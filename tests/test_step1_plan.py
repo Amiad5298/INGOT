@@ -236,6 +236,32 @@ class TestGeneratePlanWithTui:
 
         assert result is False
 
+    @patch("ai_workflow.workflow.step1_plan.AuggieClient")
+    @patch("ai_workflow.ui.plan_tui.PlanGeneratorUI")
+    def test_dont_save_session_flag_is_passed(
+        self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
+    ):
+        """Verifies dont_save_session=True is passed to Auggie client."""
+        monkeypatch.setenv("AI_WORKFLOW_LOG_DIR", str(tmp_path))
+
+        mock_tui = MagicMock()
+        mock_tui.quit_requested = False
+        mock_tui_class.return_value = mock_tui
+
+        mock_client = MagicMock()
+        mock_client.run_with_callback.return_value = (True, "Plan output")
+        mock_auggie_class.return_value = mock_client
+
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
+
+        _generate_plan_with_tui(workflow_state, "Test prompt", plan_path)
+
+        # Verify dont_save_session=True is passed in the call
+        mock_client.run_with_callback.assert_called_once()
+        call_kwargs = mock_client.run_with_callback.call_args.kwargs
+        assert "dont_save_session" in call_kwargs
+        assert call_kwargs["dont_save_session"] is True
+
 
 # =============================================================================
 # Tests for _generate_plan_fallback()
@@ -278,6 +304,21 @@ class TestGeneratePlanFallback:
         _generate_plan_fallback(workflow_state, "Test prompt")
 
         mock_auggie_class.assert_called_once_with(model="custom-model")
+
+    @patch("ai_workflow.workflow.step1_plan.AuggieClient")
+    def test_dont_save_session_flag_is_passed(self, mock_auggie_class, workflow_state):
+        """Verifies dont_save_session=True is passed to Auggie client."""
+        mock_client = MagicMock()
+        mock_client.run_print.return_value = True
+        mock_auggie_class.return_value = mock_client
+
+        _generate_plan_fallback(workflow_state, "Test prompt")
+
+        # Verify dont_save_session=True is passed in the call
+        mock_client.run_print.assert_called_once()
+        call_kwargs = mock_client.run_print.call_args.kwargs
+        assert "dont_save_session" in call_kwargs
+        assert call_kwargs["dont_save_session"] is True
 
 
 # =============================================================================
@@ -719,6 +760,38 @@ class TestStep1CreatePlanFileHandling:
 
         mock_save_plan.assert_called_once()
 
+    @patch("ai_workflow.workflow.step1_plan.print_error")
+    @patch("ai_workflow.workflow.step1_plan._save_plan_from_output")
+    @patch("ai_workflow.workflow.step1_plan._generate_plan_fallback")
+    @patch("ai_workflow.ui.tui._should_use_tui")
+    def test_returns_false_when_fallback_save_fails_to_create_file(
+        self, mock_should_tui, mock_generate, mock_save_plan, mock_print_error,
+        workflow_state, tmp_path, monkeypatch
+    ):
+        """Returns False when _save_plan_from_output fails to create the file (impossible case)."""
+        monkeypatch.chdir(tmp_path)
+        mock_should_tui.return_value = False
+        mock_generate.return_value = True  # Generation succeeds but no file
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir(parents=True, exist_ok=True)
+        # Note: plan file intentionally NOT created
+
+        # Mock _save_plan_from_output to do nothing (simulates failure to write)
+        mock_save_plan.return_value = None  # Does not create the file
+
+        workflow_state.skip_clarification = True
+
+        result = step_1_create_plan(workflow_state, MagicMock())
+
+        # Should return False because file still doesn't exist
+        assert result is False
+        # Should have called _save_plan_from_output
+        mock_save_plan.assert_called_once()
+        # Should have logged the error
+        mock_print_error.assert_called_once()
+        assert "Plan file was not created" in mock_print_error.call_args[0][0]
+
 
 # =============================================================================
 # Tests for step_1_create_plan() - Clarification logic
@@ -786,6 +859,40 @@ class TestStep1CreatePlanClarification:
         step_1_create_plan(workflow_state, MagicMock())
 
         mock_clarify.assert_not_called()
+
+    @patch("ai_workflow.workflow.step1_plan.prompt_confirm")
+    @patch("ai_workflow.workflow.step1_plan._display_plan_summary")
+    @patch("ai_workflow.workflow.step1_plan._run_clarification")
+    @patch("ai_workflow.workflow.step1_plan._generate_plan_fallback")
+    @patch("ai_workflow.ui.tui._should_use_tui")
+    def test_returns_false_when_clarification_returns_false(
+        self, mock_should_tui, mock_generate, mock_clarify, mock_display, mock_confirm,
+        workflow_state, tmp_path, monkeypatch
+    ):
+        """Returns False immediately when _run_clarification returns False."""
+        monkeypatch.chdir(tmp_path)
+        mock_should_tui.return_value = False
+        mock_clarify.return_value = False  # Clarification fails/aborts
+
+        specs_dir = tmp_path / "specs"
+        plan_path = specs_dir / "TEST-123-plan.md"
+
+        def create_plan(*args, **kwargs):
+            specs_dir.mkdir(parents=True, exist_ok=True)
+            plan_path.write_text("# Plan")
+            return True
+
+        mock_generate.side_effect = create_plan
+        workflow_state.skip_clarification = False  # Don't skip clarification
+
+        result = step_1_create_plan(workflow_state, MagicMock())
+
+        # Should return False because clarification returned False
+        assert result is False
+        # Clarification was called
+        mock_clarify.assert_called_once()
+        # Confirm was NOT called because we returned early
+        mock_confirm.assert_not_called()
 
 
 # =============================================================================
