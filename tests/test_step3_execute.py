@@ -1085,3 +1085,43 @@ class TestStep3Execute:
         step_3_execute(workflow_state, use_tui=False)
 
         mock_commit.assert_called_once()
+
+    @patch("ai_workflow.workflow.step3_execute.prompt_confirm")
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("ai_workflow.ui.tui.TaskRunnerUI")
+    def test_stops_execution_when_quit_requested(
+        self, mock_tui_class, mock_execute, mock_mark, mock_capture, mock_confirm, workflow_state, tmp_path
+    ):
+        """Stops execution when user requests quit via TUI."""
+        # Setup
+        mock_tui = MagicMock()
+        # Simulate quit requested before the second task
+        mock_tui.quit_requested = True 
+        mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0)
+        mock_tui_class.return_value = mock_tui
+        
+        # User confirms quit at the prompt
+        mock_confirm.return_value = True
+
+        tasks = [
+            Task(name="Task 1", status=TaskStatus.PENDING),
+            Task(name="Task 2", status=TaskStatus.PENDING),
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        # Execute
+        _execute_with_tui(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # Assertions
+        # Should verify that we stopped TUI to show prompt
+        mock_tui.stop.assert_called()
+        # Should verify prompt was shown
+        mock_confirm.assert_called_with("Quit task execution?", default=False)
+        # Should verify specific cleanup method for skipping remaining tasks was called
+        mock_tui.mark_remaining_skipped.assert_called()
