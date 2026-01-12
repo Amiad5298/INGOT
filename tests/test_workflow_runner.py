@@ -466,6 +466,7 @@ class TestOfferCleanupBranchInfo:
 class TestRunSpecDrivenWorkflowInit:
     """Tests for run_spec_driven_workflow initialization."""
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
@@ -479,7 +480,7 @@ class TestRunSpecDrivenWorkflowInit:
     def test_initializes_workflow_state_correctly(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        mock_completion, ticket, mock_config
+        mock_completion, mock_auggie_client, ticket, mock_config
     ):
         """Test that WorkflowState is initialized correctly with all parameters."""
         mock_get_branch.return_value = "main"
@@ -519,13 +520,14 @@ class TestRunSpecDrivenWorkflowInit:
 class TestRunSpecDrivenWorkflowDirtyState:
     """Tests for run_spec_driven_workflow dirty state handling."""
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner.handle_dirty_state")
     @patch("ai_workflow.workflow.runner.show_git_dirty_menu")
     @patch("ai_workflow.workflow.runner.is_dirty")
     @patch("ai_workflow.workflow.runner.get_current_branch")
     def test_handles_dirty_state_at_start(
         self, mock_get_branch, mock_is_dirty, mock_menu, mock_handle,
-        ticket, mock_config
+        mock_auggie_client, ticket, mock_config
     ):
         """Test that dirty state is detected and handled at start."""
         mock_get_branch.return_value = "main"
@@ -548,6 +550,7 @@ class TestRunSpecDrivenWorkflowDirtyState:
 class TestRunSpecDrivenWorkflowFetchTicket:
     """Tests for run_spec_driven_workflow fetch ticket info."""
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
@@ -561,7 +564,7 @@ class TestRunSpecDrivenWorkflowFetchTicket:
     def test_fetches_and_updates_ticket_info(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        mock_completion, ticket, mock_config
+        mock_completion, mock_auggie_client, ticket, mock_config
     ):
         """Test successful ticket info fetch updates state.ticket."""
         mock_get_branch.return_value = "main"
@@ -585,6 +588,7 @@ class TestRunSpecDrivenWorkflowFetchTicket:
 
         mock_fetch.assert_called_once()
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner.print_warning")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
@@ -599,7 +603,7 @@ class TestRunSpecDrivenWorkflowFetchTicket:
     def test_handles_fetch_ticket_info_failure_gracefully(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        mock_completion, mock_warning, ticket, mock_config
+        mock_completion, mock_warning, mock_auggie_client, ticket, mock_config
     ):
         """Test handles fetch_ticket_info failure gracefully (prints warning, continues)."""
         mock_get_branch.return_value = "main"
@@ -627,6 +631,7 @@ class TestRunSpecDrivenWorkflowFetchTicket:
 class TestRunSpecDrivenWorkflowUserContext:
     """Tests for run_spec_driven_workflow user context prompt."""
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
@@ -641,7 +646,7 @@ class TestRunSpecDrivenWorkflowUserContext:
     def test_stores_user_context_when_confirmed(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_input, mock_setup_branch, mock_commit, mock_step1, mock_step2,
-        mock_step3, mock_completion, ticket, mock_config
+        mock_step3, mock_completion, mock_auggie_client, ticket, mock_config
     ):
         """Test prompts for additional user context and stores it in state."""
         mock_get_branch.return_value = "main"
@@ -672,6 +677,7 @@ class TestRunSpecDrivenWorkflowUserContext:
 class TestRunSpecDrivenWorkflowBranchSetup:
     """Tests for run_spec_driven_workflow branch setup and base commit."""
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
@@ -685,7 +691,7 @@ class TestRunSpecDrivenWorkflowBranchSetup:
     def test_records_base_commit(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        mock_completion, ticket, mock_config
+        mock_completion, mock_auggie_client, ticket, mock_config
     ):
         """Test records base commit via get_current_commit."""
         mock_get_branch.return_value = "main"
@@ -705,6 +711,7 @@ class TestRunSpecDrivenWorkflowBranchSetup:
         state = call_args[0]
         assert state.base_commit == "abc123def456"
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._setup_branch")
     @patch("ai_workflow.workflow.runner.prompt_confirm")
     @patch("ai_workflow.workflow.runner.fetch_ticket_info")
@@ -712,7 +719,7 @@ class TestRunSpecDrivenWorkflowBranchSetup:
     @patch("ai_workflow.workflow.runner.get_current_branch")
     def test_returns_false_when_branch_setup_fails(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
-        mock_setup_branch, ticket, mock_config
+        mock_setup_branch, mock_auggie_client, ticket, mock_config
     ):
         """Test returns False when branch setup fails."""
         mock_get_branch.return_value = "main"
@@ -734,6 +741,7 @@ class TestRunSpecDrivenWorkflowBranchSetup:
 class TestRunSpecDrivenWorkflowStepOrchestration:
     """Tests for run_spec_driven_workflow step orchestration."""
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
@@ -747,7 +755,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
     def test_calls_all_steps_in_sequence(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        mock_completion, ticket, mock_config
+        mock_completion, mock_auggie_client, ticket, mock_config
     ):
         """Test calls step_1, step_2, step_3 in sequence."""
         mock_get_branch.return_value = "main"
@@ -766,6 +774,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step2.assert_called_once()
         mock_step3.assert_called_once()
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
     @patch("ai_workflow.workflow.runner.step_1_create_plan")
     @patch("ai_workflow.workflow.runner.get_current_commit")
@@ -777,7 +786,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
     def test_returns_false_when_step1_fails(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2,
-        ticket, mock_config
+        mock_auggie_client, ticket, mock_config
     ):
         """Test returns False when step_1 fails."""
         mock_get_branch.return_value = "main"
@@ -793,6 +802,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         assert result is False
         mock_step2.assert_not_called()
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
     @patch("ai_workflow.workflow.runner.step_1_create_plan")
@@ -805,7 +815,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
     def test_returns_false_when_step2_fails(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        ticket, mock_config
+        mock_auggie_client, ticket, mock_config
     ):
         """Test returns False when step_2 fails."""
         mock_get_branch.return_value = "main"
@@ -822,6 +832,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         assert result is False
         mock_step3.assert_not_called()
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
@@ -835,7 +846,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
     def test_returns_true_when_all_steps_succeed(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        mock_completion, ticket, mock_config
+        mock_completion, mock_auggie_client, ticket, mock_config
     ):
         """Test returns True when all steps succeed."""
         mock_get_branch.return_value = "main"
@@ -861,6 +872,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
 class TestRunSpecDrivenWorkflowCompletion:
     """Tests for run_spec_driven_workflow completion."""
 
+    @patch("ai_workflow.workflow.runner.AuggieClient")
     @patch("ai_workflow.workflow.runner._show_completion")
     @patch("ai_workflow.workflow.runner.step_3_execute")
     @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
@@ -874,7 +886,7 @@ class TestRunSpecDrivenWorkflowCompletion:
     def test_shows_completion_on_success(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
-        mock_completion, ticket, mock_config
+        mock_completion, mock_auggie_client, ticket, mock_config
     ):
         """Test shows completion via _show_completion on success."""
         mock_get_branch.return_value = "main"
@@ -890,4 +902,292 @@ class TestRunSpecDrivenWorkflowCompletion:
         run_spec_driven_workflow(ticket=ticket, config=mock_config)
 
         mock_completion.assert_called_once()
+
+
+# =============================================================================
+# Tests for run_spec_driven_workflow() - Step 3 Arguments (use_tui, verbose)
+# =============================================================================
+
+
+class TestRunSpecDrivenWorkflowStep3Arguments:
+    """Tests for run_spec_driven_workflow passing correct arguments to step_3_execute."""
+
+    @patch("ai_workflow.workflow.runner.AuggieClient")
+    @patch("ai_workflow.workflow.runner._show_completion")
+    @patch("ai_workflow.workflow.runner.step_3_execute")
+    @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
+    @patch("ai_workflow.workflow.runner.step_1_create_plan")
+    @patch("ai_workflow.workflow.runner.get_current_commit")
+    @patch("ai_workflow.workflow.runner._setup_branch")
+    @patch("ai_workflow.workflow.runner.prompt_confirm")
+    @patch("ai_workflow.workflow.runner.fetch_ticket_info")
+    @patch("ai_workflow.workflow.runner.is_dirty")
+    @patch("ai_workflow.workflow.runner.get_current_branch")
+    def test_passes_use_tui_and_verbose_to_step_3_execute(
+        self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that use_tui and verbose are passed correctly to step_3_execute."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+
+        run_spec_driven_workflow(
+            ticket=ticket,
+            config=mock_config,
+            use_tui=True,
+            verbose=True,
+        )
+
+        # Verify step_3_execute was called with correct keyword arguments
+        mock_step3.assert_called_once()
+        call_kwargs = mock_step3.call_args[1]
+        assert call_kwargs["use_tui"] is True
+        assert call_kwargs["verbose"] is True
+
+    @patch("ai_workflow.workflow.runner.AuggieClient")
+    @patch("ai_workflow.workflow.runner._show_completion")
+    @patch("ai_workflow.workflow.runner.step_3_execute")
+    @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
+    @patch("ai_workflow.workflow.runner.step_1_create_plan")
+    @patch("ai_workflow.workflow.runner.get_current_commit")
+    @patch("ai_workflow.workflow.runner._setup_branch")
+    @patch("ai_workflow.workflow.runner.prompt_confirm")
+    @patch("ai_workflow.workflow.runner.fetch_ticket_info")
+    @patch("ai_workflow.workflow.runner.is_dirty")
+    @patch("ai_workflow.workflow.runner.get_current_branch")
+    def test_passes_use_tui_false_and_verbose_false_to_step_3_execute(
+        self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that use_tui=False and verbose=False are passed correctly."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+
+        run_spec_driven_workflow(
+            ticket=ticket,
+            config=mock_config,
+            use_tui=False,
+            verbose=False,
+        )
+
+        # Verify step_3_execute was called with correct keyword arguments
+        mock_step3.assert_called_once()
+        call_kwargs = mock_step3.call_args[1]
+        assert call_kwargs["use_tui"] is False
+        assert call_kwargs["verbose"] is False
+
+    @patch("ai_workflow.workflow.runner.AuggieClient")
+    @patch("ai_workflow.workflow.runner._show_completion")
+    @patch("ai_workflow.workflow.runner.step_3_execute")
+    @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
+    @patch("ai_workflow.workflow.runner.step_1_create_plan")
+    @patch("ai_workflow.workflow.runner.get_current_commit")
+    @patch("ai_workflow.workflow.runner._setup_branch")
+    @patch("ai_workflow.workflow.runner.prompt_confirm")
+    @patch("ai_workflow.workflow.runner.fetch_ticket_info")
+    @patch("ai_workflow.workflow.runner.is_dirty")
+    @patch("ai_workflow.workflow.runner.get_current_branch")
+    def test_passes_use_tui_none_for_auto_detection(
+        self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that use_tui=None is passed for auto-detection mode."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+
+        # Call without specifying use_tui (defaults to None)
+        run_spec_driven_workflow(
+            ticket=ticket,
+            config=mock_config,
+        )
+
+        # Verify step_3_execute was called with use_tui=None
+        mock_step3.assert_called_once()
+        call_kwargs = mock_step3.call_args[1]
+        assert call_kwargs["use_tui"] is None
+        assert call_kwargs["verbose"] is False
+
+
+# =============================================================================
+# Tests for run_spec_driven_workflow() - Resume Logic (Step Skipping)
+# =============================================================================
+
+
+class TestRunSpecDrivenWorkflowResumeLogic:
+    """Tests for run_spec_driven_workflow resume logic based on current_step."""
+
+    @patch("ai_workflow.workflow.runner.AuggieClient")
+    @patch("ai_workflow.workflow.runner._show_completion")
+    @patch("ai_workflow.workflow.runner.step_3_execute")
+    @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
+    @patch("ai_workflow.workflow.runner.step_1_create_plan")
+    @patch("ai_workflow.workflow.runner.get_current_commit")
+    @patch("ai_workflow.workflow.runner._setup_branch")
+    @patch("ai_workflow.workflow.runner.prompt_confirm")
+    @patch("ai_workflow.workflow.runner.fetch_ticket_info")
+    @patch("ai_workflow.workflow.runner.is_dirty")
+    @patch("ai_workflow.workflow.runner.get_current_branch")
+    @patch("ai_workflow.workflow.runner.WorkflowState")
+    def test_skips_step_1_when_current_step_is_2(
+        self, mock_state_class, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that step_1 is skipped when state.current_step = 2."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+
+        # Create a mock state with current_step = 2
+        mock_state = MagicMock()
+        mock_state.current_step = 2
+        mock_state.ticket = ticket
+        mock_state_class.return_value = mock_state
+
+        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+
+        # Step 1 should NOT be called because current_step > 1
+        mock_step1.assert_not_called()
+        # Step 2 and 3 should be called
+        mock_step2.assert_called_once()
+        mock_step3.assert_called_once()
+
+    @patch("ai_workflow.workflow.runner.AuggieClient")
+    @patch("ai_workflow.workflow.runner._show_completion")
+    @patch("ai_workflow.workflow.runner.step_3_execute")
+    @patch("ai_workflow.workflow.runner.step_2_create_tasklist")
+    @patch("ai_workflow.workflow.runner.step_1_create_plan")
+    @patch("ai_workflow.workflow.runner.get_current_commit")
+    @patch("ai_workflow.workflow.runner._setup_branch")
+    @patch("ai_workflow.workflow.runner.prompt_confirm")
+    @patch("ai_workflow.workflow.runner.fetch_ticket_info")
+    @patch("ai_workflow.workflow.runner.is_dirty")
+    @patch("ai_workflow.workflow.runner.get_current_branch")
+    @patch("ai_workflow.workflow.runner.WorkflowState")
+    def test_skips_step_1_and_step_2_when_current_step_is_3(
+        self, mock_state_class, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that step_1 and step_2 are skipped when state.current_step = 3."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+
+        # Create a mock state with current_step = 3
+        mock_state = MagicMock()
+        mock_state.current_step = 3
+        mock_state.ticket = ticket
+        mock_state_class.return_value = mock_state
+
+        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+
+        # Step 1 and 2 should NOT be called because current_step > 2
+        mock_step1.assert_not_called()
+        mock_step2.assert_not_called()
+        # Only Step 3 should be called
+        mock_step3.assert_called_once()
+
+
+# =============================================================================
+# Tests for _setup_branch() - Branch name with special characters
+# =============================================================================
+
+
+class TestSetupBranchSpecialCharacters:
+    """Tests for _setup_branch with special characters in ticket summary."""
+
+    @patch("ai_workflow.workflow.runner.prompt_confirm")
+    @patch("ai_workflow.workflow.runner.create_branch")
+    @patch("ai_workflow.workflow.runner.get_current_branch")
+    def test_branch_name_with_spaces_and_special_chars(
+        self, mock_get_branch, mock_create, mock_confirm, workflow_state
+    ):
+        """Test branch name generation with spaces and special characters in summary."""
+        mock_get_branch.return_value = "main"
+        mock_confirm.return_value = True
+        mock_create.return_value = True
+
+        # Create ticket with special characters in summary
+        special_ticket = JiraTicket(
+            ticket_id="TEST-789",
+            ticket_url="https://jira.example.com/TEST-789",
+            title="Update: GraphQL query!",
+            description="Test description.",
+            summary="Update: GraphQL query!",
+        )
+        workflow_state.ticket = special_ticket
+
+        result = _setup_branch(workflow_state, special_ticket)
+
+        assert result is True
+        # The branch name should be generated with the raw summary
+        # (no sanitization exists yet per the ticket description)
+        expected_branch = "test-789-Update: GraphQL query!"
+        assert workflow_state.branch_name == expected_branch
+        mock_create.assert_called_once_with(expected_branch)
+
+    @patch("ai_workflow.workflow.runner.prompt_confirm")
+    @patch("ai_workflow.workflow.runner.create_branch")
+    @patch("ai_workflow.workflow.runner.get_current_branch")
+    def test_branch_name_with_multiple_special_chars(
+        self, mock_get_branch, mock_create, mock_confirm, workflow_state
+    ):
+        """Test branch name with multiple special characters."""
+        mock_get_branch.return_value = "main"
+        mock_confirm.return_value = True
+        mock_create.return_value = True
+
+        # Create ticket with multiple special characters
+        special_ticket = JiraTicket(
+            ticket_id="TEST-999",
+            ticket_url="https://jira.example.com/TEST-999",
+            title="Fix: API/endpoint (v2) - urgent!!!",
+            description="Urgent fix needed.",
+            summary="Fix: API/endpoint (v2) - urgent!!!",
+        )
+        workflow_state.ticket = special_ticket
+
+        result = _setup_branch(workflow_state, special_ticket)
+
+        assert result is True
+        # Raw string formatting (no sanitization)
+        expected_branch = "test-999-Fix: API/endpoint (v2) - urgent!!!"
+        assert workflow_state.branch_name == expected_branch
 
