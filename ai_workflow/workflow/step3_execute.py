@@ -1,0 +1,632 @@
+"""Step 3: Execute Implementation - Optimistic Execution Model.
+
+This module implements the third step of the workflow - executing
+the task list with optimistic automated execution.
+
+Philosophy: Trust the AI. If it returns success, it succeeded.
+Don't nanny it with file checks and retry loops.
+
+Each task runs in its own clean context (using dont_save_session=True)
+to maintain focus and avoid context pollution.
+
+Supports two display modes:
+- TUI mode: Rich interactive display with task list and log panels
+- Fallback mode: Simple line-based output for CI/non-TTY environments
+"""
+
+import os
+import time
+from pathlib import Path
+
+from typing import TYPE_CHECKING
+
+from ai_workflow.integrations.auggie import AuggieClient
+from ai_workflow.integrations.git import get_current_branch, is_dirty
+from ai_workflow.ui.log_buffer import TaskLogBuffer
+from ai_workflow.ui.prompts import prompt_confirm
+from ai_workflow.utils.console import (
+    console,
+    print_error,
+    print_header,
+    print_info,
+    print_step,
+    print_success,
+    print_warning,
+)
+from ai_workflow.workflow.events import (
+    TaskRunStatus,
+    create_task_finished_event,
+    create_task_output_event,
+    create_task_started_event,
+    format_log_filename,
+    format_run_directory,
+)
+from ai_workflow.workflow.state import WorkflowState
+from ai_workflow.workflow.task_memory import capture_task_memory
+from ai_workflow.workflow.tasks import (
+    Task,
+    get_pending_tasks,
+    mark_task_complete,
+    parse_task_list,
+)
+
+if TYPE_CHECKING:
+    from ai_workflow.ui.tui import TaskRunnerUI
+
+
+# =============================================================================
+# Log Directory Management
+# =============================================================================
+
+# Default log retention count
+DEFAULT_LOG_RETENTION = 10
+
+
+def _get_log_base_dir() -> Path:
+    """Get the base directory for run logs.
+
+    Returns:
+        Path to the log base directory.
+    """
+    env_dir = os.environ.get("AI_WORKFLOW_LOG_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return Path(".ai_workflow/runs")
+
+
+def _create_run_log_dir(ticket_id: str) -> Path:
+    """Create a timestamped log directory for this run.
+
+    Args:
+        ticket_id: Ticket identifier for directory naming.
+
+    Returns:
+        Path to the created log directory.
+    """
+    base_dir = _get_log_base_dir()
+    ticket_dir = base_dir / ticket_id
+    run_dir = ticket_dir / format_run_directory()
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def _cleanup_old_runs(ticket_id: str, keep_count: int = DEFAULT_LOG_RETENTION) -> None:
+    """Remove old run directories beyond retention limit.
+
+    Args:
+        ticket_id: Ticket identifier.
+        keep_count: Number of runs to keep.
+    """
+    base_dir = _get_log_base_dir()
+    ticket_dir = base_dir / ticket_id
+
+    if not ticket_dir.exists():
+        return
+
+    # Get all run directories sorted by name (timestamp order)
+    run_dirs = sorted(
+        [d for d in ticket_dir.iterdir() if d.is_dir()],
+        key=lambda d: d.name,
+        reverse=True,
+    )
+
+    # Remove directories beyond retention limit
+    for old_dir in run_dirs[keep_count:]:
+        try:
+            import shutil
+            shutil.rmtree(old_dir)
+        except Exception:
+            pass  # Ignore cleanup errors
+
+
+def step_3_execute(
+    state: WorkflowState,
+    *,
+    use_tui: bool | None = None,
+    verbose: bool = False,
+) -> bool:
+    """Execute Step 3: Optimistic automated implementation.
+
+    Fast execution model:
+    - Minimal prompts
+    - Trust AI success signals
+    - No per-task verification
+
+    Supports two modes:
+    - TUI mode: Rich interactive display with task list and log panels
+    - Fallback mode: Simple line-based output for CI/non-TTY environments
+
+    Args:
+        state: Current workflow state
+        use_tui: Override for TUI mode. None = auto-detect.
+        verbose: Enable verbose mode in TUI (expanded log panel).
+
+    Returns:
+        True if all tasks completed successfully
+    """
+    print_header("Step 3: Execute Implementation")
+
+    # Verify task list exists
+    tasklist_path = state.get_tasklist_path()
+    if not tasklist_path.exists():
+        print_error(f"Task list not found: {tasklist_path}")
+        return False
+
+    # Parse and get pending tasks
+    tasks = parse_task_list(tasklist_path.read_text())
+    pending = get_pending_tasks(tasks)
+
+    if not pending:
+        print_success("All tasks already completed!")
+        return True
+
+    print_info(f"Executing {len(pending)} tasks...")
+
+    # Get plan path for AI context (not reading content)
+    plan_path = state.get_plan_path()
+
+    # Create log directory and clean up old runs
+    log_dir = _create_run_log_dir(state.ticket.ticket_id)
+    _cleanup_old_runs(state.ticket.ticket_id)
+
+    # Determine execution mode (lazy import to avoid circular dependency)
+    from ai_workflow.ui.tui import _should_use_tui
+
+    if _should_use_tui(use_tui):
+        failed_tasks = _execute_with_tui(
+            state, pending, plan_path, tasklist_path, log_dir, verbose=verbose
+        )
+    else:
+        failed_tasks = _execute_fallback(state, pending, plan_path, tasklist_path, log_dir)
+
+    # If there are failures, prompt immediately before post-implementation steps
+    if failed_tasks:
+        if not prompt_confirm(
+            "Some tasks failed. Proceed to post-implementation steps (tests and commit instructions) anyway?",
+            default=True
+        ):
+            print_info("Exiting Step 3 early due to task failures.")
+            return False
+
+    # Summary
+    _show_summary(state, failed_tasks)
+
+    # Post-Implementation Verification (run only changed/new tests)
+    _run_post_implementation_tests(state)
+
+    # Offer commit instructions if there are changes
+    _offer_commit_instructions(state)
+
+    # Print log directory location
+    print_info(f"Task logs saved to: {log_dir}")
+
+    return len(failed_tasks) == 0
+
+
+def _execute_with_tui(
+    state: WorkflowState,
+    pending: list[Task],
+    plan_path: Path,
+    tasklist_path: Path,
+    log_dir: Path,
+    *,
+    verbose: bool = False,
+) -> list[str]:
+    """Execute tasks with TUI display.
+
+    Args:
+        state: Current workflow state
+        pending: List of pending tasks
+        plan_path: Path to plan file
+        tasklist_path: Path to task list file
+        log_dir: Directory for log files
+        verbose: Enable verbose mode (expanded log panel).
+
+    Returns:
+        List of failed task names
+    """
+    # Lazy import to avoid circular dependency
+    from ai_workflow.ui.tui import TaskRunnerUI
+
+    failed_tasks: list[str] = []
+    user_quit: bool = False
+
+    # Initialize TUI
+    tui = TaskRunnerUI(ticket_id=state.ticket.ticket_id, verbose_mode=verbose)
+    tui.initialize_records([t.name for t in pending])
+    tui.set_log_dir(log_dir)
+
+    # Create log buffers for each task
+    for i, task in enumerate(pending):
+        log_filename = format_log_filename(i, task.name)
+        log_path = log_dir / log_filename
+        record = tui.get_record(i)
+        if record:
+            record.log_buffer = TaskLogBuffer(log_path)
+
+    with tui:
+        for i, task in enumerate(pending):
+            # Check for quit request before starting next task
+            if tui.quit_requested:
+                # Stop TUI temporarily to show prompt
+                tui.stop()
+                if prompt_confirm("Quit task execution?", default=False):
+                    user_quit = True
+                    tui.mark_remaining_skipped(i)
+                    break
+                else:
+                    # User changed their mind, continue
+                    tui.quit_requested = False
+                    tui.start()
+
+            record = tui.get_record(i)
+            if not record:
+                continue
+
+            # Emit task started event
+            start_event = create_task_started_event(i, task.name)
+            tui.handle_event(start_event)
+
+            # Execute task with callback
+            success = _execute_task_with_callback(
+                state, task, plan_path,
+                callback=lambda line, idx=i, name=task.name: tui.handle_event(
+                    create_task_output_event(idx, name, line)
+                ),
+            )
+
+            # Check for quit request during task execution
+            if tui.quit_requested:
+                # Task finished naturally, check if user still wants to quit
+                tui.stop()
+                if prompt_confirm("Task completed. Quit execution?", default=False):
+                    user_quit = True
+                    # Emit task finished event first
+                    duration = record.elapsed_time
+                    finish_event = create_task_finished_event(
+                        i, task.name, success, duration,
+                        error=None if success else "Task returned failure",
+                    )
+                    tui.handle_event(finish_event)
+                    if success:
+                        mark_task_complete(tasklist_path, task.name)
+                        state.mark_task_complete(task.name)
+                    else:
+                        failed_tasks.append(task.name)
+                    tui.mark_remaining_skipped(i + 1)
+                    break
+                else:
+                    tui.quit_requested = False
+                    tui.start()
+
+            # Emit task finished event
+            duration = record.elapsed_time
+            finish_event = create_task_finished_event(
+                i, task.name, success, duration,
+                error=None if success else "Task returned failure",
+            )
+            tui.handle_event(finish_event)
+
+            if success:
+                mark_task_complete(tasklist_path, task.name)
+                state.mark_task_complete(task.name)
+                try:
+                    capture_task_memory(task, state)
+                except Exception as e:
+                    # Log to buffer, don't print
+                    if record.log_buffer:
+                        record.log_buffer.write(f"[WARNING] Failed to capture task memory: {e}")
+            else:
+                failed_tasks.append(task.name)
+                if state.fail_fast:
+                    tui.mark_remaining_skipped(i + 1)
+                    break
+
+    tui.print_summary()
+    if user_quit:
+        print_info("Execution stopped by user request.")
+    return failed_tasks
+
+
+def _execute_fallback(
+    state: WorkflowState,
+    pending: list[Task],
+    plan_path: Path,
+    tasklist_path: Path,
+    log_dir: Path,
+) -> list[str]:
+    """Execute tasks with fallback (non-TUI) display.
+
+    Args:
+        state: Current workflow state
+        pending: List of pending tasks
+        plan_path: Path to plan file
+        tasklist_path: Path to task list file
+        log_dir: Directory for log files
+
+    Returns:
+        List of failed task names
+    """
+    failed_tasks: list[str] = []
+
+    for i, task in enumerate(pending):
+        print_step(f"[{i + 1}/{len(pending)}] {task.name}")
+
+        # Create log buffer for this task
+        log_filename = format_log_filename(i, task.name)
+        log_path = log_dir / log_filename
+
+        with TaskLogBuffer(log_path) as log_buffer:
+            # Callback that writes to log and prints to stdout
+            def output_callback(line: str) -> None:
+                log_buffer.write(line)
+                console.print(line)
+
+            success = _execute_task_with_callback(
+                state, task, plan_path,
+                callback=output_callback,
+            )
+
+        if success:
+            mark_task_complete(tasklist_path, task.name)
+            state.mark_task_complete(task.name)
+            print_success(f"Task completed: {task.name}")
+            try:
+                capture_task_memory(task, state)
+            except Exception as e:
+                print_warning(f"Failed to capture task memory (analytics): {e}")
+        else:
+            failed_tasks.append(task.name)
+            print_warning(f"Task returned failure: {task.name}")
+            if state.fail_fast:
+                print_error("Stopping: fail_fast enabled")
+                break
+
+    return failed_tasks
+
+
+def _build_task_prompt(task: Task, plan_path: Path) -> str:
+    """Build the prompt for task execution.
+
+    Args:
+        task: Task to execute
+        plan_path: Path to the plan file
+
+    Returns:
+        Prompt string for the AI
+    """
+    if plan_path.exists():
+        return f"""Execute this task. Do NOT commit or push any changes.
+
+Task: {task.name}
+
+The implementation plan is at: {plan_path}
+Use codebase-retrieval to read the plan and focus on the section relevant to this task.
+Use codebase-retrieval to find existing patterns in the codebase."""
+    else:
+        return f"""Execute this task. Do NOT commit or push any changes.
+
+Task: {task.name}
+
+Use codebase-retrieval to find existing patterns in the codebase."""
+
+
+def _execute_task(
+    state: WorkflowState,
+    task: Task,
+    plan_path: Path,
+) -> bool:
+    """Execute a single task in clean context (legacy mode).
+
+    Optimistic execution model:
+    - Trust AI exit codes
+    - No file verification
+    - No retry loops
+    - Minimal prompt with instructions to retrieve context
+
+    Args:
+        state: Current workflow state
+        task: Task to execute
+        plan_path: Path to the plan file (AI will retrieve content as needed)
+
+    Returns:
+        True if AI reported success
+    """
+    prompt = _build_task_prompt(task, plan_path)
+    auggie_client = AuggieClient(model=state.implementation_model)
+
+    try:
+        success, _ = auggie_client.run_print_with_output(
+            prompt,
+            dont_save_session=True
+        )
+        if success:
+            print_success(f"Task completed: {task.name}")
+        else:
+            print_warning(f"Task returned failure: {task.name}")
+        return success
+    except Exception as e:
+        print_error(f"Task execution crashed: {e}")
+        return False
+
+
+def _execute_task_with_callback(
+    state: WorkflowState,
+    task: Task,
+    plan_path: Path,
+    *,
+    callback: callable,
+) -> bool:
+    """Execute a single task with streaming output callback.
+
+    Uses AuggieClient.run_with_callback() for streaming output.
+    Each output line is passed to the callback function.
+
+    Args:
+        state: Current workflow state
+        task: Task to execute
+        plan_path: Path to the plan file
+        callback: Function called for each output line
+
+    Returns:
+        True if AI reported success
+    """
+    prompt = _build_task_prompt(task, plan_path)
+    auggie_client = AuggieClient(model=state.implementation_model)
+
+    try:
+        success, _ = auggie_client.run_with_callback(
+            prompt,
+            output_callback=callback,
+            dont_save_session=True,
+        )
+        return success
+    except Exception as e:
+        callback(f"[ERROR] Task execution crashed: {e}")
+        return False
+
+
+def _show_summary(state: WorkflowState, failed_tasks: list[str] | None = None) -> None:
+    """Show execution summary.
+
+    Args:
+        state: Current workflow state
+        failed_tasks: Optional list of task names that failed
+    """
+    console.print()
+    print_header("Execution Summary")
+
+    console.print(f"[bold]Ticket:[/bold] {state.ticket.ticket_id}")
+    console.print(f"[bold]Branch:[/bold] {state.branch_name or get_current_branch()}")
+    console.print(f"[bold]Tasks completed:[/bold] {len(state.completed_tasks)}")
+    console.print(f"[bold]Checkpoints:[/bold] {len(state.checkpoint_commits)}")
+
+    if failed_tasks:
+        console.print(f"[bold]Tasks with issues:[/bold] {len(failed_tasks)}")
+
+    if state.completed_tasks:
+        console.print()
+        console.print("[bold]Completed tasks:[/bold]")
+        for task in state.completed_tasks:
+            console.print(f"  [green]✓[/green] {task}")
+
+    if failed_tasks:
+        console.print()
+        console.print("[bold]Tasks with issues:[/bold]")
+        for task in failed_tasks:
+            console.print(f"  [yellow]![/yellow] {task}")
+
+    console.print()
+
+
+def _run_post_implementation_tests(state: WorkflowState) -> None:
+    """Run post-implementation verification tests using AI.
+
+    Finds and runs tests that cover the code changed in this Step 3 run.
+    This includes both modified test files AND tests that cover modified source files.
+    Does NOT run the full project test suite.
+    """
+    # Prompt user to run tests
+    if not prompt_confirm("Run tests for changes made in this run?", default=True):
+        print_info("Skipping tests")
+        return
+
+    print_step("Running Tests for Changed Code via AI")
+    console.print("[dim]AI will identify and run tests that cover the code changed in this run...[/dim]")
+    console.print()
+
+    prompt = """Identify and run the tests that are relevant to the code changes made in this run.
+
+## Step 1: Identify Changed Production Code
+- Run `git diff --name-only` and `git status --porcelain` to list all files changed in this run.
+- Separate the changed files into two categories:
+  a) **Test files**: files in directories like `test/`, `tests/`, `__tests__/`, or matching patterns like `*.spec.*`, `*_test.*`, `test_*.*`
+  b) **Production/source files**: all other changed files (excluding test paths above)
+
+## Step 2: Determine Relevant Tests to Run
+Find the minimal, most targeted set of tests that cover the changes:
+- **If test files were modified/added**: include those tests.
+- **If production/source files were modified/added**: use codebase-retrieval and repository conventions to find tests that cover those files. Look for:
+  - Tests located in the same module/package area as the changed source files
+  - Tests named similarly to the changed files (e.g., `foo.py` → `test_foo.py`, `foo_test.py`, `foo.spec.ts`)
+  - Tests referenced by existing docs, scripts, or test configuration in the repo
+- Prefer the smallest targeted set. If the repo supports running tests by file, class, or package, use that to scope execution.
+
+## Step 3: Transparency Before Execution
+Before running any tests:
+- Print the exact command(s) you plan to run.
+- Briefly explain how these tests were selected (e.g., "These tests correspond to module X which was changed" or "These are the modified test files").
+
+## Step 4: Execute Tests
+Run the identified tests and clearly report success or failure.
+
+## Critical Constraints
+- Do NOT commit any changes
+- Do NOT push any changes
+- Do NOT run the entire project test suite by default
+- Only expand the test scope if a targeted run is not possible in this repo
+
+## Fallback Behavior
+If you cannot reliably map changed source files to specific tests AND cannot run targeted tests in this repo:
+1. Explain why targeted test selection is not possible.
+2. Propose 1-2 broader-but-still-reasonable commands (e.g., module-level tests, package-level tests).
+3. Ask the user for confirmation before running them.
+4. Do NOT silently fall back to "run everything".
+
+If NO production files were changed AND NO test files were changed, report "No code changes detected that require testing" and STOP."""
+
+    auggie_client = AuggieClient(model=state.implementation_model)
+
+    try:
+        success, _ = auggie_client.run_print_with_output(
+            prompt,
+            dont_save_session=True
+        )
+        console.print()
+        if success:
+            print_success("Test execution completed successfully")
+        else:
+            print_warning("Test execution reported issues")
+            print_info("Review test output above to identify issues")
+    except Exception as e:
+        print_error(f"Failed to run tests: {e}")
+
+
+def _offer_commit_instructions(state: WorkflowState) -> None:
+    """Offer commit instructions to the user if there are uncommitted changes.
+
+    Does NOT execute any git commands. Only prints suggested commands
+    for the user to run manually.
+
+    Args:
+        state: Current workflow state
+    """
+    if not is_dirty():
+        return
+
+    console.print()
+    if not prompt_confirm("Would you like instructions to commit these changes?", default=True):
+        return
+
+    # Generate suggested commit message
+    task_count = len(state.completed_tasks)
+    commit_msg = f"feat({state.ticket.ticket_id}): implement {task_count} tasks"
+
+    console.print()
+    print_header("Suggested Commit Steps")
+    console.print()
+    console.print("Run the following commands to commit your changes:")
+    console.print()
+    console.print("[bold cyan]  git status[/bold cyan]")
+    console.print("[bold cyan]  git add -A[/bold cyan]")
+    console.print(f'[bold cyan]  git commit -m "{commit_msg}"[/bold cyan]')
+    console.print()
+    print_info("Review 'git status' output before adding files.")
+    console.print()
+
+
+__all__ = [
+    "step_3_execute",
+]
+
