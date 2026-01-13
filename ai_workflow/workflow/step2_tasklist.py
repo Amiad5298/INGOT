@@ -222,20 +222,24 @@ Tasks that can run concurrently with no dependencies on each other:
 - Separate API endpoints that don't share state
 - Test suites that don't modify shared resources
 
-**CRITICAL: File Disjointness Requirement**
-Independent tasks running in parallel MUST touch disjoint sets of files. Two parallel agents editing the same file simultaneously will cause race conditions and data loss.
+**CRITICAL: File Disjointness Requirement & Resolution Strategy**
+Independent tasks running in parallel MUST touch disjoint sets of files.
 
-If two tasks need to edit the same file:
-1. **Preferred**: Mark BOTH tasks as FUNDAMENTAL (sequential) to avoid conflicts
-2. **Alternative**: Merge them into a single task
-3. **Alternative**: Restructure the tasks so each touches different files
+If you detect that multiple logical tasks need to edit the same shared file (e.g., `TestData.java`, `pom.xml`, `Enums.java`, configuration files), use the **"Setup Task Pattern"**:
 
-Examples of file conflicts to avoid:
-- Two tasks both adding functions to `utils.py` → Make FUNDAMENTAL or merge
-- Two tasks both updating `config.yaml` → Make FUNDAMENTAL or merge
-- Two tasks both modifying `__init__.py` exports → Make FUNDAMENTAL or merge
+1.  **Extract Shared Changes**: Take the edits for the shared files from all features.
+2.  **Create Setup Task**: Create a single `FUNDAMENTAL` task (Order 1) named "Update Shared Resources" containing ONLY these shared file edits.
+3.  **Parallelize the Rest**: Now that the shared conflicts are resolved in the setup task, create the remaining feature-specific tasks as `INDEPENDENT`.
 
-Mark independent tasks with: `<!-- category: independent, group: GROUP_NAME -->`
+**Example of Resolving Conflict in `TestData.java`:**
+Instead of:
+- Task A (Fundamental): Implement Feature A + Update TestData
+- Task B (Fundamental): Implement Feature B + Update TestData (Blocked by A)
+
+DO THIS:
+- Task 1 (Fundamental): **Prepare Shared Test Data** (Update `TestData.java` with mocks for BOTH A and B)
+- Task 2 (Independent): **Implement Feature A** (Logic + Unit Tests, no longer touching TestData)
+- Task 3 (Independent): **Implement Feature B** (Logic + Unit Tests, no longer touching TestData)
 
 ### Output Format
 
@@ -266,7 +270,7 @@ Mark independent tasks with: `<!-- category: independent, group: GROUP_NAME -->`
 3. **Service/Logic tasks are USUALLY FUNDAMENTAL** - Order 2+
 4. **UI/Docs/Utils are USUALLY INDEPENDENT** - Can parallelize
 5. **Tests with their implementation are FUNDAMENTAL** - Part of that task
-6. **Shared file edits require FUNDAMENTAL** - If two tasks edit the same file, both must be FUNDAMENTAL to prevent race conditions
+6. **Shared file edits require EXTRACTION** - If two tasks edit the same file, extract the shared edits to a new FUNDAMENTAL setup task, then keep the original tasks INDEPENDENT.
 
 Order tasks by dependency (prerequisites first). Keep descriptions concise but specific."""
 
