@@ -37,6 +37,16 @@ class RateLimitConfig:
     # HTTP status codes that trigger retry
     retryable_status_codes: tuple[int, ...] = (429, 502, 503, 504)
 
+    def __post_init__(self):
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be >= 0")
+        if self.max_retries > 0 and self.base_delay_seconds <= 0:
+            raise ValueError("base_delay_seconds must be > 0 when max_retries > 0")
+        if self.jitter_factor < 0 or self.jitter_factor > 1:
+            raise ValueError("jitter_factor must be in [0, 1]")
+        if self.max_delay_seconds < self.base_delay_seconds:
+            raise ValueError("max_delay_seconds must be >= base_delay_seconds")
+
 
 @dataclass
 class WorkflowState:

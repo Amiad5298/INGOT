@@ -14,6 +14,7 @@ Features:
 from __future__ import annotations
 
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -278,6 +279,8 @@ class TaskRunnerUI:
     _stop_input_thread: bool = field(default=False, init=False, repr=False)
     # Quit signal for execution loop
     quit_requested: bool = field(default=False, init=False, repr=False)
+    # Thread-safe event queue for parallel execution
+    _event_queue: queue.Queue = field(default_factory=queue.Queue, init=False, repr=False)
 
     def initialize_records(self, task_names: list[str]) -> None:
         """Initialize task run records from task names.
@@ -414,9 +417,31 @@ class TaskRunnerUI:
             self._live = None
 
     def refresh(self) -> None:
-        """Refresh the display with current state."""
+        """Refresh the display with current state.
+
+        Drains the event queue first (for thread-safe parallel mode),
+        then updates the Live display.
+        """
+        self._drain_event_queue()
         if self._live is not None:
             self._live.update(self._render_layout())
+
+    def post_event(self, event: TaskEvent) -> None:
+        """Thread-safe: push event to queue (called from worker threads).
+
+        Args:
+            event: The task event to queue for processing.
+        """
+        self._event_queue.put(event)
+
+    def _drain_event_queue(self) -> None:
+        """Main thread: process all pending events from the queue."""
+        while True:
+            try:
+                event = self._event_queue.get_nowait()
+                self._apply_event(event)
+            except queue.Empty:
+                break
 
     def __enter__(self) -> TaskRunnerUI:
         """Context manager entry."""
@@ -540,10 +565,27 @@ class TaskRunnerUI:
     # =========================================================================
 
     def handle_event(self, event: TaskEvent) -> None:
-        """Handle a task event and update UI accordingly.
+        """Handle a task event and update UI accordingly (sequential mode).
+
+        For sequential mode: applies the event and refreshes immediately.
+        For parallel mode: use post_event() to queue events, then refresh()
+        to drain the queue on the main thread.
 
         Args:
             event: The task event to process.
+        """
+        self._apply_event(event)
+        self.refresh()
+
+    def _apply_event(self, event: TaskEvent) -> None:
+        """Apply event to TUI state (main thread only).
+
+        This is the core event processing logic, extracted from handle_event
+        to support both sequential mode (direct call) and parallel mode
+        (called from _drain_event_queue).
+
+        Args:
+            event: The task event to apply.
         """
         if event.event_type == TaskEventType.TASK_STARTED:
             self._handle_task_started(event)
@@ -553,8 +595,6 @@ class TaskRunnerUI:
             self._handle_task_finished(event)
         elif event.event_type == TaskEventType.RUN_FINISHED:
             self._handle_run_finished(event)
-
-        self.refresh()
 
     def _handle_task_started(self, event: TaskEvent) -> None:
         """Handle TASK_STARTED event with parallel support.
@@ -584,7 +624,7 @@ class TaskRunnerUI:
             record.log_buffer.write(line)
 
     def _handle_task_finished(self, event: TaskEvent) -> None:
-        """Handle TASK_FINISHED event with parallel support.
+        """Handle TASK_FINISHED event with parallel support and tri-state status.
 
         Args:
             event: The task finished event.
@@ -593,15 +633,24 @@ class TaskRunnerUI:
         if record:
             record.end_time = event.timestamp
             if event.data:
-                if event.data.get("success", False):
+                # Support tri-state status: "success", "failed", "skipped"
+                status_str = event.data.get("status")
+                if status_str == "success":
                     record.status = TaskRunStatus.SUCCESS
+                elif status_str == "skipped":
+                    record.status = TaskRunStatus.SKIPPED
                 else:
                     record.status = TaskRunStatus.FAILED
                     record.error = event.data.get("error")
 
-            # Close the log buffer
-            if record.log_buffer:
-                record.log_buffer.close()
+            # CRITICAL: Close log buffer for ALL statuses (success, failed, skipped)
+            # Best-effort cleanup - catch exceptions to avoid breaking event processing
+            if record.log_buffer is not None:
+                try:
+                    record.log_buffer.close()
+                except Exception:
+                    pass  # Best-effort cleanup
+                record.log_buffer = None
 
             if self.parallel_mode:
                 self._running_task_indices.discard(event.task_index)

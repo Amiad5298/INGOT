@@ -259,16 +259,20 @@ def format_task_list(tasks: list[Task]) -> str:
 
 
 def get_fundamental_tasks(tasks: list[Task]) -> list[Task]:
-    """Get fundamental tasks sorted by dependency order.
+    """Get fundamental tasks sorted by dependency order with stable ordering.
+
+    Sorting is done by:
+    1. dependency_order (explicit order from metadata)
+    2. line_number (for stability when dependency_order is equal)
 
     Args:
         tasks: List of all tasks
 
     Returns:
-        List of fundamental tasks sorted by dependency_order
+        List of fundamental tasks sorted by (dependency_order, line_number)
     """
     fundamental = [t for t in tasks if t.category == TaskCategory.FUNDAMENTAL]
-    return sorted(fundamental, key=lambda t: t.dependency_order)
+    return sorted(fundamental, key=lambda t: (t.dependency_order, t.line_number))
 
 
 def get_independent_tasks(tasks: list[Task]) -> list[Task]:

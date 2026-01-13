@@ -207,6 +207,51 @@ class TestRateLimitConfig:
         assert config.max_delay_seconds == 120.0
         assert config.jitter_factor == 0.3
 
+    def test_negative_max_retries_raises_error(self):
+        """max_retries < 0 raises ValueError."""
+        with pytest.raises(ValueError, match="max_retries must be >= 0"):
+            RateLimitConfig(max_retries=-1)
+
+    def test_zero_max_retries_allows_zero_base_delay(self):
+        """max_retries=0 allows base_delay_seconds=0."""
+        config = RateLimitConfig(max_retries=0, base_delay_seconds=0.0)
+        assert config.max_retries == 0
+        assert config.base_delay_seconds == 0.0
+
+    def test_positive_max_retries_requires_positive_base_delay(self):
+        """base_delay_seconds must be > 0 when max_retries > 0."""
+        with pytest.raises(ValueError, match="base_delay_seconds must be > 0"):
+            RateLimitConfig(max_retries=3, base_delay_seconds=0.0)
+        with pytest.raises(ValueError, match="base_delay_seconds must be > 0"):
+            RateLimitConfig(max_retries=1, base_delay_seconds=-1.0)
+
+    def test_jitter_factor_negative_raises_error(self):
+        """jitter_factor < 0 raises ValueError."""
+        with pytest.raises(ValueError, match="jitter_factor must be in"):
+            RateLimitConfig(jitter_factor=-0.1)
+
+    def test_jitter_factor_above_one_raises_error(self):
+        """jitter_factor > 1 raises ValueError."""
+        with pytest.raises(ValueError, match="jitter_factor must be in"):
+            RateLimitConfig(jitter_factor=1.1)
+
+    def test_jitter_factor_at_bounds_valid(self):
+        """jitter_factor=0 and jitter_factor=1 are valid."""
+        config_zero = RateLimitConfig(jitter_factor=0.0)
+        assert config_zero.jitter_factor == 0.0
+        config_one = RateLimitConfig(jitter_factor=1.0)
+        assert config_one.jitter_factor == 1.0
+
+    def test_max_delay_less_than_base_raises_error(self):
+        """max_delay_seconds < base_delay_seconds raises ValueError."""
+        with pytest.raises(ValueError, match="max_delay_seconds must be >= base_delay_seconds"):
+            RateLimitConfig(base_delay_seconds=10.0, max_delay_seconds=5.0)
+
+    def test_max_delay_equals_base_delay_valid(self):
+        """max_delay_seconds == base_delay_seconds is valid."""
+        config = RateLimitConfig(base_delay_seconds=5.0, max_delay_seconds=5.0)
+        assert config.max_delay_seconds == config.base_delay_seconds
+
 
 class TestWorkflowStateParallelFields:
     """Tests for WorkflowState parallel execution fields."""

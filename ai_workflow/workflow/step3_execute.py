@@ -18,12 +18,17 @@ Supports two display modes:
 """
 
 import os
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from ai_workflow.integrations.auggie import AuggieClient
+from ai_workflow.integrations.auggie import (
+    AuggieClient,
+    AuggieRateLimitError,
+    _looks_like_rate_limit,
+)
 from ai_workflow.integrations.git import get_current_branch, is_dirty
 from ai_workflow.ui.log_buffer import TaskLogBuffer
 from ai_workflow.ui.prompts import prompt_confirm
@@ -343,12 +348,13 @@ def _execute_with_tui(
             start_event = create_task_started_event(i, task.name)
             tui.handle_event(start_event)
 
-            # Execute task with callback
-            success = _execute_task_with_callback(
+            # Execute task with retry wrapper (sequential mode, not parallel)
+            success = _execute_task_with_retry(
                 state, task, plan_path,
                 callback=lambda line, idx=i, name=task.name: tui.handle_event(
                     create_task_output_event(idx, name, line)
                 ),
+                is_parallel=False,
             )
 
             # Check for quit request during task execution
@@ -438,9 +444,11 @@ def _execute_fallback(
                 log_buffer.write(line)
                 console.print(line)
 
-            success = _execute_task_with_callback(
+            # Execute with retry wrapper (sequential mode, not parallel)
+            success = _execute_task_with_retry(
                 state, task, plan_path,
                 callback=output_callback,
+                is_parallel=False,
             )
 
         if success:
@@ -473,6 +481,7 @@ def _execute_parallel_fallback(
     Uses ThreadPoolExecutor for concurrent AI agent execution.
     Each task runs in complete isolation with dont_save_session=True.
     Rate limit errors trigger exponential backoff retry.
+    Implements fail_fast semantics with stop_flag for early termination.
 
     Args:
         state: Current workflow state
@@ -485,14 +494,28 @@ def _execute_parallel_fallback(
         List of failed task names
     """
     failed_tasks: list[str] = []
+    skipped_tasks: list[str] = []
+    stop_flag = threading.Event()
     max_workers = min(state.max_parallel_tasks, len(tasks))
 
     print_info(f"Executing {len(tasks)} tasks with {max_workers} parallel workers")
     print_info(f"Rate limit retry: max {state.rate_limit_config.max_retries} retries")
 
-    def execute_single_task(task_info: tuple[int, Task]) -> tuple[Task, bool]:
-        """Execute a single task with retry handling (runs in thread)."""
+    def execute_single_task(task_info: tuple[int, Task]) -> tuple[Task, bool | None]:
+        """Execute a single task with retry handling (runs in thread).
+
+        Returns:
+            Tuple of (task, success) where success is:
+            - True if task succeeded
+            - False if task failed
+            - None if task was skipped (due to stop_flag)
+        """
         idx, task = task_info
+
+        # Check stop flag before starting
+        if stop_flag.is_set():
+            return task, None  # Skipped
+
         log_filename = format_log_filename(idx, task.name)
         log_path = log_dir / log_filename
 
@@ -501,12 +524,13 @@ def _execute_parallel_fallback(
             def output_callback(line: str) -> None:
                 log_buffer.write(line)
 
-            # Use retry-enabled execution
+            # Use retry-enabled execution with is_parallel=True
             success = _execute_task_with_retry(
                 state,
                 task,
                 plan_path,
                 callback=output_callback,
+                is_parallel=True,
             )
 
         return task, success
@@ -519,19 +543,32 @@ def _execute_parallel_fallback(
         }
 
         for future in as_completed(futures):
-            task, success = future.result()
+            try:
+                task, success = future.result()
+            except CancelledError:
+                task = futures[future]
+                skipped_tasks.append(task.name)
+                print_info(f"[PARALLEL] Skipped (cancelled): {task.name}")
+                continue
 
-            if success:
+            if success is None:
+                # Task was skipped due to stop_flag
+                skipped_tasks.append(task.name)
+                print_info(f"[PARALLEL] Skipped: {task.name}")
+            elif success:
                 mark_task_complete(tasklist_path, task.name)
                 state.mark_task_complete(task.name)
                 print_success(f"[PARALLEL] Completed: {task.name}")
-                try:
-                    capture_task_memory(task, state)
-                except Exception as e:
-                    print_warning(f"Failed to capture task memory: {e}")
+                # Memory capture disabled for parallel tasks (contamination risk)
             else:
                 failed_tasks.append(task.name)
                 print_warning(f"[PARALLEL] Failed: {task.name}")
+                # Trigger fail-fast if enabled
+                if state.fail_fast:
+                    stop_flag.set()
+                    # Cancel pending futures
+                    for f in futures:
+                        f.cancel()
 
     return failed_tasks
 
@@ -549,6 +586,7 @@ def _execute_parallel_with_tui(
 
     Shows multiple tasks running concurrently in the TUI.
     Rate limit errors trigger exponential backoff retry.
+    Implements fail_fast semantics with stop_flag for early termination.
 
     Args:
         state: Current workflow state
@@ -564,6 +602,8 @@ def _execute_parallel_with_tui(
     from ai_workflow.ui.tui import TaskRunnerUI
 
     failed_tasks: list[str] = []
+    skipped_tasks: list[str] = []
+    stop_flag = threading.Event()
     max_workers = min(state.max_parallel_tasks, len(tasks))
 
     # Initialize TUI with all parallel tasks
@@ -580,78 +620,104 @@ def _execute_parallel_with_tui(
         if record:
             record.log_buffer = TaskLogBuffer(log_path)
 
-    def execute_single_task_tui(task_info: tuple[int, Task]) -> tuple[int, Task, bool]:
-        """Execute a single task with TUI callbacks and retry handling."""
+    def execute_single_task_tui(task_info: tuple[int, Task]) -> tuple[int, Task, str]:
+        """Execute a single task with TUI callbacks and retry handling.
+
+        Returns:
+            Tuple of (idx, task, status) where status is 'success'|'failed'|'skipped'.
+        """
         idx, task = task_info
         record = tui.get_record(idx)
+
+        # Early exit if stop flag set (fail-fast triggered by another task)
+        if stop_flag.is_set():
+            return idx, task, "skipped"
 
         # Emit task started
         start_event = create_task_started_event(idx, task.name)
         tui.handle_event(start_event)
 
-        # Execute with streaming callback and retry handling
-        success = _execute_task_with_retry(
-            state,
-            task,
-            plan_path,
-            callback=lambda line, i=idx, n=task.name: tui.handle_event(
-                create_task_output_event(i, n, line)
-            ),
-        )
+        try:
+            # Execute with streaming callback and retry handling (is_parallel=True)
+            success = _execute_task_with_retry(
+                state,
+                task,
+                plan_path,
+                callback=lambda line, i=idx, n=task.name: tui.handle_event(
+                    create_task_output_event(i, n, line)
+                ),
+                is_parallel=True,
+            )
+            status = "success" if success else "failed"
+        except Exception as e:
+            # Unexpected crash - treat as failure
+            tui.handle_event(create_task_output_event(idx, task.name, f"[ERROR] {e}"))
+            status = "failed"
 
         # Emit task finished
         duration = record.elapsed_time if record else 0.0
         finish_event = create_task_finished_event(
             idx,
             task.name,
-            success,
+            status == "success",
             duration,
-            error=None if success else "Task returned failure",
+            error=None if status == "success" else "Task returned failure",
         )
         tui.handle_event(finish_event)
 
-        return idx, task, success
+        return idx, task, status
 
     with tui:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(execute_single_task_tui, (i, task)): task
+                executor.submit(execute_single_task_tui, (i, task)): (i, task)
                 for i, task in enumerate(tasks)
             }
 
             for future in as_completed(futures):
-                idx, task, success = future.result()
+                try:
+                    idx, task, status = future.result()
+                except CancelledError:
+                    idx, task = futures[future]
+                    status = "skipped"
+                    # Emit skipped event for cancelled tasks
+                    finish_event = create_task_finished_event(
+                        idx, task.name, False, 0.0, error=None
+                    )
+                    tui.handle_event(finish_event)
 
-                if success:
+                if status == "success":
                     mark_task_complete(tasklist_path, task.name)
                     state.mark_task_complete(task.name)
-                    try:
-                        capture_task_memory(task, state)
-                    except Exception as e:
-                        record = tui.get_record(idx)
-                        if record and record.log_buffer:
-                            record.log_buffer.write(
-                                f"[WARNING] Memory capture failed: {e}"
-                            )
-                else:
+                    # Memory capture disabled for parallel tasks (contamination risk)
+                elif status == "skipped":
+                    skipped_tasks.append(task.name)
+                else:  # failed
                     failed_tasks.append(task.name)
+                    # Trigger fail-fast if enabled
+                    if state.fail_fast:
+                        stop_flag.set()
+                        # Cancel pending futures
+                        for f in futures:
+                            f.cancel()
 
     tui.print_summary()
     return failed_tasks
 
 
-def _build_task_prompt(task: Task, plan_path: Path) -> str:
+def _build_task_prompt(task: Task, plan_path: Path, is_parallel: bool = False) -> str:
     """Build the prompt for task execution.
 
     Args:
         task: Task to execute
         plan_path: Path to the plan file
+        is_parallel: Whether this task runs in parallel with others
 
     Returns:
         Prompt string for the AI
     """
     if plan_path.exists():
-        return f"""Execute this task. Do NOT commit or push any changes.
+        base_prompt = f"""Execute this task.
 
 Task: {task.name}
 
@@ -659,11 +725,22 @@ The implementation plan is at: {plan_path}
 Use codebase-retrieval to read the plan and focus on the section relevant to this task.
 Use codebase-retrieval to find existing patterns in the codebase."""
     else:
-        return f"""Execute this task. Do NOT commit or push any changes.
+        base_prompt = f"""Execute this task.
 
 Task: {task.name}
 
 Use codebase-retrieval to find existing patterns in the codebase."""
+
+    if is_parallel:
+        base_prompt += """
+
+IMPORTANT: This task runs in parallel with other tasks.
+- Do NOT run `git add`, `git commit`, or `git push`
+- Do NOT stage any changes
+- Only make file modifications; staging/committing will be done after all tasks complete"""
+
+    base_prompt += "\n\nDo NOT commit or push any changes."
+    return base_prompt
 
 
 def _execute_task(
@@ -710,7 +787,8 @@ def _execute_task_with_callback(
     task: Task,
     plan_path: Path,
     *,
-    callback: callable,
+    callback: Callable[[str], None],
+    is_parallel: bool = False,
 ) -> bool:
     """Execute a single task with streaming output callback.
 
@@ -722,20 +800,28 @@ def _execute_task_with_callback(
         task: Task to execute
         plan_path: Path to the plan file
         callback: Function called for each output line
+        is_parallel: Whether this task runs in parallel with others
 
     Returns:
         True if AI reported success
+
+    Raises:
+        AuggieRateLimitError: If the output indicates a rate limit error
     """
-    prompt = _build_task_prompt(task, plan_path)
+    prompt = _build_task_prompt(task, plan_path, is_parallel=is_parallel)
     auggie_client = AuggieClient(model=state.implementation_model)
 
     try:
-        success, _ = auggie_client.run_with_callback(
+        success, output = auggie_client.run_with_callback(
             prompt,
             output_callback=callback,
             dont_save_session=True,
         )
+        if not success and _looks_like_rate_limit(output):
+            raise AuggieRateLimitError("Rate limit detected", output=output)
         return success
+    except AuggieRateLimitError:
+        raise  # Let retry decorator handle
     except Exception as e:
         callback(f"[ERROR] Task execution crashed: {e}")
         return False
@@ -746,6 +832,7 @@ def _execute_task_with_retry(
     task: Task,
     plan_path: Path,
     callback: Callable[[str], None] | None = None,
+    is_parallel: bool = False,
 ) -> bool:
     """Execute a task with rate limit retry handling.
 
@@ -757,6 +844,7 @@ def _execute_task_with_retry(
         task: Task to execute
         plan_path: Path to plan file
         callback: Output callback for streaming
+        is_parallel: Whether this task runs in parallel with others
 
     Returns:
         True if task succeeded, False otherwise
@@ -766,7 +854,9 @@ def _execute_task_with_retry(
     # Skip retry wrapper if retries disabled
     if config.max_retries <= 0:
         if callback:
-            return _execute_task_with_callback(state, task, plan_path, callback=callback)
+            return _execute_task_with_callback(
+                state, task, plan_path, callback=callback, is_parallel=is_parallel
+            )
         else:
             return _execute_task(state, task, plan_path)
 
@@ -780,7 +870,9 @@ def _execute_task_with_retry(
     @with_rate_limit_retry(config, on_retry=log_retry)
     def execute_with_retry() -> bool:
         if callback:
-            return _execute_task_with_callback(state, task, plan_path, callback=callback)
+            return _execute_task_with_callback(
+                state, task, plan_path, callback=callback, is_parallel=is_parallel
+            )
         else:
             return _execute_task(state, task, plan_path)
 

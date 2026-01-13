@@ -62,8 +62,8 @@ def show_help() -> None:
     print_info("  --tui/--no-tui            Enable/disable TUI mode (default: auto)")
     print_info("  --verbose, -V             Show verbose output in TUI log panel")
     print_info("  --parallel/--no-parallel  Enable/disable parallel task execution")
-    print_info("  --max-parallel N          Max parallel tasks (1-5, default: 3)")
-    print_info("  --fail-fast               Stop on first task failure")
+    print_info("  --max-parallel N          Max parallel tasks (1-5, default: from config)")
+    print_info("  --fail-fast/--no-fail-fast  Stop on first task failure (default: from config)")
     print_info("  --max-retries N           Max retries on rate limit (0 to disable)")
     print_info("  --retry-base-delay SECS   Base delay for retry backoff (seconds)")
     print_info("  --config                  Show current configuration")
@@ -145,19 +145,19 @@ def main(
         ),
     ] = None,
     max_parallel: Annotated[
-        int,
+        Optional[int],
         typer.Option(
             "--max-parallel",
-            help="Maximum number of parallel tasks (1-5)",
+            help="Maximum number of parallel tasks (1-5, default: from config)",
         ),
-    ] = 3,
+    ] = None,
     fail_fast: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
-            "--fail-fast",
-            help="Stop on first task failure",
+            "--fail-fast/--no-fail-fast",
+            help="Stop on first task failure (default: from config)",
         ),
-    ] = False,
+    ] = None,
     max_retries: Annotated[
         int,
         typer.Option(
@@ -197,8 +197,8 @@ def main(
     """
     setup_logging()
 
-    # Validate max_parallel
-    if max_parallel < 1 or max_parallel > 5:
+    # Validate max_parallel if provided via CLI
+    if max_parallel is not None and (max_parallel < 1 or max_parallel > 5):
         print_error("Error: --max-parallel must be between 1 and 5")
         raise typer.Exit(ExitCode.GENERAL_ERROR)
 
@@ -373,8 +373,8 @@ def _run_workflow(
     use_tui: Optional[bool] = None,
     verbose: bool = False,
     parallel: Optional[bool] = None,
-    max_parallel: int = 3,
-    fail_fast: bool = False,
+    max_parallel: Optional[int] = None,
+    fail_fast: Optional[bool] = None,
     max_retries: int = 5,
     retry_base_delay: float = 2.0,
 ) -> None:
@@ -391,8 +391,8 @@ def _run_workflow(
         use_tui: Override for TUI mode. None = auto-detect.
         verbose: Enable verbose mode in TUI (expanded log panel).
         parallel: Override for parallel execution. None = use config.
-        max_parallel: Maximum number of parallel tasks (1-5).
-        fail_fast: Stop on first task failure.
+        max_parallel: Maximum number of parallel tasks (1-5). None = use config.
+        fail_fast: Stop on first task failure. None = use config.
         max_retries: Max retries on rate limit (0 to disable).
         retry_base_delay: Base delay for retry backoff (seconds).
     """
@@ -416,8 +416,13 @@ def _run_workflow(
 
     # Determine parallel execution settings
     effective_parallel = parallel if parallel is not None else config.settings.parallel_execution_enabled
-    effective_max_parallel = max_parallel if max_parallel != 3 else config.settings.max_parallel_tasks
-    effective_fail_fast = fail_fast or config.settings.fail_fast
+    effective_max_parallel = max_parallel if max_parallel is not None else config.settings.max_parallel_tasks
+    effective_fail_fast = fail_fast if fail_fast is not None else config.settings.fail_fast
+
+    # Validate effective_max_parallel (catches invalid config values too)
+    if effective_max_parallel < 1 or effective_max_parallel > 5:
+        print_error(f"Invalid max_parallel={effective_max_parallel} (must be 1-5)")
+        raise typer.Exit(ExitCode.GENERAL_ERROR)
 
     # Build rate limit config
     rate_limit_config = RateLimitConfig(

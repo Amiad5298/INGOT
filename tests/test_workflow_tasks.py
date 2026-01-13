@@ -655,3 +655,49 @@ class TestGetPendingIndependentTasks:
 
         assert len(result) == 1
         assert result[0].name == "Pending"
+
+
+class TestFundamentalTaskOrdering:
+    """Tests for stable ordering of fundamental tasks."""
+
+    def test_sorts_by_dependency_order_then_line_number(self):
+        """Fundamental tasks sort by dependency_order, then line_number."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, get_fundamental_tasks
+        )
+
+        tasks = [
+            Task(name="Task C", category=TaskCategory.FUNDAMENTAL, dependency_order=1, line_number=30),
+            Task(name="Task A", category=TaskCategory.FUNDAMENTAL, dependency_order=1, line_number=10),
+            Task(name="Task B", category=TaskCategory.FUNDAMENTAL, dependency_order=1, line_number=20),
+            Task(name="Task D", category=TaskCategory.FUNDAMENTAL, dependency_order=2, line_number=5),
+        ]
+
+        result = get_fundamental_tasks(tasks)
+
+        # Same dependency_order should be sorted by line_number
+        assert result[0].name == "Task A"  # order=1, line=10
+        assert result[1].name == "Task B"  # order=1, line=20
+        assert result[2].name == "Task C"  # order=1, line=30
+        assert result[3].name == "Task D"  # order=2, line=5
+
+    def test_stable_ordering_with_same_values(self):
+        """Tasks with same dependency_order and line_number maintain stable order."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, get_fundamental_tasks
+        )
+
+        # All tasks have same dependency_order and line_number
+        tasks = [
+            Task(name="First", category=TaskCategory.FUNDAMENTAL, dependency_order=0, line_number=0),
+            Task(name="Second", category=TaskCategory.FUNDAMENTAL, dependency_order=0, line_number=0),
+            Task(name="Third", category=TaskCategory.FUNDAMENTAL, dependency_order=0, line_number=0),
+        ]
+
+        result = get_fundamental_tasks(tasks)
+
+        # Python's sort is stable, so original order should be preserved
+        assert len(result) == 3
+        assert result[0].name == "First"
+        assert result[1].name == "Second"
+        assert result[2].name == "Third"

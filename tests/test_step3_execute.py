@@ -1490,3 +1490,189 @@ class TestTaskRetry:
 
         assert result is True
         assert mock_execute.call_count == 2
+
+
+# =============================================================================
+# Tests for Parallel Execution Enhancements
+# =============================================================================
+
+
+class TestParallelPromptGitRestrictions:
+    """Tests for git restrictions in parallel task prompts."""
+
+    def test_parallel_prompt_includes_git_restrictions(self, sample_task, tmp_path):
+        """Parallel mode prompt includes git restrictions."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path, is_parallel=True)
+
+        assert "Do NOT run `git add`" in result
+        assert "git commit" in result
+        assert "git push" in result
+        assert "parallel" in result.lower()
+
+    def test_sequential_prompt_excludes_git_restrictions(self, sample_task, tmp_path):
+        """Sequential mode prompt does not include parallel git restrictions."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path, is_parallel=False)
+
+        assert "Do NOT run `git add`" not in result
+        assert "parallel" not in result.lower()
+
+
+class TestParallelTaskMemorySkipped:
+    """Tests for memory capture being skipped in parallel mode."""
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_parallel_fallback_skips_memory_capture(
+        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Parallel fallback does not call capture_task_memory."""
+        from ai_workflow.workflow.step3_execute import _execute_parallel_fallback
+
+        mock_execute.return_value = True
+
+        tasks = [Task(name="Parallel Task 1", status=TaskStatus.PENDING)]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        _execute_parallel_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # Memory capture should NOT be called for parallel tasks
+        mock_capture.assert_not_called()
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_sequential_fallback_calls_memory_capture(
+        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Sequential fallback calls capture_task_memory."""
+        mock_execute.return_value = True
+
+        tasks = [Task(name="Sequential Task 1", status=TaskStatus.PENDING)]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        _execute_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # Memory capture SHOULD be called for sequential tasks
+        mock_capture.assert_called_once()
+
+
+class TestParallelFailFast:
+    """Tests for fail_fast semantics in parallel execution."""
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_fail_fast_stops_pending_tasks(
+        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Fail-fast stops pending tasks when one fails."""
+        from ai_workflow.workflow.step3_execute import _execute_parallel_fallback
+
+        # First task fails, second should be skipped
+        mock_execute.side_effect = [False, True, True]
+        workflow_state.fail_fast = True
+        workflow_state.max_parallel_tasks = 1  # Force sequential for predictable order
+
+        tasks = [
+            Task(name="Task 1", status=TaskStatus.PENDING),
+            Task(name="Task 2", status=TaskStatus.PENDING),
+            Task(name="Task 3", status=TaskStatus.PENDING),
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        failed = _execute_parallel_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # Task 1 should fail, others should be skipped
+        assert "Task 1" in failed
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_no_fail_fast_continues_after_failure(
+        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Without fail-fast, execution continues after failure."""
+        from ai_workflow.workflow.step3_execute import _execute_parallel_fallback
+
+        mock_execute.side_effect = [False, True, True]
+        workflow_state.fail_fast = False
+        workflow_state.max_parallel_tasks = 1
+
+        tasks = [
+            Task(name="Task 1", status=TaskStatus.PENDING),
+            Task(name="Task 2", status=TaskStatus.PENDING),
+            Task(name="Task 3", status=TaskStatus.PENDING),
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        failed = _execute_parallel_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # All tasks should execute
+        assert mock_execute.call_count == 3
+        assert failed == ["Task 1"]
+
+
+class TestExecuteTaskWithCallbackRateLimit:
+    """Tests for rate limit detection in _execute_task_with_callback."""
+
+    @patch("ai_workflow.workflow.step3_execute.AuggieClient")
+    def test_raises_rate_limit_error_on_rate_limit_output(
+        self, mock_auggie_class, workflow_state, sample_task
+    ):
+        """Raises AuggieRateLimitError when output indicates rate limit."""
+        from ai_workflow.integrations.auggie import AuggieRateLimitError
+
+        mock_client = MagicMock()
+        # Simulate rate limit in output
+        mock_client.run_with_callback.return_value = (
+            False, "Error: HTTP 429 Too Many Requests"
+        )
+        mock_auggie_class.return_value = mock_client
+
+        callback = MagicMock()
+
+        with pytest.raises(AuggieRateLimitError):
+            _execute_task_with_callback(
+                workflow_state, sample_task, workflow_state.get_plan_path(),
+                callback=callback
+            )
+
+    @patch("ai_workflow.workflow.step3_execute.AuggieClient")
+    def test_returns_false_on_non_rate_limit_failure(
+        self, mock_auggie_class, workflow_state, sample_task
+    ):
+        """Returns False on non-rate-limit failure."""
+        mock_client = MagicMock()
+        mock_client.run_with_callback.return_value = (False, "Some other error")
+        mock_auggie_class.return_value = mock_client
+
+        callback = MagicMock()
+        result = _execute_task_with_callback(
+            workflow_state, sample_task, workflow_state.get_plan_path(),
+            callback=callback
+        )
+
+        assert result is False

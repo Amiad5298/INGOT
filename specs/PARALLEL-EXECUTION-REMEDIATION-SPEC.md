@@ -1,134 +1,86 @@
-# Parallel Execution Hardening / Remediation Spec (v3)
+# Parallel Execution Hardening / Remediation Spec
 
-## Delta / Changes from v2
+## Scope
 
-| Section | Change |
-|---------|--------|
-| **Fix B** | Resolved API contradiction: introduced `run_with_callback_retryable()` as a NEW method; `run_with_callback` remains backward-compatible. Step 3 parallel/sequential code calls the new method. |
-| **Fix C** | Added explicit main-thread pump loop pseudocode inside `_execute_parallel_with_tui`. Uses `concurrent.futures.wait(..., timeout=0.1)` + `tui.refresh()` to drain queue without a separate render thread. |
-| **Fix D** | Clarified SKIPPED representation: use tri-state `status` field in `TASK_FINISHED` event data (`"success" | "failed" | "skipped"`). Updated TUI event handler + summary rules. |
-| **Fix B+** | Retry now applies to BOTH sequential (Phase 1) and parallel (Phase 2) execution. Documented the retry boundary at `_execute_task_with_retry`. |
-| **Fix J** | Simplified: verified `as_completed` loop runs on main thread, so `mark_task_complete` calls are already safe. Removed over-engineered lock/collection proposal. |
-| **Test Plan** | Added requirement to mock `time.sleep` and `random.uniform` (or seed) for deterministic, fast retry tests. |
+This spec remediates implementation issues in the parallel execution feature affecting:
+- CLI flag override logic
+- Retry mechanism for rate-limit errors
+- TUI thread-safety
+- fail-fast enforcement and SKIPPED task representation
+- Task ordering stability
+- Log buffer lifecycle
+- Task memory capture in parallel mode
+- Git contention policy
 
----
+## Non-Goals
 
-## Background & Scope
-
-This spec addresses implementation issues found during review of the parallel execution feature. The issues affect CLI behavior, retry semantics, TUI thread-safety, fail-fast enforcement, task ordering, task memory correctness, and test coverage.
-
----
-
-## Issue Validation Report
-
-### A) CLI Override Logic Bugs
-**STATUS: CONFIRMED**
-
-| Issue | File | Lines | Evidence |
-|-------|------|-------|----------|
-| max-parallel override bug | `cli.py` | 419 | `effective_max_parallel = max_parallel if max_parallel != 3 else ...` – uses `!= 3` instead of Optional[int] |
-| fail-fast cannot disable | `cli.py` | 420 | `effective_fail_fast = fail_fast or config...` – `or` means config True always wins |
-| Negative values not validated | `state.py` | 32-35 | `max_retries`, `base_delay_seconds` accept any int/float |
+- New features beyond what PARALLEL-EXECUTION-SPEC.md defines
+- Scheduler semantics for `group_id` (kept for UI labeling only)
+- Full task memory isolation (deferred to post-MVP)
 
 ---
 
-### B) Retry Mechanism May Not Retry
-**STATUS: CONFIRMED**
+## MVP Decisions
 
-- `_execute_task_with_callback` catches all exceptions and returns `False`
-- `run_with_callback` returns `(success, output)` without raising
-- Retry decorator never sees an exception to retry
-
----
-
-### C) TUI Thread-Safety Risks
-**STATUS: CONFIRMED**
-
-Worker threads call `tui.handle_event()` directly. Rich Live is not thread-safe.
+| Decision | Rationale |
+|----------|-----------|
+| **Memory capture disabled for parallel tasks** | `git diff --cached` mixes all concurrent changes; disabling prevents attribution contamination. Sequential tasks still capture. |
+| **`group_id` is UI-only** | Original spec introduced `group:` tags; removing would break existing task lists. No scheduler semantics in MVP. |
+| **Git operations forbidden in parallel tasks** | Parallel `git add`/`commit` contends on `.git/index`. Enforcement via prompt instructions. |
+| **Retry boundary is `_execute_task_with_callback`** | This function raises `AuggieRateLimitError` on rate-limit failures; `_execute_task_with_retry` wraps it with exponential backoff. |
+| **Thread-safety of state mutations: already satisfied** | `as_completed` loop runs on main thread; no additional locking required. |
 
 ---
 
-### D) fail_fast Not Enforced in Parallel Phase
-**STATUS: CONFIRMED**
+## Required Code Changes
 
-All futures submitted upfront; no cancellation on first failure.
+### File: `ai_workflow/cli.py`
 
----
-
-### E) Task Ordering – dependency_order=0 Problem
-**STATUS: CONFIRMED**
-
----
-
-### F) Log Buffer Lifecycle
-**STATUS: CONFIRMED**
-
-No try/finally around task execution in parallel TUI path.
-
----
-
-### G) Task Memory Capture Correctness
-**STATUS: CONFIRMED**
-
----
-
-### H) group_id Unused
-**STATUS: CONFIRMED**
-
----
-
-### I) Missing Tests
-**STATUS: CONFIRMED**
-
----
-
-### J) Thread-Safety of Shared State
-**STATUS: ALREADY SATISFIED**
-
-Verified: `as_completed` loop runs on the **main thread**, so `mark_task_complete(tasklist_path, ...)` and `state.mark_task_complete(...)` are called from the main thread, not worker threads. No additional locking required.
-
----
-
-### K) Concurrent Git/Index Operations
-**STATUS: CONFIRMED**
-
----
-
-## Proposed Fixes
-
-### Fix A: CLI Override Semantics
-
-**Changes to `cli.py`:**
-
-1. Change `max_parallel` from `int` with default 3 to `Optional[int]` default `None`:
+#### Change 1: `max_parallel` CLI parameter
 ```python
+# BEFORE:
+max_parallel: Annotated[int, typer.Option(...)] = 3
+
+# AFTER:
 max_parallel: Annotated[Optional[int], typer.Option(...)] = None
 ```
 
-2. Change `fail_fast` to a tri-state flag:
+#### Change 2: `fail_fast` CLI parameter
 ```python
+# BEFORE:
+fail_fast: Annotated[bool, typer.Option("--fail-fast")] = False
+
+# AFTER:
 fail_fast: Annotated[Optional[bool], typer.Option("--fail-fast/--no-fail-fast")] = None
 ```
 
-3. In `_run_workflow`, compute effective values properly:
+#### Change 3: Compute effective values in `_run_workflow`
 ```python
 effective_max_parallel = max_parallel if max_parallel is not None else config.settings.max_parallel_tasks
 effective_fail_fast = fail_fast if fail_fast is not None else config.settings.fail_fast
 ```
 
-4. **Validate effective (post-merge) values**, not just raw CLI args:
+#### Change 4: Validate effective values
 ```python
-# After merging CLI + config:
 if effective_max_parallel < 1 or effective_max_parallel > 5:
     print_error(f"Invalid max_parallel={effective_max_parallel} (must be 1-5)")
     raise typer.Exit(ExitCode.GENERAL_ERROR)
 ```
 
-5. **Validate RateLimitConfig** in `state.py` `__post_init__`:
+---
+
+### File: `ai_workflow/workflow/state.py`
+
+#### Change 1: Add `__post_init__` validation to `RateLimitConfig`
 ```python
 @dataclass
 class RateLimitConfig:
-    ...
+    max_retries: int = 5
+    base_delay_seconds: float = 2.0
+    max_delay_seconds: float = 60.0
+    jitter_factor: float = 0.5
+    retryable_status_codes: tuple[int, ...] = (429, 502, 503, 504)
+
     def __post_init__(self):
         if self.max_retries < 0:
             raise ValueError("max_retries must be >= 0")
@@ -142,25 +94,9 @@ class RateLimitConfig:
 
 ---
 
-### Fix B: Retry Mechanism (Backward-Compatible Approach)
+### File: `ai_workflow/integrations/auggie.py`
 
-**Problem:** Errors are returned as `False`, not raised. Retry decorator never sees exceptions.
-
-**Solution:** Add a NEW method `run_with_callback_retryable()` that raises on rate limits. Keep `run_with_callback()` unchanged for backward compatibility.
-
-#### 1. Add `_looks_like_rate_limit()` classifier in `auggie.py`:
-```python
-def _looks_like_rate_limit(output: str, exit_code: int) -> bool:
-    """Heuristic check for rate limit errors."""
-    if exit_code == 0:
-        return False
-    output_lower = output.lower()
-    patterns = ["429", "rate limit", "rate_limit", "too many requests",
-                "quota exceeded", "capacity", "throttl", "502", "503", "504"]
-    return any(p in output_lower for p in patterns)
-```
-
-#### 2. Add `AuggieRateLimitError` exception:
+#### Change 1: Add `AuggieRateLimitError` exception
 ```python
 class AuggieRateLimitError(Exception):
     """Raised when Auggie CLI output indicates a rate limit error."""
@@ -169,50 +105,53 @@ class AuggieRateLimitError(Exception):
         self.output = output
 ```
 
-#### 3. Add NEW method `run_with_callback_retryable()` in `AuggieClient`:
+#### Change 2: Add `_looks_like_rate_limit()` classifier (module-level)
 ```python
-def run_with_callback_retryable(self, prompt, *, output_callback, ...) -> tuple[bool, str]:
-    """Like run_with_callback, but raises AuggieRateLimitError on rate limits.
-
-    Use this method when you want the caller to handle retries.
-    """
-    success, output = self.run_with_callback(prompt, output_callback=output_callback, ...)
-    if not success and _looks_like_rate_limit(output, -1):  # exit code unavailable here
-        raise AuggieRateLimitError("Rate limit detected", output=output)
-    return success, output
+def _looks_like_rate_limit(output: str) -> bool:
+    """Heuristic check for rate limit errors in output."""
+    output_lower = output.lower()
+    patterns = ["429", "rate limit", "rate_limit", "too many requests",
+                "quota exceeded", "capacity", "throttl", "502", "503", "504"]
+    return any(p in output_lower for p in patterns)
 ```
 
-**Note:** To get the actual exit code, we may need to refactor `run_with_callback` to return it or store it. Alternatively, detect rate limit patterns in output only.
+---
 
-#### 4. Update `_execute_task_with_callback` to re-raise rate limit errors:
+### File: `ai_workflow/workflow/step3_execute.py`
+
+#### Change 1: Update `_execute_task_with_callback` to raise on rate limit
 ```python
-def _execute_task_with_callback(...) -> bool:
+from ai_workflow.integrations.auggie import AuggieRateLimitError, _looks_like_rate_limit
+
+def _execute_task_with_callback(
+    state: WorkflowState,
+    task: Task,
+    plan_path: Path,
+    *,
+    callback: callable,
+) -> bool:
+    prompt = _build_task_prompt(task, plan_path)
+    auggie_client = AuggieClient(model=state.implementation_model)
+
     try:
-        success, output = auggie_client.run_with_callback(...)
+        success, output = auggie_client.run_with_callback(
+            prompt,
+            output_callback=callback,
+            dont_save_session=True,
+        )
         if not success and _looks_like_rate_limit(output):
-            raise AuggieRateLimitError("Rate limit detected", output)
+            raise AuggieRateLimitError("Rate limit detected", output=output)
         return success
     except AuggieRateLimitError:
-        raise  # Let retry decorator catch this
+        raise  # Let retry decorator handle
     except Exception as e:
         callback(f"[ERROR] Task execution crashed: {e}")
         return False
 ```
 
-**Backward Compatibility:** `run_with_callback()` is UNCHANGED. Only `_execute_task_with_callback` converts rate limit failures to exceptions.
-
-**Retry Boundary:** The retry logic lives in `_execute_task_with_retry()`, which wraps `_execute_task_with_callback`. Both sequential and parallel execution MUST use `_execute_task_with_retry()` (see Fix B+).
-
----
-
-### Fix B+: Retry Applies to BOTH Sequential and Parallel Execution
-
-**Problem:** Currently, only `_execute_parallel_fallback` and `_execute_parallel_with_tui` use `_execute_task_with_retry`. Sequential execution (`_execute_with_tui`, `_execute_fallback`) calls `_execute_task_with_callback` directly, bypassing retry logic.
-
-**Solution:** Update sequential execution to also use `_execute_task_with_retry`:
-
+#### Change 2: Update `_execute_with_tui` to use retry wrapper
 ```python
-# In _execute_with_tui (around line 347):
+# Around line 347:
 # BEFORE:
 success = _execute_task_with_callback(state, task, plan_path, callback=...)
 
@@ -220,8 +159,9 @@ success = _execute_task_with_callback(state, task, plan_path, callback=...)
 success = _execute_task_with_retry(state, task, plan_path, callback=...)
 ```
 
+#### Change 3: Update `_execute_fallback` to use retry wrapper
 ```python
-# In _execute_fallback (around line 441):
+# Around line 441:
 # BEFORE:
 success = _execute_task_with_callback(state, task, plan_path, callback=output_callback)
 
@@ -229,19 +169,182 @@ success = _execute_task_with_callback(state, task, plan_path, callback=output_ca
 success = _execute_task_with_retry(state, task, plan_path, callback=output_callback)
 ```
 
-**Behavior when `max_retries=0`:** `_execute_task_with_retry` already handles this case by calling the underlying function directly without retry wrapping.
+#### Change 4: Add `is_parallel` parameter to `_build_task_prompt`
+```python
+def _build_task_prompt(task: Task, plan_path: Path, is_parallel: bool = False) -> str:
+    base_prompt = f"""Execute this task.
+
+Task: {task.name}
+
+The implementation plan is at: {plan_path}
+Use codebase-retrieval to read the plan and focus on the section relevant to this task."""
+
+    if is_parallel:
+        base_prompt += """
+
+IMPORTANT: This task runs in parallel with other tasks.
+- Do NOT run `git add`, `git commit`, or `git push`
+- Do NOT stage any changes
+- Only make file modifications; staging/committing will be done after all tasks complete"""
+
+    base_prompt += "\n\nDo NOT commit or push any changes."
+    return base_prompt
+```
+
+#### Change 5: Pass `is_parallel=True` in parallel execution functions
+Update calls to `_build_task_prompt` in `_execute_parallel_fallback` and `_execute_parallel_with_tui`.
+
+#### Change 6: Disable memory capture for parallel tasks
+```python
+# In parallel execution completion handling:
+if success:
+    mark_task_complete(tasklist_path, task.name)
+    state.mark_task_complete(task.name)
+    # Memory capture disabled for parallel tasks (contamination risk)
+```
+
+#### Change 7: Add `threading.Event` stop flag for fail-fast in `_execute_parallel_fallback`
+```python
+import threading
+from concurrent.futures import CancelledError
+
+def _execute_parallel_fallback(...) -> list[str]:
+    failed_tasks: list[str] = []
+    skipped_tasks: list[str] = []
+    stop_flag = threading.Event()
+
+    def execute_single_task(task_info: tuple[int, Task]) -> tuple[Task, bool | None]:
+        idx, task = task_info
+        if stop_flag.is_set():
+            return task, None  # Skipped
+        # ... existing execution logic ...
+        return task, success
+
+    # ... in as_completed loop:
+    try:
+        _, success = future.result()
+    except CancelledError:
+        skipped_tasks.append(task.name)
+        continue
+
+    if success is None:
+        skipped_tasks.append(task.name)
+    elif success:
+        mark_task_complete(...)
+    else:
+        failed_tasks.append(task.name)
+        if state.fail_fast:
+            stop_flag.set()
+            for f in futures:
+                f.cancel()
+```
+
+#### Change 8: Add fail-fast with stop flag in `_execute_parallel_with_tui`
+
+The TUI path must implement the same fail-fast behavior as the fallback path:
+- Use a shared `threading.Event` stop flag
+- Worker threads check `stop_flag.is_set()` before executing
+- On first failure with `fail_fast=True`, set `stop_flag` and cancel pending futures
+- Handle `CancelledError` and mark as SKIPPED
+- Emit `TASK_FINISHED` with `status="skipped"` for cancelled/not-started tasks
+
+```python
+import threading
+from concurrent.futures import wait, FIRST_COMPLETED, CancelledError
+
+def _execute_parallel_with_tui(
+    state: WorkflowState,
+    tasks: list[Task],
+    plan_path: Path,
+    tasklist_path: Path,
+    tui: TaskRunnerUI,
+    max_workers: int,
+) -> list[str]:
+    failed_tasks: list[str] = []
+    skipped_tasks: list[str] = []
+    stop_flag = threading.Event()
+    future_to_task: dict[Future, tuple[int, Task]] = {}
+
+    def execute_single_task_tui(task_info: tuple[int, Task]) -> tuple[int, Task, str]:
+        """Worker function. Returns (idx, task, status) where status is 'success'|'failed'|'skipped'."""
+        idx, task = task_info
+
+        # Early exit if stop flag set (fail-fast triggered by another task)
+        if stop_flag.is_set():
+            return idx, task, "skipped"
+
+        tui.post_event(create_task_started_event(idx, task.name))
+
+        try:
+            success = _execute_task_with_retry(
+                state, task, plan_path,
+                callback=lambda msg: tui.post_event(create_task_output_event(idx, task.name, msg)),
+                is_parallel=True,
+            )
+            status = "success" if success else "failed"
+        except Exception as e:
+            # Unexpected crash - treat as failure
+            tui.post_event(create_task_output_event(idx, task.name, f"[ERROR] {e}"))
+            status = "failed"
+
+        return idx, task, status
+
+    with tui:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            for i, task in enumerate(tasks):
+                future = executor.submit(execute_single_task_tui, (i, task))
+                future_to_task[future] = (i, task)
+
+            pending = set(future_to_task.keys())
+
+            while pending:
+                done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+                tui.refresh()  # Drains event queue + updates Live display
+
+                for future in done:
+                    idx, task = future_to_task[future]
+
+                    try:
+                        _, _, status = future.result()
+                    except CancelledError:
+                        status = "skipped"
+
+                    # Emit TASK_FINISHED event for this task
+                    record = tui.get_record(idx)
+                    duration = record.elapsed_time if record else 0.0
+                    tui.post_event(create_task_finished_event(
+                        idx, task.name, status, duration,
+                        error="Task failed" if status == "failed" else None
+                    ))
+
+                    # Update tracking lists
+                    if status == "success":
+                        mark_task_complete(tasklist_path, task.name)
+                        state.mark_task_complete(task.name)
+                        # Memory capture disabled for parallel tasks (contamination risk)
+                    elif status == "skipped":
+                        skipped_tasks.append(task.name)
+                    else:  # failed
+                        failed_tasks.append(task.name)
+
+                        # Trigger fail-fast: stop accepting new work
+                        if state.fail_fast:
+                            stop_flag.set()
+                            # Cancel all pending futures
+                            for f in pending:
+                                f.cancel()
+
+            tui.refresh()  # Final drain
+
+    return failed_tasks  # Caller may also want skipped_tasks
+```
 
 ---
 
-### Fix C: TUI Thread-Safety (Queue + Main-Thread Pump Loop)
+### File: `ai_workflow/ui/tui.py`
 
-**Constraints:**
-- Workers MUST NOT call `tui.handle_event()` or `tui.refresh()`
-- Workers only push events to a thread-safe queue via `tui.post_event()`
-- Main thread explicitly drains queue and refreshes display
-
-**Changes to `tui.py`:**
-
+#### Change 1: Add event queue for thread-safe event posting
 ```python
 import queue
 
@@ -263,8 +366,8 @@ class TaskRunnerUI:
                 break
 
     def _apply_event(self, event: TaskEvent) -> None:
-        """Apply event (main thread only). Extracted from handle_event, no refresh call."""
-        # ... existing handle_event logic, minus self.refresh() at the end ...
+        """Apply event (main thread only). Extracted from handle_event."""
+        # ... existing handle_event logic, minus self.refresh() ...
 
     def refresh(self) -> None:
         """Refresh display (main thread only). Drains queue first."""
@@ -272,173 +375,117 @@ class TaskRunnerUI:
         if self._live is not None:
             self._live.update(self._render_layout())
 
-    # Keep handle_event for sequential mode backward compatibility:
+    # Keep handle_event for sequential mode:
     def handle_event(self, event: TaskEvent) -> None:
         self._apply_event(event)
         self.refresh()
 ```
 
-**Main-Thread Pump Loop in `_execute_parallel_with_tui`:**
+#### Change 2: Log buffer lifecycle in `_apply_event`
 
-Rich Live's `refresh_per_second` does NOT automatically call our `refresh()` method. We must explicitly pump the queue. Add an explicit main-thread loop:
+Log buffers must be closed for ALL task completion statuses (success, failed, skipped). The existing logic closes log buffers on TASK_FINISHED; this must be preserved after refactoring `handle_event` → `_apply_event`.
 
 ```python
-def _execute_parallel_with_tui(...) -> list[str]:
-    from concurrent.futures import wait, FIRST_COMPLETED
+def _apply_event(self, event: TaskEvent) -> None:
+    """Apply event to TUI state (main thread only)."""
+    if event.event_type == TaskEventType.TASK_FINISHED:
+        data = event.data
+        idx = data.get("task_index", event.task_index)
+        record = self.records[idx]
 
-    # ... setup tui, log buffers, etc. ...
+        status_str = data["status"]
+        if status_str == "success":
+            record.status = TaskRunStatus.SUCCESS
+        elif status_str == "skipped":
+            record.status = TaskRunStatus.SKIPPED
+        else:
+            record.status = TaskRunStatus.FAILED
+            record.error = data.get("error")
 
-    def execute_single_task_tui(task_info):
-        idx, task = task_info
-        tui.post_event(create_task_started_event(idx, task.name))
-        success = _execute_task_with_retry(state, task, plan_path,
-            callback=lambda line, i=idx, n=task.name: tui.post_event(
-                create_task_output_event(i, n, line)))
-        duration = tui.get_record(idx).elapsed_time if tui.get_record(idx) else 0.0
-        tui.post_event(create_task_finished_event(idx, task.name, success, duration,
-            error=None if success else "Task failed"))
-        return idx, task, success
+        record.end_time = event.timestamp
+        record.duration = data.get("duration", 0.0)
 
-    with tui:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            pending = {executor.submit(execute_single_task_tui, (i, t)): t
-                       for i, t in enumerate(tasks)}
+        # CRITICAL: Close log buffer for ALL statuses (success, failed, skipped)
+        if record.log_buffer is not None:
+            try:
+                record.log_buffer.close()
+            except Exception:
+                pass  # Best-effort cleanup
+            record.log_buffer = None
 
-            # Main-thread pump loop: drain queue + refresh while futures run
-            while pending:
-                done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
-                tui.refresh()  # Drains queue + updates Live
+    elif event.event_type == TaskEventType.TASK_STARTED:
+        # ... existing logic ...
+        pass
 
-                for future in done:
-                    idx, task, success = future.result()
-                    if success:
-                        mark_task_complete(tasklist_path, task.name)
-                        state.mark_task_complete(task.name)
-                    else:
-                        failed_tasks.append(task.name)
-                        if state.fail_fast:
-                            # Cancel remaining (best-effort)
-                            for f in pending:
-                                f.cancel()
-
-            # Final drain after all complete
-            tui.refresh()
-
-    tui.print_summary()
-    return failed_tasks
+    elif event.event_type == TaskEventType.TASK_OUTPUT:
+        # ... existing logic ...
+        pass
 ```
 
-**Why this works:** The main thread calls `wait(..., timeout=0.1)` which blocks briefly, then calls `tui.refresh()` to drain the queue and update the display. This avoids a separate render thread while keeping the UI responsive.
+**Requirement**: Log buffer cleanup MUST happen in `_apply_event` on the main thread (not in worker threads) because:
+1. Workers only call `post_event()` (thread-safe queue push)
+2. Main thread drains queue via `refresh()` → `_drain_event_queue()` → `_apply_event()`
+3. Log buffers may have thread affinity; closing on main thread is safest
 
 ---
 
-### Fix D: fail_fast in Parallel Phase + SKIPPED Representation
+### File: `ai_workflow/workflow/events.py`
 
-**Semantics defined:**
-1. After first failure, **do not start** any additional tasks (check stop flag before execution)
-2. **Best-effort cancel** pending futures (may not interrupt running tasks)
-3. Running tasks **may continue** to completion (thread safety)
-4. Tasks not started → marked **SKIPPED** (not FAILED)
-5. `CancelledError` from `future.result()` → task marked SKIPPED
-
-**SKIPPED Representation in Events:**
-
-Currently, `TASK_FINISHED` has a `success: bool` field. To distinguish SKIPPED from FAILED, change to a tri-state `status` field:
-
+#### Change 1: Update `create_task_finished_event` to use tri-state status
 ```python
-# In events.py:
-class TaskFinishedData:
-    task_index: int
-    task_name: str
-    status: Literal["success", "failed", "skipped"]  # Changed from success: bool
-    duration: float
-    error: Optional[str] = None
+def create_task_finished_event(
+    task_index: int,
+    task_name: str,
+    status: Literal["success", "failed", "skipped"],  # Changed from success: bool
+    duration: float,
+    error: str | None = None,
+) -> TaskEvent:
+    return TaskEvent(
+        event_type=TaskEventType.TASK_FINISHED,
+        task_index=task_index,
+        task_name=task_name,
+        timestamp=time.time(),
+        data={"status": status, "duration": duration, "error": error},
+    )
 ```
 
-**Update TUI event handler:**
+#### Change 2: Update all callers to pass status string
+```python
+# Success case:
+create_task_finished_event(idx, task.name, "success", duration)
+
+# Failure case:
+create_task_finished_event(idx, task.name, "failed", duration, error="...")
+
+# Skipped case:
+create_task_finished_event(idx, task.name, "skipped", 0.0)
+```
+
+#### Note on TUI handler update:
 ```python
 def _apply_event(self, event: TaskEvent) -> None:
     if event.event_type == TaskEventType.TASK_FINISHED:
         data = event.data
-        record = self.records[data.task_index]
-        if data.status == "success":
-            record.status = TaskRunStatus.COMPLETED
-        elif data.status == "skipped":
+        record = self.records[data["task_index"]]
+        status_str = data["status"]
+        if status_str == "success":
+            record.status = TaskRunStatus.SUCCESS
+        elif status_str == "skipped":
             record.status = TaskRunStatus.SKIPPED
         else:
             record.status = TaskRunStatus.FAILED
 ```
 
-**Update summary logic:**
-```python
-def print_summary(self) -> None:
-    completed = sum(1 for r in self.records if r.status == TaskRunStatus.COMPLETED)
-    failed = sum(1 for r in self.records if r.status == TaskRunStatus.FAILED)
-    skipped = sum(1 for r in self.records if r.status == TaskRunStatus.SKIPPED)
-    # ... print summary with all three counts ...
-```
-
-**Changes to `step3_execute.py`:**
-
-```python
-import threading
-from concurrent.futures import CancelledError
-
-def _execute_parallel_fallback(...) -> list[str]:
-    failed_tasks: list[str] = []
-    skipped_tasks: list[str] = []
-    stop_flag = threading.Event()
-
-    def execute_single_task(task_info: tuple[int, Task]) -> tuple[Task, bool | None]:
-        """Returns (task, success) where success=None means skipped."""
-        idx, task = task_info
-        if stop_flag.is_set():
-            return task, None  # Skipped
-        # ... existing execution logic ...
-        return task, success
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {}
-        for i, task in enumerate(tasks):
-            if stop_flag.is_set():
-                skipped_tasks.append(task.name)
-                continue
-            futures[executor.submit(execute_single_task, (i, task))] = task
-
-        for future in as_completed(futures):
-            task = futures[future]
-            try:
-                _, success = future.result()
-            except CancelledError:
-                skipped_tasks.append(task.name)
-                continue
-
-            if success is None:
-                skipped_tasks.append(task.name)
-            elif success:
-                mark_task_complete(tasklist_path, task.name)
-                state.mark_task_complete(task.name)
-            else:
-                failed_tasks.append(task.name)
-                if state.fail_fast:
-                    stop_flag.set()
-                    for f in futures:
-                        f.cancel()
-
-    return failed_tasks
-```
-
 ---
 
-### Fix E: Task Ordering Stability
+### File: `ai_workflow/workflow/tasks.py`
 
-**Change `get_fundamental_tasks` in `tasks.py`:**
+#### Change 1: Stable sort for `get_fundamental_tasks`
 ```python
 def get_fundamental_tasks(tasks: list[Task]) -> list[Task]:
     fundamental = [t for t in tasks if t.category == TaskCategory.FUNDAMENTAL]
-    # Stable sort: (explicit_first, dependency_order, line_number)
     return sorted(fundamental, key=lambda t: (
-        0 if t.dependency_order > 0 else 1,  # Explicit order=1-N before order=0
+        0 if t.dependency_order > 0 else 1,  # Explicit order before order=0
         t.dependency_order,
         t.line_number  # Tie-breaker preserves file order
     ))
@@ -446,149 +493,34 @@ def get_fundamental_tasks(tasks: list[Task]) -> list[Task]:
 
 ---
 
-### Fix F: Log Buffer Lifecycle
+## Acceptance Criteria
 
-**Wrap task execution in try/finally in `step3_execute.py`:**
-```python
-def execute_single_task_tui(task_info):
-    idx, task = task_info
-    record = tui.get_record(idx)
-    success = False
-
-    try:
-        start_event = create_task_started_event(idx, task.name)
-        tui.post_event(start_event)
-        success = _execute_task_with_retry(...)
-    finally:
-        duration = record.elapsed_time if record else 0.0
-        finish_event = create_task_finished_event(
-            idx, task.name, success, duration,
-            error=None if success else "Task failed or crashed"
-        )
-        tui.post_event(finish_event)
-
-    return idx, task, success
-```
-
----
-
-### Fix G: Task Memory in Parallel Mode (Revised)
-
-**Problem:** Deferring capture until after all tasks complete still reads a combined `git diff --cached` that mixes all changes. This does NOT prevent contamination.
-
-**MVP Solution (Chosen): Disable memory capture for parallel tasks**
-```python
-# In _execute_parallel_fallback and _execute_parallel_with_tui:
-# DON'T call capture_task_memory() for parallel tasks at all
-
-if success:
-    mark_task_complete(tasklist_path, task.name)
-    state.mark_task_complete(task.name)
-    # Memory capture disabled for parallel tasks (contamination risk)
-    # Log this decision:
-    print_info(f"[PARALLEL] Completed: {task.name} (memory capture skipped)")
-```
-
-**Why this is MVP-safe:** Task memory is used for cross-task learning and analytics. Disabling it for parallel tasks loses some analytics value but prevents incorrect attribution. Sequential/fundamental tasks still capture memory correctly.
-
-**Follow-up (post-MVP):** Implement true isolation via one of:
-1. **File-set based capture**: Track which files each task touched (via git diff before/after per task)
-2. **Git worktree isolation**: Each parallel task runs in a separate worktree
-
-**Update Acceptance Criteria:**
-- Parallel tasks must NOT call `capture_task_memory()`
-- Add log message indicating memory capture is skipped for parallel tasks
-
----
-
-### Fix H: group_id Decision (Explicit)
-
-**Decision: Option A – Keep for UI labeling only**
-
-**Rationale:** The original spec and Step 2 prompt introduce `group:` tags. Removing them would require updating the prompt and breaking existing task lists. Keeping them for UI labeling is low-cost and provides future extensibility.
-
-**Changes:**
-
-1. **Keep** `group_id` in `Task` dataclass and parsing logic
-2. **Update documentation** in original spec to clarify: "Group tags are informational labels for UI display only. No scheduler semantics in MVP."
-3. **TUI enhancement (optional, low priority):** Display group label in task list if present
-
-**No conflict with original spec:** The original spec says `group:` is for "grouping parallel tasks" – we clarify this means visual grouping, not execution grouping.
-
----
-
-### Fix J: Thread-Safety of Shared Clients/State (ALREADY SATISFIED)
-
-**Findings after code review:**
-- `AuggieClient` is created per call in `_execute_task_with_callback` (line 730) – **OK**
-- `WorkflowState.mark_task_complete()` is called from the `as_completed` loop, which runs on the **main thread** – **OK**
-- `mark_task_complete(tasklist_path, ...)` is also called from the main thread – **OK**
-
-**Verification:** In both `_execute_parallel_fallback` (lines 521-534) and `_execute_parallel_with_tui` (lines 622-637), the `as_completed` loop runs on the main thread. Worker threads only execute tasks and return results; they do NOT call `mark_task_complete` or mutate `state`.
-
-**No additional fix needed.** The current implementation is already thread-safe for state mutations.
-
----
-
-### Fix K: Git Contention Policy (NEW)
-
-**Problem:** Parallel tasks may run `git add`, `git commit` which contends on `.git/index`.
-
-**Policy (MVP): Parallel tasks MUST NOT stage/commit**
-
-**Enforcement via agent prompt** – update `_build_task_prompt` in `step3_execute.py`:
-
-```python
-def _build_task_prompt(task: Task, plan_path: Path, is_parallel: bool = False) -> str:
-    base_prompt = f"""Execute this task.
-
-Task: {task.name}
-
-The implementation plan is at: {plan_path}
-Use codebase-retrieval to read the plan and focus on the section relevant to this task."""
-
-    # Add parallel-specific restrictions
-    if is_parallel:
-        base_prompt += """
-
-IMPORTANT: This task runs in parallel with other tasks.
-- Do NOT run `git add`, `git commit`, or `git push`
-- Do NOT stage any changes
-- Only make file modifications; staging/committing will be done after all tasks complete"""
-
-    base_prompt += "\n\nDo NOT commit or push any changes."
-    return base_prompt
-```
-
-**Pass `is_parallel=True`** when calling from parallel execution functions.
-
-**Acceptance Criteria:**
-- Parallel task prompts include git restriction
-- Test that parallel task prompt contains "Do NOT run `git add`"
+1. **CLI:** `--max-parallel 3` overrides config value of 5; `--no-fail-fast` overrides config `fail_fast: true`; effective values validated (1-5 range)
+2. **Retry:** Rate limit errors (429, 502-504, keywords) trigger exponential backoff via `_execute_task_with_retry`; non-rate-limit errors fail immediately; retry applies to BOTH sequential and parallel execution
+3. **TUI:** No race conditions; workers use `post_event()`; main thread drains queue via explicit `wait()` pump loop
+4. **fail_fast (both paths):** First failure stops new submissions in BOTH `_execute_parallel_fallback` AND `_execute_parallel_with_tui`; uses shared `threading.Event` stop_flag; workers check `stop_flag.is_set()` before executing; pending tasks marked SKIPPED; `CancelledError` handled in both paths; SKIPPED represented as tri-state `status` field in `TASK_FINISHED` events
+5. **Ordering:** Tasks with `dependency_order=0` appear after tasks with explicit orders; `line_number` used as tie-breaker
+6. **Log buffers:** Closed in `_apply_event()` for ALL statuses (success, failed, skipped); cleanup is best-effort (catches exceptions)
+7. **TASK_FINISHED guarantee:** Every task that starts MUST emit a TASK_FINISHED event, even on unexpected exceptions; workers use try/except to catch crashes and emit "failed" status
+8. **Memory:** Parallel tasks do NOT call `capture_task_memory()`
+9. **group_id:** Retained for UI labeling only; no scheduler semantics
+10. **Thread-safety:** State mutations happen on main thread; workers only call `post_event()` (queue push)
+11. **Git contention:** Parallel task prompts include git operation restrictions
+12. **Tests:** All behaviors have passing tests; retry tests mock `time.sleep` and `random.uniform`
 
 ---
 
 ## Test Plan
 
-### Test Determinism Requirements
+### Test Determinism
 
-**Mocking for retry tests:** The retry utilities use `time.sleep()` and `random.uniform()` for exponential backoff with jitter. To ensure tests are fast and deterministic:
-
-1. **Mock `time.sleep`** to avoid actual delays:
-   ```python
-   @patch('ai_workflow.workflow.retry_utils.time.sleep')
-   def test_retry_triggers_on_rate_limit_error(mock_sleep):
-       # Test runs instantly, mock_sleep.call_count verifies retry attempts
-   ```
-
-2. **Seed or mock `random.uniform`** for deterministic jitter:
-   ```python
-   @patch('ai_workflow.workflow.retry_utils.random.uniform', return_value=0.5)
-   def test_retry_delay_calculation(mock_random):
-       # Jitter is now deterministic
-   ```
-
-3. **Alternative: Use a test-friendly retry config** with `max_retries=0` for tests that don't need retry behavior.
+Mock `time.sleep` and `random.uniform` for fast, deterministic retry tests:
+```python
+@patch('ai_workflow.utils.retry.time.sleep')
+@patch('ai_workflow.utils.retry.random.uniform', return_value=0.5)
+def test_retry_triggers_on_rate_limit_error(mock_random, mock_sleep):
+    # Test runs instantly, mock_sleep.call_count verifies attempts
+```
 
 ### Test Matrix
 
@@ -597,42 +529,35 @@ IMPORTANT: This task runs in parallel with other tasks.
 | `test_max_parallel_override_none_uses_config` | `tests/test_cli.py` | `None` → uses config value |
 | `test_max_parallel_override_explicit` | `tests/test_cli.py` | `--max-parallel 2` overrides config=5 |
 | `test_fail_fast_no_flag_overrides_config` | `tests/test_cli.py` | `--no-fail-fast` overrides config=True |
-| `test_rate_limit_config_validation` | `tests/test_state.py` | Invalid values raise ValueError |
+| `test_rate_limit_config_validation` | `tests/test_workflow_state.py` | Invalid values raise ValueError |
 | `test_looks_like_rate_limit_patterns` | `tests/test_auggie.py` | Classifier detects 429, 502-504, keywords |
-| `test_looks_like_rate_limit_exit_zero_false` | `tests/test_auggie.py` | Exit code 0 → False |
 | `test_execute_task_raises_on_rate_limit` | `tests/test_step3_execute.py` | `_execute_task_with_callback` raises `AuggieRateLimitError` |
-| `test_retry_triggers_on_rate_limit_error` | `tests/test_retry.py` | Integration: exception triggers retry (mock `time.sleep`) |
-| `test_tui_post_event_thread_safe` | `tests/test_tui.py` | Multi-threaded posting works |
-| `test_tui_drain_queue_on_refresh` | `tests/test_tui.py` | Events processed on refresh |
-| `test_fail_fast_skips_pending_tasks` | `tests/test_step3_execute.py` | Pending tasks → SKIPPED |
-| `test_fail_fast_handles_cancelled_error` | `tests/test_step3_execute.py` | CancelledError → SKIPPED |
-| `test_task_ordering_stability` | `tests/test_workflow_tasks.py` | Mixed order=0 and order>0 |
+| `test_retry_triggers_on_rate_limit_error` | `tests/test_retry.py` | Exception triggers retry with mocked sleep |
+| `test_tui_post_event_thread_safe` | `tests/test_tui.py` | Multi-threaded posting to queue works |
+| `test_tui_drain_queue_on_refresh` | `tests/test_tui.py` | Events processed on refresh() |
+| `test_fail_fast_skips_pending_tasks_fallback` | `tests/test_step3_execute.py` | Fallback path: pending tasks → SKIPPED status |
+| `test_fail_fast_skips_pending_tasks_tui` | `tests/test_step3_execute.py` | TUI path: pending tasks → SKIPPED status |
+| `test_fail_fast_handles_cancelled_error_fallback` | `tests/test_step3_execute.py` | Fallback path: CancelledError → SKIPPED |
+| `test_fail_fast_handles_cancelled_error_tui` | `tests/test_step3_execute.py` | TUI path: CancelledError → SKIPPED |
+| `test_task_ordering_stability` | `tests/test_workflow_tasks.py` | Mixed order=0 and order>0 sorted correctly |
 | `test_parallel_task_memory_skipped` | `tests/test_step3_execute.py` | No capture_task_memory call |
-| `test_parallel_prompt_git_restrictions` | `tests/test_step3_execute.py` | Prompt contains git restrictions |
+| `test_parallel_prompt_git_restrictions` | `tests/test_step3_execute.py` | Prompt contains "Do NOT run `git add`" |
 | `test_sequential_uses_retry` | `tests/test_step3_execute.py` | Sequential mode calls `_execute_task_with_retry` |
+| `test_task_finished_event_tri_state` | `tests/test_events.py` | `create_task_finished_event` accepts status string |
+| `test_task_finished_always_emitted_on_exception` | `tests/test_step3_execute.py` | Worker crash still emits TASK_FINISHED (failed) |
+| `test_log_buffer_closed_on_success` | `tests/test_tui.py` | Log buffer closed in `_apply_event` for success |
+| `test_log_buffer_closed_on_failure` | `tests/test_tui.py` | Log buffer closed in `_apply_event` for failure |
+| `test_log_buffer_closed_on_skipped` | `tests/test_tui.py` | Log buffer closed in `_apply_event` for skipped |
+| `test_stop_flag_prevents_new_task_execution` | `tests/test_step3_execute.py` | Worker early-exits if stop_flag set |
 
 ---
 
-## Acceptance Criteria
+## Repo Hygiene Note
 
-1. **CLI:** `--max-parallel 3` works when config=5; `--no-fail-fast` overrides config `fail_fast: true`; effective values validated
-2. **Retry:** Rate limit errors (429, 502-504, keywords) trigger exponential backoff; non-rate-limit errors fail immediately; retry applies to BOTH sequential and parallel execution
-3. **TUI:** No race conditions; workers use `post_event()`; main thread drains queue via explicit pump loop
-4. **fail_fast:** First failure stops new submissions; pending marked SKIPPED; CancelledError handled; SKIPPED represented as tri-state status in events
-5. **Ordering:** Tasks with order=0 appear after explicit orders, preserving file order as tie-breaker
-6. **Log buffers:** Always closed via try/finally
-7. **Memory:** Parallel tasks skip memory capture; log message indicates skipped
-8. **group_id:** Retained for UI labeling; no scheduler semantics in MVP
-9. **Thread-safety:** Already satisfied – state mutations happen on main thread in `as_completed` loop
-10. **Git contention:** Parallel task prompts include git restrictions
-11. **Tests:** All new behaviors have passing tests; retry tests mock `time.sleep` for speed
+This is the **single source-of-truth** remediation spec. If older versions exist in this directory, archive or remove them. Git preserves history.
 
 ---
 
-## Implementation Priority
+## Changelog
 
-1. **Critical (blocks correctness):** B (retry mechanism), B+ (retry in sequential), D (fail_fast + SKIPPED), K (git contention)
-2. **High (user-facing bugs):** A (CLI override), C (TUI thread-safety with pump loop)
-3. **Medium (reliability):** E (ordering), F (buffer leaks), G (memory skipping)
-4. **Low (cleanup):** H (group_id docs), J (already satisfied - document only)
-
+Version history: see Git.

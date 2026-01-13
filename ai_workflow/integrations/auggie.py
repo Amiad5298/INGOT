@@ -24,6 +24,42 @@ from ai_workflow.utils.console import (
 from ai_workflow.utils.logging import log_command, log_message
 
 
+class AuggieRateLimitError(Exception):
+    """Raised when Auggie CLI output indicates a rate limit error."""
+
+    def __init__(self, message: str, output: str):
+        super().__init__(message)
+        self.output = output
+
+
+def _looks_like_rate_limit(output: str) -> bool:
+    """Heuristic check for rate limit errors in output.
+
+    Detects rate limit errors by checking for common HTTP status codes
+    and rate limit keywords in the output.
+
+    Args:
+        output: The output string to check
+
+    Returns:
+        True if the output looks like a rate limit error
+    """
+    output_lower = output.lower()
+    patterns = [
+        "429",
+        "rate limit",
+        "rate_limit",
+        "too many requests",
+        "quota exceeded",
+        "capacity",
+        "throttl",
+        "502",
+        "503",
+        "504",
+    ]
+    return any(p in output_lower for p in patterns)
+
+
 @dataclass
 class AuggieModel:
     """Auggie model information.
@@ -481,6 +517,7 @@ def _parse_model_list(output: str) -> list[AuggieModel]:
 __all__ = [
     "AuggieModel",
     "AuggieClient",
+    "AuggieRateLimitError",
     "extract_model_id",
     "version_gte",
     "get_auggie_version",
@@ -488,5 +525,6 @@ __all__ = [
     "check_auggie_installed",
     "install_auggie",
     "list_models",
+    "_looks_like_rate_limit",
 ]
 
