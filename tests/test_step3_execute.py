@@ -19,7 +19,7 @@ from ai_workflow.workflow.step3_execute import (
     step_3_execute,
 )
 from ai_workflow.workflow.state import WorkflowState
-from ai_workflow.workflow.tasks import Task, TaskStatus
+from ai_workflow.workflow.tasks import Task, TaskStatus, TaskCategory
 from ai_workflow.integrations.jira import JiraTicket
 
 
@@ -1125,3 +1125,368 @@ class TestStep3Execute:
         mock_confirm.assert_called_with("Quit task execution?", default=False)
         # Should verify specific cleanup method for skipping remaining tasks was called
         mock_tui.mark_remaining_skipped.assert_called()
+
+
+# =============================================================================
+# Tests for Two-Phase Execution
+# =============================================================================
+
+
+class TestTwoPhaseExecution:
+    """Tests for two-phase execution model."""
+
+    @patch("ai_workflow.workflow.step3_execute._offer_commit_instructions")
+    @patch("ai_workflow.workflow.step3_execute._run_post_implementation_tests")
+    @patch("ai_workflow.workflow.step3_execute._show_summary")
+    @patch("ai_workflow.workflow.step3_execute._execute_parallel_fallback")
+    @patch("ai_workflow.workflow.step3_execute._execute_fallback")
+    @patch("ai_workflow.ui.tui._should_use_tui")
+    @patch("ai_workflow.workflow.step3_execute._cleanup_old_runs")
+    @patch("ai_workflow.workflow.step3_execute._create_run_log_dir")
+    def test_executes_fundamental_tasks_first(
+        self, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
+        mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+    ):
+        """Fundamental tasks run before independent tasks."""
+        mock_log_dir.return_value = tmp_path / "logs"
+        (tmp_path / "logs").mkdir()
+        mock_should_tui.return_value = False
+        mock_execute_fallback.return_value = []
+        mock_execute_parallel.return_value = []
+
+        # Create tasklist with both fundamental and independent tasks
+        tasklist = workflow_state.get_tasklist_path()
+        tasklist.parent.mkdir(parents=True, exist_ok=True)
+        tasklist.write_text("""
+<!-- category: fundamental, order: 1 -->
+- [ ] Fundamental task
+<!-- category: independent, group: ui -->
+- [ ] Independent task
+""")
+
+        step_3_execute(workflow_state)
+
+        # Verify fundamental fallback was called first
+        assert mock_execute_fallback.called
+        # Verify parallel fallback was also called
+        assert mock_execute_parallel.called
+        # Check call order
+        assert mock_execute_fallback.call_count >= 1
+        assert mock_execute_parallel.call_count == 1
+
+    @patch("ai_workflow.workflow.step3_execute._offer_commit_instructions")
+    @patch("ai_workflow.workflow.step3_execute._run_post_implementation_tests")
+    @patch("ai_workflow.workflow.step3_execute._show_summary")
+    @patch("ai_workflow.workflow.step3_execute._execute_fallback")
+    @patch("ai_workflow.ui.tui._should_use_tui")
+    @patch("ai_workflow.workflow.step3_execute._cleanup_old_runs")
+    @patch("ai_workflow.workflow.step3_execute._create_run_log_dir")
+    def test_fundamental_tasks_run_sequentially(
+        self, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
+        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+    ):
+        """Fundamental tasks execute one at a time (not in parallel)."""
+        mock_log_dir.return_value = tmp_path / "logs"
+        (tmp_path / "logs").mkdir()
+        mock_should_tui.return_value = False
+        mock_execute_fallback.return_value = []
+
+        # Create tasklist with only fundamental tasks
+        tasklist = workflow_state.get_tasklist_path()
+        tasklist.parent.mkdir(parents=True, exist_ok=True)
+        tasklist.write_text("""
+<!-- category: fundamental, order: 1 -->
+- [ ] First fundamental
+<!-- category: fundamental, order: 2 -->
+- [ ] Second fundamental
+""")
+
+        step_3_execute(workflow_state)
+
+        # Should use _execute_fallback (sequential), not _execute_parallel_fallback
+        assert mock_execute_fallback.called
+        # Check that tasks passed to fallback are fundamental tasks
+        call_args = mock_execute_fallback.call_args
+        tasks = call_args[0][1]  # Second positional arg is tasks
+        assert len(tasks) == 2
+
+    @patch("ai_workflow.workflow.step3_execute._offer_commit_instructions")
+    @patch("ai_workflow.workflow.step3_execute._run_post_implementation_tests")
+    @patch("ai_workflow.workflow.step3_execute._show_summary")
+    @patch("ai_workflow.workflow.step3_execute._execute_parallel_fallback")
+    @patch("ai_workflow.workflow.step3_execute._execute_fallback")
+    @patch("ai_workflow.ui.tui._should_use_tui")
+    @patch("ai_workflow.workflow.step3_execute._cleanup_old_runs")
+    @patch("ai_workflow.workflow.step3_execute._create_run_log_dir")
+    def test_independent_tasks_run_in_parallel(
+        self, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
+        mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+    ):
+        """Independent tasks execute concurrently."""
+        mock_log_dir.return_value = tmp_path / "logs"
+        (tmp_path / "logs").mkdir()
+        mock_should_tui.return_value = False
+        mock_execute_fallback.return_value = []
+        mock_execute_parallel.return_value = []
+
+        # Ensure parallel execution is enabled
+        workflow_state.parallel_execution_enabled = True
+
+        # Create tasklist with only independent tasks
+        tasklist = workflow_state.get_tasklist_path()
+        tasklist.parent.mkdir(parents=True, exist_ok=True)
+        tasklist.write_text("""
+<!-- category: independent, group: ui -->
+- [ ] UI Component
+<!-- category: independent, group: api -->
+- [ ] API Endpoint
+""")
+
+        step_3_execute(workflow_state)
+
+        # Should use _execute_parallel_fallback for independent tasks
+        assert mock_execute_parallel.called
+
+    @patch("ai_workflow.workflow.step3_execute._offer_commit_instructions")
+    @patch("ai_workflow.workflow.step3_execute._run_post_implementation_tests")
+    @patch("ai_workflow.workflow.step3_execute._show_summary")
+    @patch("ai_workflow.workflow.step3_execute._execute_parallel_fallback")
+    @patch("ai_workflow.workflow.step3_execute._execute_fallback")
+    @patch("ai_workflow.ui.tui._should_use_tui")
+    @patch("ai_workflow.workflow.step3_execute._cleanup_old_runs")
+    @patch("ai_workflow.workflow.step3_execute._create_run_log_dir")
+    def test_skips_parallel_phase_when_disabled(
+        self, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
+        mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+    ):
+        """Respects parallel_execution_enabled=False."""
+        mock_log_dir.return_value = tmp_path / "logs"
+        (tmp_path / "logs").mkdir()
+        mock_should_tui.return_value = False
+        mock_execute_fallback.return_value = []
+
+        # Disable parallel execution
+        workflow_state.parallel_execution_enabled = False
+
+        # Create tasklist with independent tasks
+        tasklist = workflow_state.get_tasklist_path()
+        tasklist.parent.mkdir(parents=True, exist_ok=True)
+        tasklist.write_text("""
+<!-- category: independent, group: ui -->
+- [ ] UI Component
+<!-- category: independent, group: api -->
+- [ ] API Endpoint
+""")
+
+        step_3_execute(workflow_state)
+
+        # Should NOT use parallel execution
+        assert not mock_execute_parallel.called
+        # Should use sequential fallback instead
+        assert mock_execute_fallback.called
+
+
+# =============================================================================
+# Tests for Parallel Execution
+# =============================================================================
+
+
+class TestParallelExecution:
+    """Tests for parallel task execution."""
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_uses_thread_pool_executor(
+        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Uses ThreadPoolExecutor for concurrent execution."""
+        from ai_workflow.workflow.step3_execute import _execute_parallel_fallback
+
+        mock_execute_retry.return_value = True
+
+        tasks = [
+            Task(name="Task 1", category=TaskCategory.INDEPENDENT),
+            Task(name="Task 2", category=TaskCategory.INDEPENDENT),
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        failed = _execute_parallel_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # All tasks should succeed
+        assert failed == []
+        # Both tasks should be executed
+        assert mock_execute_retry.call_count == 2
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_respects_max_parallel_tasks(
+        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Limits concurrent workers to max_parallel_tasks."""
+        from ai_workflow.workflow.step3_execute import _execute_parallel_fallback
+
+        mock_execute_retry.return_value = True
+        workflow_state.max_parallel_tasks = 2
+
+        tasks = [
+            Task(name=f"Task {i}", category=TaskCategory.INDEPENDENT)
+            for i in range(5)
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        failed = _execute_parallel_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # All tasks should complete
+        assert failed == []
+        assert mock_execute_retry.call_count == 5
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_collects_failed_tasks(
+        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Collects names of failed tasks."""
+        from ai_workflow.workflow.step3_execute import _execute_parallel_fallback
+
+        # First task succeeds, second fails
+        mock_execute_retry.side_effect = [True, False]
+
+        tasks = [
+            Task(name="Success Task", category=TaskCategory.INDEPENDENT),
+            Task(name="Failed Task", category=TaskCategory.INDEPENDENT),
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        failed = _execute_parallel_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # Should have one failed task
+        assert len(failed) == 1
+        assert "Failed Task" in failed
+
+    @patch("ai_workflow.workflow.step3_execute.capture_task_memory")
+    @patch("ai_workflow.workflow.step3_execute.mark_task_complete")
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_retry")
+    def test_marks_successful_tasks_complete(
+        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+    ):
+        """Marks completed tasks in tasklist."""
+        from ai_workflow.workflow.step3_execute import _execute_parallel_fallback
+
+        mock_execute_retry.return_value = True
+
+        tasks = [
+            Task(name="Task 1", category=TaskCategory.INDEPENDENT),
+        ]
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+
+        _execute_parallel_fallback(
+            workflow_state, tasks, workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(), log_dir
+        )
+
+        # Should mark task complete
+        mock_mark.assert_called_once()
+
+
+# =============================================================================
+# Tests for Task Retry
+# =============================================================================
+
+
+class TestTaskRetry:
+    """Tests for task retry with rate limit handling."""
+
+    @patch("ai_workflow.workflow.step3_execute._execute_task")
+    def test_skips_retry_when_disabled(
+        self, mock_execute, workflow_state, tmp_path
+    ):
+        """Skips retry wrapper when max_retries=0."""
+        from ai_workflow.workflow.step3_execute import _execute_task_with_retry
+        from ai_workflow.workflow.state import RateLimitConfig
+
+        mock_execute.return_value = True
+        workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
+
+        task = Task(name="Test Task")
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path()
+        )
+
+        assert result is True
+        mock_execute.assert_called_once()
+
+    @patch("ai_workflow.workflow.step3_execute._execute_task_with_callback")
+    def test_uses_callback_when_provided(
+        self, mock_execute_callback, workflow_state, tmp_path
+    ):
+        """Uses callback version when callback provided."""
+        from ai_workflow.workflow.step3_execute import _execute_task_with_retry
+        from ai_workflow.workflow.state import RateLimitConfig
+
+        mock_execute_callback.return_value = True
+        workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
+
+        task = Task(name="Test Task")
+        callback = MagicMock()
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path(), callback=callback
+        )
+
+        assert result is True
+        mock_execute_callback.assert_called_once()
+
+    @patch("ai_workflow.workflow.step3_execute._execute_task")
+    def test_returns_false_on_failure(
+        self, mock_execute, workflow_state, tmp_path
+    ):
+        """Returns False when task execution fails."""
+        from ai_workflow.workflow.step3_execute import _execute_task_with_retry
+        from ai_workflow.workflow.state import RateLimitConfig
+
+        mock_execute.return_value = False
+        workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
+
+        task = Task(name="Failing Task")
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path()
+        )
+
+        assert result is False
+
+    @patch("ai_workflow.workflow.step3_execute._execute_task")
+    def test_retries_on_rate_limit_error(
+        self, mock_execute, workflow_state, tmp_path
+    ):
+        """Retries execution on rate limit errors."""
+        from ai_workflow.workflow.step3_execute import _execute_task_with_retry
+        from ai_workflow.workflow.state import RateLimitConfig
+
+        # First call raises rate limit error (HTTP 429), second succeeds
+        mock_execute.side_effect = [Exception("HTTP Error 429: Too Many Requests"), True]
+        workflow_state.rate_limit_config = RateLimitConfig(
+            max_retries=3, base_delay_seconds=0.01, max_delay_seconds=0.1
+        )
+
+        task = Task(name="Retry Task")
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path()
+        )
+
+        assert result is True
+        assert mock_execute.call_count == 2

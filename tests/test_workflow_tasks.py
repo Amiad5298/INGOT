@@ -372,3 +372,286 @@ class TestMarkTaskCompleteEdgeCases:
         content = tasklist.read_text()
         assert "[x] Fix bug (issue #123)" in content
 
+
+# =============================================================================
+# Tests for TaskCategory enum
+# =============================================================================
+
+
+class TestTaskCategory:
+    """Tests for TaskCategory enum."""
+
+    def test_fundamental_value(self):
+        """FUNDAMENTAL has correct string value."""
+        from ai_workflow.workflow.tasks import TaskCategory
+        assert TaskCategory.FUNDAMENTAL.value == "fundamental"
+
+    def test_independent_value(self):
+        """INDEPENDENT has correct string value."""
+        from ai_workflow.workflow.tasks import TaskCategory
+        assert TaskCategory.INDEPENDENT.value == "independent"
+
+
+# =============================================================================
+# Tests for _parse_task_metadata
+# =============================================================================
+
+
+class TestParseTaskMetadata:
+    """Tests for _parse_task_metadata function."""
+
+    def test_parses_fundamental_category(self):
+        """Parses 'category: fundamental' correctly."""
+        from ai_workflow.workflow.tasks import _parse_task_metadata, TaskCategory
+
+        lines = [
+            "<!-- category: fundamental, order: 1 -->",
+            "- [ ] Setup database",
+        ]
+        category, order, group_id = _parse_task_metadata(lines, 1)
+
+        assert category == TaskCategory.FUNDAMENTAL
+        assert order == 1
+        assert group_id is None
+
+    def test_parses_independent_category(self):
+        """Parses 'category: independent' correctly."""
+        from ai_workflow.workflow.tasks import _parse_task_metadata, TaskCategory
+
+        lines = [
+            "<!-- category: independent, group: ui -->",
+            "- [ ] Create UI component",
+        ]
+        category, order, group_id = _parse_task_metadata(lines, 1)
+
+        assert category == TaskCategory.INDEPENDENT
+        assert group_id == "ui"
+
+    def test_parses_order_field(self):
+        """Parses 'order: N' correctly."""
+        from ai_workflow.workflow.tasks import _parse_task_metadata, TaskCategory
+
+        lines = [
+            "<!-- category: fundamental, order: 5 -->",
+            "- [ ] Task with order 5",
+        ]
+        category, order, group_id = _parse_task_metadata(lines, 1)
+
+        assert order == 5
+
+    def test_parses_group_field(self):
+        """Parses 'group: name' correctly."""
+        from ai_workflow.workflow.tasks import _parse_task_metadata, TaskCategory
+
+        lines = [
+            "<!-- category: independent, group: backend -->",
+            "- [ ] API endpoint",
+        ]
+        category, order, group_id = _parse_task_metadata(lines, 1)
+
+        assert group_id == "backend"
+
+    def test_handles_missing_metadata(self):
+        """Returns defaults when no metadata comment."""
+        from ai_workflow.workflow.tasks import _parse_task_metadata, TaskCategory
+
+        lines = [
+            "## Tasks",
+            "- [ ] Task without metadata",
+        ]
+        category, order, group_id = _parse_task_metadata(lines, 1)
+
+        assert category == TaskCategory.FUNDAMENTAL  # Default
+        assert order == 0
+        assert group_id is None
+
+    def test_handles_partial_metadata(self):
+        """Handles metadata with only some fields."""
+        from ai_workflow.workflow.tasks import _parse_task_metadata, TaskCategory
+
+        lines = [
+            "<!-- category: fundamental -->",
+            "- [ ] Task without order",
+        ]
+        category, order, group_id = _parse_task_metadata(lines, 1)
+
+        assert category == TaskCategory.FUNDAMENTAL
+        assert order == 0  # Default when not specified
+
+    def test_case_insensitive_parsing(self):
+        """Parses 'Category: FUNDAMENTAL' correctly."""
+        from ai_workflow.workflow.tasks import _parse_task_metadata, TaskCategory
+
+        lines = [
+            "<!-- category: FUNDAMENTAL, order: 2 -->",
+            "- [ ] Task with uppercase",
+        ]
+        category, order, group_id = _parse_task_metadata(lines, 1)
+
+        assert category == TaskCategory.FUNDAMENTAL
+        assert order == 2
+
+
+# =============================================================================
+# Tests for get_fundamental_tasks
+# =============================================================================
+
+
+class TestGetFundamentalTasks:
+    """Tests for get_fundamental_tasks function."""
+
+    def test_returns_only_fundamental_tasks(self):
+        """Filters to fundamental category only."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, TaskStatus, get_fundamental_tasks
+        )
+
+        tasks = [
+            Task(name="Schema", category=TaskCategory.FUNDAMENTAL),
+            Task(name="UI Component", category=TaskCategory.INDEPENDENT),
+            Task(name="API Endpoint", category=TaskCategory.FUNDAMENTAL),
+        ]
+
+        result = get_fundamental_tasks(tasks)
+
+        assert len(result) == 2
+        assert all(t.category == TaskCategory.FUNDAMENTAL for t in result)
+
+    def test_returns_empty_when_none_exist(self):
+        """Returns empty list when no fundamental tasks."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, get_fundamental_tasks
+        )
+
+        tasks = [
+            Task(name="UI Component", category=TaskCategory.INDEPENDENT),
+            Task(name="Utils", category=TaskCategory.INDEPENDENT),
+        ]
+
+        result = get_fundamental_tasks(tasks)
+
+        assert result == []
+
+    def test_preserves_order(self):
+        """Tasks returned in dependency_order."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, get_fundamental_tasks
+        )
+
+        tasks = [
+            Task(name="Third", category=TaskCategory.FUNDAMENTAL, dependency_order=3),
+            Task(name="First", category=TaskCategory.FUNDAMENTAL, dependency_order=1),
+            Task(name="Second", category=TaskCategory.FUNDAMENTAL, dependency_order=2),
+        ]
+
+        result = get_fundamental_tasks(tasks)
+
+        assert [t.name for t in result] == ["First", "Second", "Third"]
+
+
+# =============================================================================
+# Tests for get_independent_tasks
+# =============================================================================
+
+
+class TestGetIndependentTasks:
+    """Tests for get_independent_tasks function."""
+
+    def test_returns_only_independent_tasks(self):
+        """Filters to independent category only."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, get_independent_tasks
+        )
+
+        tasks = [
+            Task(name="Schema", category=TaskCategory.FUNDAMENTAL),
+            Task(name="UI Component", category=TaskCategory.INDEPENDENT),
+            Task(name="Utils", category=TaskCategory.INDEPENDENT),
+        ]
+
+        result = get_independent_tasks(tasks)
+
+        assert len(result) == 2
+        assert all(t.category == TaskCategory.INDEPENDENT for t in result)
+
+    def test_returns_empty_when_none_exist(self):
+        """Returns empty list when no independent tasks."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, get_independent_tasks
+        )
+
+        tasks = [
+            Task(name="Schema", category=TaskCategory.FUNDAMENTAL),
+            Task(name="API", category=TaskCategory.FUNDAMENTAL),
+        ]
+
+        result = get_independent_tasks(tasks)
+
+        assert result == []
+
+
+# =============================================================================
+# Tests for get_pending_fundamental_tasks
+# =============================================================================
+
+
+class TestGetPendingFundamentalTasks:
+    """Tests for get_pending_fundamental_tasks function."""
+
+    def test_excludes_completed_tasks(self):
+        """Only returns non-completed fundamental tasks."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, TaskStatus, get_pending_fundamental_tasks
+        )
+
+        tasks = [
+            Task(name="Done", category=TaskCategory.FUNDAMENTAL, status=TaskStatus.COMPLETE),
+            Task(name="Pending", category=TaskCategory.FUNDAMENTAL, status=TaskStatus.PENDING),
+        ]
+
+        result = get_pending_fundamental_tasks(tasks)
+
+        assert len(result) == 1
+        assert result[0].name == "Pending"
+
+    def test_excludes_independent_tasks(self):
+        """Only returns fundamental tasks, not independent."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, TaskStatus, get_pending_fundamental_tasks
+        )
+
+        tasks = [
+            Task(name="Fundamental", category=TaskCategory.FUNDAMENTAL, status=TaskStatus.PENDING),
+            Task(name="Independent", category=TaskCategory.INDEPENDENT, status=TaskStatus.PENDING),
+        ]
+
+        result = get_pending_fundamental_tasks(tasks)
+
+        assert len(result) == 1
+        assert result[0].name == "Fundamental"
+
+
+# =============================================================================
+# Tests for get_pending_independent_tasks
+# =============================================================================
+
+
+class TestGetPendingIndependentTasks:
+    """Tests for get_pending_independent_tasks function."""
+
+    def test_excludes_completed_tasks(self):
+        """Only returns non-completed independent tasks."""
+        from ai_workflow.workflow.tasks import (
+            Task, TaskCategory, TaskStatus, get_pending_independent_tasks
+        )
+
+        tasks = [
+            Task(name="Done", category=TaskCategory.INDEPENDENT, status=TaskStatus.COMPLETE),
+            Task(name="Pending", category=TaskCategory.INDEPENDENT, status=TaskStatus.PENDING),
+            Task(name="Fundamental", category=TaskCategory.FUNDAMENTAL, status=TaskStatus.PENDING),
+        ]
+
+        result = get_pending_independent_tasks(tasks)
+
+        assert len(result) == 1
+        assert result[0].name == "Pending"

@@ -69,6 +69,34 @@ class TestSettings:
         assert "SQUASH_AT_END" in keys
 
 
+class TestParallelSettings:
+    """Tests for parallel execution settings."""
+
+    def test_parallel_execution_enabled_default(self):
+        """parallel_execution_enabled defaults to True."""
+        settings = Settings()
+        assert settings.parallel_execution_enabled is True
+
+    def test_max_parallel_tasks_default(self):
+        """max_parallel_tasks defaults to 3."""
+        settings = Settings()
+        assert settings.max_parallel_tasks == 3
+
+    def test_fail_fast_default(self):
+        """fail_fast defaults to False."""
+        settings = Settings()
+        assert settings.fail_fast is False
+
+    def test_loads_from_config_file(self):
+        """Parallel settings can be loaded from config keys."""
+        settings = Settings()
+
+        # Verify the key mappings exist
+        assert settings.get_attribute_for_key("PARALLEL_EXECUTION_ENABLED") == "parallel_execution_enabled"
+        assert settings.get_attribute_for_key("MAX_PARALLEL_TASKS") == "max_parallel_tasks"
+        assert settings.get_attribute_for_key("FAIL_FAST") == "fail_fast"
+
+
 class TestConfigFile:
     """Tests for CONFIG_FILE constant."""
 
