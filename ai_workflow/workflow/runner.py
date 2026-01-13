@@ -32,7 +32,7 @@ from ai_workflow.utils.console import (
 )
 from ai_workflow.utils.errors import AIWorkflowError, UserCancelledError
 from ai_workflow.utils.logging import log_message
-from ai_workflow.workflow.state import WorkflowState
+from ai_workflow.workflow.state import RateLimitConfig, WorkflowState
 from ai_workflow.workflow.step1_plan import step_1_create_plan
 from ai_workflow.workflow.step2_tasklist import step_2_create_tasklist
 from ai_workflow.workflow.step3_execute import step_3_execute
@@ -47,6 +47,10 @@ def run_spec_driven_workflow(
     squash_at_end: bool = True,
     use_tui: bool | None = None,
     verbose: bool = False,
+    parallel_execution_enabled: bool = True,
+    max_parallel_tasks: int = 3,
+    fail_fast: bool = False,
+    rate_limit_config: RateLimitConfig | None = None,
 ) -> bool:
     """Run the complete spec-driven development workflow.
 
@@ -64,6 +68,10 @@ def run_spec_driven_workflow(
         squash_at_end: Squash commits at end
         use_tui: Override for TUI mode. None = auto-detect.
         verbose: Enable verbose mode in TUI (expanded log panel).
+        parallel_execution_enabled: Enable parallel execution of independent tasks.
+        max_parallel_tasks: Maximum number of parallel tasks (1-5).
+        fail_fast: Stop on first task failure.
+        rate_limit_config: Rate limit retry configuration.
 
     Returns:
         True if workflow completed successfully
@@ -77,6 +85,10 @@ def run_spec_driven_workflow(
         implementation_model=implementation_model or config.settings.default_model,
         skip_clarification=skip_clarification,
         squash_at_end=squash_at_end,
+        parallel_execution_enabled=parallel_execution_enabled,
+        max_parallel_tasks=max_parallel_tasks,
+        fail_fast=fail_fast,
+        rate_limit_config=rate_limit_config or RateLimitConfig(),
     )
 
     # Initialize Auggie client

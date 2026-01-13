@@ -22,6 +22,13 @@ class TaskStatus(Enum):
     SKIPPED = "skipped"
 
 
+class TaskCategory(Enum):
+    """Task execution category for parallel execution."""
+
+    FUNDAMENTAL = "fundamental"  # Must run sequentially
+    INDEPENDENT = "independent"  # Can run in parallel
+
+
 @dataclass
 class Task:
     """Represents a single task from the task list.
@@ -32,6 +39,9 @@ class Task:
         line_number: Line number in the task list file
         indent_level: Indentation level (for nested tasks)
         parent: Parent task name (if nested)
+        category: Task execution category (fundamental or independent)
+        dependency_order: Order for fundamental tasks (sequential execution)
+        group_id: Group identifier for parallel tasks
     """
 
     name: str
@@ -39,10 +49,66 @@ class Task:
     line_number: int = 0
     indent_level: int = 0
     parent: Optional[str] = None
+    # Fields for parallel execution
+    category: TaskCategory = TaskCategory.FUNDAMENTAL
+    dependency_order: int = 0  # For fundamental tasks ordering
+    group_id: Optional[str] = None  # For grouping parallel tasks
+
+
+def _parse_task_metadata(
+    lines: list[str], task_line_num: int
+) -> tuple[TaskCategory, int, Optional[str]]:
+    """Parse task metadata from comment line above task.
+
+    Searches backwards from the task line, skipping empty lines,
+    to find the metadata comment. This handles cases where LLMs
+    insert blank lines between the comment and task for readability.
+
+    Args:
+        lines: All lines from task list
+        task_line_num: Line number of the task (0-indexed)
+
+    Returns:
+        Tuple of (category, order, group_id)
+    """
+    # Default values
+    category = TaskCategory.FUNDAMENTAL
+    order = 0
+    group_id = None
+
+    # Look backwards from task line, skipping empty lines
+    search_line = task_line_num - 1
+    while search_line >= 0:
+        line_content = lines[search_line].strip()
+
+        # Skip empty lines
+        if not line_content:
+            search_line -= 1
+            continue
+
+        # Found non-empty line - check if it's metadata
+        if line_content.startswith("<!-- category:"):
+            # Parse: <!-- category: fundamental, order: 1 -->
+            # or: <!-- category: independent, group: ui -->
+            if "fundamental" in line_content.lower():
+                category = TaskCategory.FUNDAMENTAL
+                order_match = re.search(r'order:\s*(\d+)', line_content)
+                if order_match:
+                    order = int(order_match.group(1))
+            elif "independent" in line_content.lower():
+                category = TaskCategory.INDEPENDENT
+                group_match = re.search(r'group:\s*(\w+)', line_content)
+                if group_match:
+                    group_id = group_match.group(1)
+
+        # Stop searching after first non-empty line (whether metadata or not)
+        break
+
+    return category, order, group_id
 
 
 def parse_task_list(content: str) -> list[Task]:
-    """Parse task list from markdown content.
+    """Parse task list from markdown content with category metadata.
 
     Supports formats:
     - [ ] Task name (pending)
@@ -51,6 +117,10 @@ def parse_task_list(content: str) -> list[Task]:
     - * [ ] Task name (alternate bullet)
     - - [ ] Task name (dash bullet)
 
+    Also parses category metadata comments above tasks:
+    - <!-- category: fundamental, order: N -->
+    - <!-- category: independent, group: GROUP_NAME -->
+
     Args:
         content: Markdown content with task list
 
@@ -58,6 +128,7 @@ def parse_task_list(content: str) -> list[Task]:
         List of Task objects
     """
     tasks: list[Task] = []
+    lines = content.splitlines()
 
     # Pattern for task items: optional bullet, checkbox, task name
     # Captures: indent, checkbox state, task name
@@ -66,7 +137,7 @@ def parse_task_list(content: str) -> list[Task]:
         re.MULTILINE,
     )
 
-    for line_num, line in enumerate(content.splitlines(), start=1):
+    for line_num, line in enumerate(lines):
         match = pattern.match(line)
         if match:
             indent, checkbox, name = match.groups()
@@ -74,11 +145,17 @@ def parse_task_list(content: str) -> list[Task]:
 
             status = TaskStatus.COMPLETE if checkbox.lower() == "x" else TaskStatus.PENDING
 
+            # Parse metadata from previous line
+            category, order, group_id = _parse_task_metadata(lines, line_num)
+
             task = Task(
                 name=name.strip(),
                 status=status,
-                line_number=line_num,
+                line_number=line_num + 1,  # Convert to 1-based
                 indent_level=indent_level,
+                category=category,
+                dependency_order=order,
+                group_id=group_id,
             )
 
             # Set parent for nested tasks
@@ -89,7 +166,7 @@ def parse_task_list(content: str) -> list[Task]:
                         break
 
             tasks.append(task)
-            log_message(f"Parsed task: {task.name} ({task.status.value})")
+            log_message(f"Parsed task: {task.name} ({task.status.value}, {task.category.value})")
 
     log_message(f"Total tasks parsed: {len(tasks)}")
     return tasks
@@ -181,13 +258,67 @@ def format_task_list(tasks: list[Task]) -> str:
     return "\n".join(lines)
 
 
+def get_fundamental_tasks(tasks: list[Task]) -> list[Task]:
+    """Get fundamental tasks sorted by dependency order.
+
+    Args:
+        tasks: List of all tasks
+
+    Returns:
+        List of fundamental tasks sorted by dependency_order
+    """
+    fundamental = [t for t in tasks if t.category == TaskCategory.FUNDAMENTAL]
+    return sorted(fundamental, key=lambda t: t.dependency_order)
+
+
+def get_independent_tasks(tasks: list[Task]) -> list[Task]:
+    """Get independent tasks (parallelizable).
+
+    Args:
+        tasks: List of all tasks
+
+    Returns:
+        List of independent tasks
+    """
+    return [t for t in tasks if t.category == TaskCategory.INDEPENDENT]
+
+
+def get_pending_fundamental_tasks(tasks: list[Task]) -> list[Task]:
+    """Get pending fundamental tasks sorted by order.
+
+    Args:
+        tasks: List of all tasks
+
+    Returns:
+        List of pending fundamental tasks sorted by dependency_order
+    """
+    return [t for t in get_fundamental_tasks(tasks) if t.status == TaskStatus.PENDING]
+
+
+def get_pending_independent_tasks(tasks: list[Task]) -> list[Task]:
+    """Get pending independent tasks.
+
+    Args:
+        tasks: List of all tasks
+
+    Returns:
+        List of pending independent tasks
+    """
+    return [t for t in get_independent_tasks(tasks) if t.status == TaskStatus.PENDING]
+
+
 __all__ = [
     "TaskStatus",
+    "TaskCategory",
     "Task",
     "parse_task_list",
     "get_pending_tasks",
     "get_completed_tasks",
     "mark_task_complete",
     "format_task_list",
+    "get_fundamental_tasks",
+    "get_independent_tasks",
+    "get_pending_fundamental_tasks",
+    "get_pending_independent_tasks",
 ]
 

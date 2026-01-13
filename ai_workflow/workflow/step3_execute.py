@@ -1,7 +1,10 @@
-"""Step 3: Execute Implementation - Optimistic Execution Model.
+"""Step 3: Execute Implementation - Two-Phase Execution Model.
 
 This module implements the third step of the workflow - executing
-the task list with optimistic automated execution.
+the task list with a two-phase execution model:
+
+Phase 1: Sequential execution of fundamental tasks (dependencies, order matters)
+Phase 2: Parallel execution of independent tasks (can run concurrently)
 
 Philosophy: Trust the AI. If it returns success, it succeeded.
 Don't nanny it with file checks and retry loops.
@@ -16,9 +19,9 @@ Supports two display modes:
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from ai_workflow.integrations.auggie import AuggieClient
 from ai_workflow.integrations.git import get_current_branch, is_dirty
@@ -33,6 +36,10 @@ from ai_workflow.utils.console import (
     print_success,
     print_warning,
 )
+from ai_workflow.utils.retry import (
+    RateLimitExceededError,
+    with_rate_limit_retry,
+)
 from ai_workflow.workflow.events import (
     TaskRunStatus,
     create_task_finished_event,
@@ -45,6 +52,8 @@ from ai_workflow.workflow.state import WorkflowState
 from ai_workflow.workflow.task_memory import capture_task_memory
 from ai_workflow.workflow.tasks import (
     Task,
+    get_pending_fundamental_tasks,
+    get_pending_independent_tasks,
     get_pending_tasks,
     mark_task_complete,
     parse_task_list,
@@ -126,12 +135,10 @@ def step_3_execute(
     use_tui: bool | None = None,
     verbose: bool = False,
 ) -> bool:
-    """Execute Step 3: Optimistic automated implementation.
+    """Execute Step 3: Two-phase task execution.
 
-    Fast execution model:
-    - Minimal prompts
-    - Trust AI success signals
-    - No per-task verification
+    Phase 1: Sequential execution of fundamental tasks
+    Phase 2: Parallel execution of independent tasks
 
     Supports two modes:
     - TUI mode: Rich interactive display with task list and log panels
@@ -153,52 +160,118 @@ def step_3_execute(
         print_error(f"Task list not found: {tasklist_path}")
         return False
 
-    # Parse and get pending tasks
+    # Parse all tasks
     tasks = parse_task_list(tasklist_path.read_text())
-    pending = get_pending_tasks(tasks)
 
-    if not pending:
+    # Separate into phases
+    pending_fundamental = get_pending_fundamental_tasks(tasks)
+    pending_independent = get_pending_independent_tasks(tasks)
+
+    # Handle legacy task lists (no categorization = all fundamental)
+    if not pending_fundamental and not pending_independent:
+        # Legacy mode: treat all as fundamental
+        pending_fundamental = get_pending_tasks(tasks)
+        pending_independent = []
+
+    total_pending = len(pending_fundamental) + len(pending_independent)
+    if total_pending == 0:
         print_success("All tasks already completed!")
         return True
 
-    print_info(f"Executing {len(pending)} tasks...")
+    print_info(
+        f"Found {len(pending_fundamental)} fundamental + "
+        f"{len(pending_independent)} independent tasks"
+    )
 
-    # Get plan path for AI context (not reading content)
+    # Setup
     plan_path = state.get_plan_path()
-
-    # Create log directory and clean up old runs
     log_dir = _create_run_log_dir(state.ticket.ticket_id)
     _cleanup_old_runs(state.ticket.ticket_id)
 
-    # Determine execution mode (lazy import to avoid circular dependency)
+    failed_tasks: list[str] = []
+
+    # Determine execution mode
     from ai_workflow.ui.tui import _should_use_tui
 
-    if _should_use_tui(use_tui):
-        failed_tasks = _execute_with_tui(
-            state, pending, plan_path, tasklist_path, log_dir, verbose=verbose
-        )
-    else:
-        failed_tasks = _execute_fallback(state, pending, plan_path, tasklist_path, log_dir)
+    use_tui_mode = _should_use_tui(use_tui)
 
-    # If there are failures, prompt immediately before post-implementation steps
+    # PHASE 1: Execute fundamental tasks sequentially
+    if pending_fundamental:
+        print_header("Phase 1: Fundamental Tasks (Sequential)")
+
+        if use_tui_mode:
+            phase1_failed = _execute_with_tui(
+                state,
+                pending_fundamental,
+                plan_path,
+                tasklist_path,
+                log_dir,
+                verbose=verbose,
+                phase="fundamental",
+            )
+        else:
+            phase1_failed = _execute_fallback(
+                state, pending_fundamental, plan_path, tasklist_path, log_dir
+            )
+
+        failed_tasks.extend(phase1_failed)
+
+        # If fail_fast and we had failures, stop here
+        if failed_tasks and state.fail_fast:
+            print_error("Phase 1 failures with fail_fast enabled. Stopping.")
+            return False
+
+    # PHASE 2: Execute independent tasks in parallel
+    if pending_independent and state.parallel_execution_enabled:
+        print_header("Phase 2: Independent Tasks (Parallel)")
+
+        if use_tui_mode:
+            phase2_failed = _execute_parallel_with_tui(
+                state,
+                pending_independent,
+                plan_path,
+                tasklist_path,
+                log_dir,
+                verbose=verbose,
+            )
+        else:
+            phase2_failed = _execute_parallel_fallback(
+                state, pending_independent, plan_path, tasklist_path, log_dir
+            )
+
+        failed_tasks.extend(phase2_failed)
+    elif pending_independent:
+        # Parallel disabled, run sequentially
+        print_info("Parallel execution disabled. Running independent tasks sequentially.")
+        if use_tui_mode:
+            phase2_failed = _execute_with_tui(
+                state,
+                pending_independent,
+                plan_path,
+                tasklist_path,
+                log_dir,
+                verbose=verbose,
+                phase="independent",
+            )
+        else:
+            phase2_failed = _execute_fallback(
+                state, pending_independent, plan_path, tasklist_path, log_dir
+            )
+        failed_tasks.extend(phase2_failed)
+
+    # Handle failures
     if failed_tasks:
         if not prompt_confirm(
-            "Some tasks failed. Proceed to post-implementation steps (tests and commit instructions) anyway?",
-            default=True
+            "Some tasks failed. Proceed to post-implementation steps?",
+            default=True,
         ):
             print_info("Exiting Step 3 early due to task failures.")
             return False
 
-    # Summary
+    # Post-execution steps
     _show_summary(state, failed_tasks)
-
-    # Post-Implementation Verification (run only changed/new tests)
     _run_post_implementation_tests(state)
-
-    # Offer commit instructions if there are changes
     _offer_commit_instructions(state)
-
-    # Print log directory location
     print_info(f"Task logs saved to: {log_dir}")
 
     return len(failed_tasks) == 0
@@ -212,8 +285,9 @@ def _execute_with_tui(
     log_dir: Path,
     *,
     verbose: bool = False,
+    phase: str = "sequential",
 ) -> list[str]:
-    """Execute tasks with TUI display.
+    """Execute tasks with TUI display (sequential mode).
 
     Args:
         state: Current workflow state
@@ -222,6 +296,7 @@ def _execute_with_tui(
         tasklist_path: Path to task list file
         log_dir: Directory for log files
         verbose: Enable verbose mode (expanded log panel).
+        phase: Phase identifier for logging ("fundamental", "independent", "sequential").
 
     Returns:
         List of failed task names
@@ -386,6 +461,185 @@ def _execute_fallback(
     return failed_tasks
 
 
+def _execute_parallel_fallback(
+    state: WorkflowState,
+    tasks: list[Task],
+    plan_path: Path,
+    tasklist_path: Path,
+    log_dir: Path,
+) -> list[str]:
+    """Execute independent tasks in parallel (non-TUI mode) with rate limit handling.
+
+    Uses ThreadPoolExecutor for concurrent AI agent execution.
+    Each task runs in complete isolation with dont_save_session=True.
+    Rate limit errors trigger exponential backoff retry.
+
+    Args:
+        state: Current workflow state
+        tasks: List of independent tasks to execute
+        plan_path: Path to plan file
+        tasklist_path: Path to task list file
+        log_dir: Directory for log files
+
+    Returns:
+        List of failed task names
+    """
+    failed_tasks: list[str] = []
+    max_workers = min(state.max_parallel_tasks, len(tasks))
+
+    print_info(f"Executing {len(tasks)} tasks with {max_workers} parallel workers")
+    print_info(f"Rate limit retry: max {state.rate_limit_config.max_retries} retries")
+
+    def execute_single_task(task_info: tuple[int, Task]) -> tuple[Task, bool]:
+        """Execute a single task with retry handling (runs in thread)."""
+        idx, task = task_info
+        log_filename = format_log_filename(idx, task.name)
+        log_path = log_dir / log_filename
+
+        with TaskLogBuffer(log_path) as log_buffer:
+
+            def output_callback(line: str) -> None:
+                log_buffer.write(line)
+
+            # Use retry-enabled execution
+            success = _execute_task_with_retry(
+                state,
+                task,
+                plan_path,
+                callback=output_callback,
+            )
+
+        return task, success
+
+    # Execute in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(execute_single_task, (i, task)): task
+            for i, task in enumerate(tasks)
+        }
+
+        for future in as_completed(futures):
+            task, success = future.result()
+
+            if success:
+                mark_task_complete(tasklist_path, task.name)
+                state.mark_task_complete(task.name)
+                print_success(f"[PARALLEL] Completed: {task.name}")
+                try:
+                    capture_task_memory(task, state)
+                except Exception as e:
+                    print_warning(f"Failed to capture task memory: {e}")
+            else:
+                failed_tasks.append(task.name)
+                print_warning(f"[PARALLEL] Failed: {task.name}")
+
+    return failed_tasks
+
+
+def _execute_parallel_with_tui(
+    state: WorkflowState,
+    tasks: list[Task],
+    plan_path: Path,
+    tasklist_path: Path,
+    log_dir: Path,
+    *,
+    verbose: bool = False,
+) -> list[str]:
+    """Execute independent tasks in parallel with TUI display and rate limit handling.
+
+    Shows multiple tasks running concurrently in the TUI.
+    Rate limit errors trigger exponential backoff retry.
+
+    Args:
+        state: Current workflow state
+        tasks: List of independent tasks
+        plan_path: Path to plan file
+        tasklist_path: Path to task list file
+        log_dir: Directory for log files
+        verbose: Enable verbose mode
+
+    Returns:
+        List of failed task names
+    """
+    from ai_workflow.ui.tui import TaskRunnerUI
+
+    failed_tasks: list[str] = []
+    max_workers = min(state.max_parallel_tasks, len(tasks))
+
+    # Initialize TUI with all parallel tasks
+    tui = TaskRunnerUI(ticket_id=state.ticket.ticket_id, verbose_mode=verbose)
+    tui.initialize_records([t.name for t in tasks])
+    tui.set_log_dir(log_dir)
+    tui.set_parallel_mode(True)  # Enable parallel mode display
+
+    # Create log buffers for each task
+    for i, task in enumerate(tasks):
+        log_filename = format_log_filename(i, task.name)
+        log_path = log_dir / log_filename
+        record = tui.get_record(i)
+        if record:
+            record.log_buffer = TaskLogBuffer(log_path)
+
+    def execute_single_task_tui(task_info: tuple[int, Task]) -> tuple[int, Task, bool]:
+        """Execute a single task with TUI callbacks and retry handling."""
+        idx, task = task_info
+        record = tui.get_record(idx)
+
+        # Emit task started
+        start_event = create_task_started_event(idx, task.name)
+        tui.handle_event(start_event)
+
+        # Execute with streaming callback and retry handling
+        success = _execute_task_with_retry(
+            state,
+            task,
+            plan_path,
+            callback=lambda line, i=idx, n=task.name: tui.handle_event(
+                create_task_output_event(i, n, line)
+            ),
+        )
+
+        # Emit task finished
+        duration = record.elapsed_time if record else 0.0
+        finish_event = create_task_finished_event(
+            idx,
+            task.name,
+            success,
+            duration,
+            error=None if success else "Task returned failure",
+        )
+        tui.handle_event(finish_event)
+
+        return idx, task, success
+
+    with tui:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(execute_single_task_tui, (i, task)): task
+                for i, task in enumerate(tasks)
+            }
+
+            for future in as_completed(futures):
+                idx, task, success = future.result()
+
+                if success:
+                    mark_task_complete(tasklist_path, task.name)
+                    state.mark_task_complete(task.name)
+                    try:
+                        capture_task_memory(task, state)
+                    except Exception as e:
+                        record = tui.get_record(idx)
+                        if record and record.log_buffer:
+                            record.log_buffer.write(
+                                f"[WARNING] Memory capture failed: {e}"
+                            )
+                else:
+                    failed_tasks.append(task.name)
+
+    tui.print_summary()
+    return failed_tasks
+
+
 def _build_task_prompt(task: Task, plan_path: Path) -> str:
     """Build the prompt for task execution.
 
@@ -484,6 +738,59 @@ def _execute_task_with_callback(
         return success
     except Exception as e:
         callback(f"[ERROR] Task execution crashed: {e}")
+        return False
+
+
+def _execute_task_with_retry(
+    state: WorkflowState,
+    task: Task,
+    plan_path: Path,
+    callback: Callable[[str], None] | None = None,
+) -> bool:
+    """Execute a task with rate limit retry handling.
+
+    Wraps the core execution with exponential backoff retry logic
+    to handle API rate limits during parallel execution.
+
+    Args:
+        state: Current workflow state
+        task: Task to execute
+        plan_path: Path to plan file
+        callback: Output callback for streaming
+
+    Returns:
+        True if task succeeded, False otherwise
+    """
+    config = state.rate_limit_config
+
+    # Skip retry wrapper if retries disabled
+    if config.max_retries <= 0:
+        if callback:
+            return _execute_task_with_callback(state, task, plan_path, callback=callback)
+        else:
+            return _execute_task(state, task, plan_path)
+
+    def log_retry(attempt: int, delay: float, error: Exception) -> None:
+        """Log retry attempts."""
+        message = f"[RETRY {attempt}/{config.max_retries}] Rate limited. Waiting {delay:.1f}s..."
+        if callback:
+            callback(message)
+        print_warning(message)
+
+    @with_rate_limit_retry(config, on_retry=log_retry)
+    def execute_with_retry() -> bool:
+        if callback:
+            return _execute_task_with_callback(state, task, plan_path, callback=callback)
+        else:
+            return _execute_task(state, task, plan_path)
+
+    try:
+        return execute_with_retry()
+    except RateLimitExceededError as e:
+        error_msg = f"[FAILED] Task exhausted all retries: {e}"
+        if callback:
+            callback(error_msg)
+        print_error(error_msg)
         return False
 
 

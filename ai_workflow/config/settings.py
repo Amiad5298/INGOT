@@ -26,6 +26,9 @@ class Settings:
         preferred_editor: Preferred editor command (empty = auto-detect)
         skip_clarification: Skip clarification step by default
         squash_at_end: Squash checkpoint commits at workflow end
+        parallel_execution_enabled: Enable parallel execution of independent tasks
+        max_parallel_tasks: Maximum number of parallel tasks (1-5)
+        fail_fast: Stop on first task failure
     """
 
     # Model settings
@@ -46,6 +49,11 @@ class Settings:
     skip_clarification: bool = False
     squash_at_end: bool = True
 
+    # Parallel execution settings
+    parallel_execution_enabled: bool = True
+    max_parallel_tasks: int = 3
+    fail_fast: bool = False
+
     # Config key to attribute mapping
     _key_mapping: dict[str, str] = field(
         default_factory=lambda: {
@@ -59,6 +67,9 @@ class Settings:
             "PREFERRED_EDITOR": "preferred_editor",
             "SKIP_CLARIFICATION": "skip_clarification",
             "SQUASH_AT_END": "squash_at_end",
+            "PARALLEL_EXECUTION_ENABLED": "parallel_execution_enabled",
+            "MAX_PARALLEL_TASKS": "max_parallel_tasks",
+            "FAIL_FAST": "fail_fast",
         },
         repr=False,
     )

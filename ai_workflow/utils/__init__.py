@@ -5,6 +5,7 @@ This package contains:
 - errors: Custom exceptions and exit codes
 - error_analysis: Structured error parsing for better retry prompts
 - logging: Logging configuration
+- retry: Rate limit handling with exponential backoff
 """
 
 from ai_workflow.utils.console import (
@@ -27,6 +28,11 @@ from ai_workflow.utils.errors import (
     UserCancelledError,
 )
 from ai_workflow.utils.logging import log_command, log_message, setup_logging
+from ai_workflow.utils.retry import (
+    RateLimitExceededError,
+    calculate_backoff_delay,
+    with_rate_limit_retry,
+)
 
 __all__ = [
     # Console
@@ -52,5 +58,9 @@ __all__ = [
     "setup_logging",
     "log_message",
     "log_command",
+    # Retry
+    "RateLimitExceededError",
+    "calculate_backoff_delay",
+    "with_rate_limit_retry",
 ]
 

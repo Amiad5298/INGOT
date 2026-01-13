@@ -155,6 +155,7 @@ def _generate_tasklist(
     """
     plan_content = plan_path.read_text()
 
+    ticket_id = state.ticket.ticket_id
     prompt = f"""Based on this implementation plan, create a task list optimized for AI agent execution.
 
 Plan:
@@ -164,42 +165,78 @@ Plan:
 
 ### Size & Scope
 - Each task should represent a **complete, coherent unit of work**
-- Target 3-8 tasks for a typical feature (not 15-25 micro-tasks)
-- A task should implement a full capability, not fragments
+- Target 3-8 tasks for a typical feature
 - Include tests WITH implementation, not as separate tasks
 
-### Good Task Examples:
-- "Implement UserService with CRUD operations and unit tests"
-- "Add authentication middleware with JWT validation and integration tests"
-- "Create database migration for users table and seed data"
-- "Refactor payment module to use new pricing engine"
+### Task Categorization
 
-### Bad Task Examples (avoid these):
-- "Create new file" (too granular)
-- "Add import statements" (not a real unit of work)
-- "Write test for function X" (tests should be with implementation)
-- "Add type hints" (should be part of implementation task)
+Categorize each task into one of two categories:
 
-### Task Boundaries
-- Align tasks with **natural code boundaries**: modules, features, layers
-- A task should leave the codebase in a **working state**
-- If tasks depend on each other, note the dependency
+#### FUNDAMENTAL Tasks (Sequential Execution)
+Tasks that establish foundational infrastructure and MUST run in order:
+- Core data models, schemas, database migrations
+- Base classes, interfaces, or abstract implementations
+- Service layers that other components depend on
+- Configuration or setup that other tasks require
+- Any task where Task N+1 depends on Task N's output
+
+Mark fundamental tasks with: `<!-- category: fundamental, order: N -->`
+
+#### INDEPENDENT Tasks (Parallel Execution)
+Tasks that can run concurrently with no dependencies on each other:
+- UI components (after models/services exist)
+- Utility functions and helpers
+- Documentation updates
+- Separate API endpoints that don't share state
+- Test suites that don't modify shared resources
+
+**CRITICAL: File Disjointness Requirement**
+Independent tasks running in parallel MUST touch disjoint sets of files. Two parallel agents editing the same file simultaneously will cause race conditions and data loss.
+
+If two tasks need to edit the same file:
+1. **Preferred**: Mark BOTH tasks as FUNDAMENTAL (sequential) to avoid conflicts
+2. **Alternative**: Merge them into a single task
+3. **Alternative**: Restructure the tasks so each touches different files
+
+Examples of file conflicts to avoid:
+- Two tasks both adding functions to `utils.py` → Make FUNDAMENTAL or merge
+- Two tasks both updating `config.yaml` → Make FUNDAMENTAL or merge
+- Two tasks both modifying `__init__.py` exports → Make FUNDAMENTAL or merge
+
+Mark independent tasks with: `<!-- category: independent, group: GROUP_NAME -->`
 
 ### Output Format
+
 **IMPORTANT:** Output ONLY the task list as plain markdown text. Do NOT use any task management tools.
 
-Format each task as a markdown checkbox:
-- [ ] Task description here
+```markdown
+# Task List: {ticket_id}
 
-Example output:
-- [ ] Implement UserService with CRUD operations and unit tests
-- [ ] Add authentication middleware with JWT validation
-- [ ] Create database migration for users table
+## Fundamental Tasks (Sequential)
+<!-- category: fundamental, order: 1 -->
+- [ ] [First foundational task]
 
-Order tasks by dependency (prerequisites first). Keep descriptions concise but specific.
+<!-- category: fundamental, order: 2 -->
+- [ ] [Second foundational task that depends on first]
 
-Be outcome-focused: describe WHAT to achieve, not HOW to do it step-by-step.
-The AI agent will determine the implementation approach."""
+## Independent Tasks (Parallel)
+<!-- category: independent, group: ui -->
+- [ ] [UI component task]
+
+<!-- category: independent, group: utils -->
+- [ ] [Utility task]
+```
+
+### Categorization Heuristics
+
+1. **If unsure, mark as FUNDAMENTAL** - Sequential is always safe
+2. **Data/Schema tasks are ALWAYS FUNDAMENTAL** - Order 1
+3. **Service/Logic tasks are USUALLY FUNDAMENTAL** - Order 2+
+4. **UI/Docs/Utils are USUALLY INDEPENDENT** - Can parallelize
+5. **Tests with their implementation are FUNDAMENTAL** - Part of that task
+6. **Shared file edits require FUNDAMENTAL** - If two tasks edit the same file, both must be FUNDAMENTAL to prevent race conditions
+
+Order tasks by dependency (prerequisites first). Keep descriptions concise but specific."""
 
     # Use a planning-specific client if a planning model is configured
     if state.planning_model:

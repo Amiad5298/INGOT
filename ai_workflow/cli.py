@@ -61,6 +61,11 @@ def show_help() -> None:
     print_info("  --force-jira-check        Force fresh Jira integration check")
     print_info("  --tui/--no-tui            Enable/disable TUI mode (default: auto)")
     print_info("  --verbose, -V             Show verbose output in TUI log panel")
+    print_info("  --parallel/--no-parallel  Enable/disable parallel task execution")
+    print_info("  --max-parallel N          Max parallel tasks (1-5, default: 3)")
+    print_info("  --fail-fast               Stop on first task failure")
+    print_info("  --max-retries N           Max retries on rate limit (0 to disable)")
+    print_info("  --retry-base-delay SECS   Base delay for retry backoff (seconds)")
     print_info("  --config                  Show current configuration")
     print_info("  --version, -v             Show version information")
     print_info("  --help, -h                Show this help message")
@@ -132,6 +137,41 @@ def main(
             help="Show verbose output in TUI log panel",
         ),
     ] = False,
+    parallel: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--parallel/--no-parallel",
+            help="Enable parallel execution of independent tasks (default: enabled)",
+        ),
+    ] = None,
+    max_parallel: Annotated[
+        int,
+        typer.Option(
+            "--max-parallel",
+            help="Maximum number of parallel tasks (1-5)",
+        ),
+    ] = 3,
+    fail_fast: Annotated[
+        bool,
+        typer.Option(
+            "--fail-fast",
+            help="Stop on first task failure",
+        ),
+    ] = False,
+    max_retries: Annotated[
+        int,
+        typer.Option(
+            "--max-retries",
+            help="Max retries on rate limit (0 to disable)",
+        ),
+    ] = 5,
+    retry_base_delay: Annotated[
+        float,
+        typer.Option(
+            "--retry-base-delay",
+            help="Base delay for retry backoff (seconds)",
+        ),
+    ] = 2.0,
     show_config: Annotated[
         bool,
         typer.Option(
@@ -156,6 +196,11 @@ def main(
     If no ticket is provided, shows the interactive main menu.
     """
     setup_logging()
+
+    # Validate max_parallel
+    if max_parallel < 1 or max_parallel > 5:
+        print_error("Error: --max-parallel must be between 1 and 5")
+        raise typer.Exit(ExitCode.GENERAL_ERROR)
 
     try:
         # Show banner
@@ -186,6 +231,11 @@ def main(
                 squash_at_end=not no_squash,
                 use_tui=tui,
                 verbose=verbose,
+                parallel=parallel,
+                max_parallel=max_parallel,
+                fail_fast=fail_fast,
+                max_retries=max_retries,
+                retry_base_delay=retry_base_delay,
             )
         else:
             # Show main menu
@@ -322,6 +372,11 @@ def _run_workflow(
     squash_at_end: bool = True,
     use_tui: Optional[bool] = None,
     verbose: bool = False,
+    parallel: Optional[bool] = None,
+    max_parallel: int = 3,
+    fail_fast: bool = False,
+    max_retries: int = 5,
+    retry_base_delay: float = 2.0,
 ) -> None:
     """Run the AI-assisted workflow.
 
@@ -335,9 +390,15 @@ def _run_workflow(
         squash_at_end: Squash commits at end
         use_tui: Override for TUI mode. None = auto-detect.
         verbose: Enable verbose mode in TUI (expanded log panel).
+        parallel: Override for parallel execution. None = use config.
+        max_parallel: Maximum number of parallel tasks (1-5).
+        fail_fast: Stop on first task failure.
+        max_retries: Max retries on rate limit (0 to disable).
+        retry_base_delay: Base delay for retry backoff (seconds).
     """
     from ai_workflow.integrations.jira import parse_jira_ticket
     from ai_workflow.workflow.runner import run_spec_driven_workflow
+    from ai_workflow.workflow.state import RateLimitConfig
 
     # Parse ticket
     jira_ticket = parse_jira_ticket(
@@ -353,6 +414,17 @@ def _run_workflow(
         impl_model or model or config.settings.implementation_model or config.settings.default_model
     )
 
+    # Determine parallel execution settings
+    effective_parallel = parallel if parallel is not None else config.settings.parallel_execution_enabled
+    effective_max_parallel = max_parallel if max_parallel != 3 else config.settings.max_parallel_tasks
+    effective_fail_fast = fail_fast or config.settings.fail_fast
+
+    # Build rate limit config
+    rate_limit_config = RateLimitConfig(
+        max_retries=max_retries,
+        base_delay_seconds=retry_base_delay,
+    )
+
     # Run workflow
     run_spec_driven_workflow(
         ticket=jira_ticket,
@@ -363,6 +435,10 @@ def _run_workflow(
         squash_at_end=squash_at_end and config.settings.squash_at_end,
         use_tui=use_tui,
         verbose=verbose,
+        parallel_execution_enabled=effective_parallel,
+        max_parallel_tasks=effective_max_parallel,
+        fail_fast=effective_fail_fast,
+        rate_limit_config=rate_limit_config,
     )
 
 
