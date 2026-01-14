@@ -98,3 +98,60 @@ def mock_console(monkeypatch):
     monkeypatch.setattr("ai_workflow.utils.console.console", mock)
     return mock
 
+
+@pytest.fixture
+def sample_tasks_with_categories():
+    """Create sample tasks with category metadata for parallel execution tests."""
+    from ai_workflow.workflow.tasks import Task, TaskStatus, TaskCategory
+
+    return [
+        Task(
+            name="Setup database schema",
+            status=TaskStatus.PENDING,
+            line_number=1,
+            category=TaskCategory.FUNDAMENTAL,
+            dependency_order=1,
+        ),
+        Task(
+            name="Configure environment",
+            status=TaskStatus.PENDING,
+            line_number=2,
+            category=TaskCategory.FUNDAMENTAL,
+            dependency_order=2,
+        ),
+        Task(
+            name="Create UI components",
+            status=TaskStatus.PENDING,
+            line_number=3,
+            category=TaskCategory.INDEPENDENT,
+            group_id="frontend",
+        ),
+        Task(
+            name="Add form validation",
+            status=TaskStatus.PENDING,
+            line_number=4,
+            category=TaskCategory.INDEPENDENT,
+            group_id="frontend",
+        ),
+        Task(
+            name="Write unit tests",
+            status=TaskStatus.PENDING,
+            line_number=5,
+            category=TaskCategory.INDEPENDENT,
+            group_id="testing",
+        ),
+    ]
+
+
+@pytest.fixture
+def rate_limit_config():
+    """Create a RateLimitConfig for testing."""
+    from ai_workflow.workflow.state import RateLimitConfig
+
+    return RateLimitConfig(
+        max_retries=3,
+        base_delay_seconds=1.0,
+        max_delay_seconds=30.0,
+        jitter_factor=0.25,
+    )
+

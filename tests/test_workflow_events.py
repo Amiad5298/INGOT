@@ -313,19 +313,37 @@ class TestEventFactories:
 
     def test_create_task_finished_event_success(self):
         """create_task_finished_event creates success event."""
-        event = create_task_finished_event(0, "Task", success=True, duration=5.0)
+        event = create_task_finished_event(0, "Task", status="success", duration=5.0)
         assert event.event_type == TaskEventType.TASK_FINISHED
-        assert event.data["success"] is True
+        assert event.data["status"] == "success"
         assert event.data["duration"] == 5.0
         assert event.data["error"] is None
 
     def test_create_task_finished_event_failure(self):
         """create_task_finished_event creates failure event."""
         event = create_task_finished_event(
-            0, "Task", success=False, duration=2.0, error="Something went wrong"
+            0, "Task", status="failed", duration=2.0, error="Something went wrong"
         )
-        assert event.data["success"] is False
+        assert event.data["status"] == "failed"
         assert event.data["error"] == "Something went wrong"
+
+    def test_task_finished_event_tri_state(self):
+        """create_task_finished_event supports tri-state status: success, failed, skipped."""
+        # Test success status
+        success_event = create_task_finished_event(0, "Task1", "success", 5.0)
+        assert success_event.data["status"] == "success"
+        assert success_event.data["error"] is None
+
+        # Test failed status
+        failed_event = create_task_finished_event(1, "Task2", "failed", 2.0, error="Error msg")
+        assert failed_event.data["status"] == "failed"
+        assert failed_event.data["error"] == "Error msg"
+
+        # Test skipped status
+        skipped_event = create_task_finished_event(2, "Task3", "skipped", 0.0)
+        assert skipped_event.data["status"] == "skipped"
+        assert skipped_event.data["duration"] == 0.0
+        assert skipped_event.data["error"] is None
 
     def test_create_run_finished_event(self):
         """create_run_finished_event creates correct event."""

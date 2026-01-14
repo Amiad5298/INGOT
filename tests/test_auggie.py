@@ -7,6 +7,7 @@ import subprocess
 from ai_workflow.integrations.auggie import (
     AuggieModel,
     AuggieClient,
+    AuggieRateLimitError,
     version_gte,
     extract_model_id,
     get_auggie_version,
@@ -14,6 +15,7 @@ from ai_workflow.integrations.auggie import (
     check_auggie_installed,
     list_models,
     _parse_model_list,
+    _looks_like_rate_limit,
 )
 
 
@@ -468,4 +470,75 @@ class TestParseModelList:
         models = _parse_model_list("")
 
         assert models == []
+
+
+class TestAuggieRateLimitError:
+    """Tests for AuggieRateLimitError exception."""
+
+    def test_creates_exception_with_message(self):
+        """Exception stores message correctly."""
+        error = AuggieRateLimitError("Rate limit detected", output="429 error")
+        assert "Rate limit detected" in str(error)
+
+    def test_stores_output(self):
+        """Exception stores output attribute."""
+        error = AuggieRateLimitError("Rate limit", output="HTTP 429 Too Many Requests")
+        assert error.output == "HTTP 429 Too Many Requests"
+
+
+class TestLooksLikeRateLimit:
+    """Tests for _looks_like_rate_limit function."""
+
+    def test_detects_429(self):
+        """Detects 429 status code."""
+        assert _looks_like_rate_limit("Error: 429 Too Many Requests") is True
+
+    def test_detects_rate_limit_text(self):
+        """Detects 'rate limit' keyword."""
+        assert _looks_like_rate_limit("Rate limit exceeded") is True
+        assert _looks_like_rate_limit("You hit the RATE LIMIT") is True
+
+    def test_detects_rate_limit_underscore(self):
+        """Detects 'rate_limit' keyword."""
+        assert _looks_like_rate_limit("rate_limit_exceeded: true") is True
+
+    def test_detects_too_many_requests(self):
+        """Detects 'too many requests' text."""
+        assert _looks_like_rate_limit("Too many requests, please wait") is True
+
+    def test_detects_quota_exceeded(self):
+        """Detects 'quota exceeded' text."""
+        assert _looks_like_rate_limit("API quota exceeded") is True
+
+    def test_detects_capacity(self):
+        """Detects 'capacity' text."""
+        assert _looks_like_rate_limit("Server at capacity") is True
+
+    def test_detects_throttl(self):
+        """Detects 'throttl' text (matches throttle, throttled, throttling)."""
+        assert _looks_like_rate_limit("Request throttled") is True
+        assert _looks_like_rate_limit("Throttling applied") is True
+
+    def test_detects_502(self):
+        """Detects 502 status code."""
+        assert _looks_like_rate_limit("HTTP 502 Bad Gateway") is True
+
+    def test_detects_503(self):
+        """Detects 503 status code."""
+        assert _looks_like_rate_limit("503 Service Unavailable") is True
+
+    def test_detects_504(self):
+        """Detects 504 status code."""
+        assert _looks_like_rate_limit("Gateway Timeout 504") is True
+
+    def test_returns_false_for_normal_output(self):
+        """Returns False for normal output."""
+        assert _looks_like_rate_limit("Task completed successfully") is False
+        assert _looks_like_rate_limit("Error: File not found") is False
+
+    def test_case_insensitive(self):
+        """Detection is case insensitive."""
+        assert _looks_like_rate_limit("RATE LIMIT") is True
+        assert _looks_like_rate_limit("Rate Limit") is True
+        assert _looks_like_rate_limit("QUOTA EXCEEDED") is True
 

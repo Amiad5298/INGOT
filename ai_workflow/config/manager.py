@@ -238,6 +238,11 @@ class ConfigManager:
         console.print(f"  Skip Clarification: {s.skip_clarification}")
         console.print(f"  Squash Commits at End: {s.squash_at_end}")
         console.print()
+        console.print("  [bold]Parallel Execution:[/bold]")
+        console.print(f"    Enabled: {s.parallel_execution_enabled}")
+        console.print(f"    Max Parallel Tasks: {s.max_parallel_tasks}")
+        console.print(f"    Fail Fast: {s.fail_fast}")
+        console.print()
 
 
 __all__ = [

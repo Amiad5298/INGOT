@@ -102,7 +102,8 @@ def step_2_create_tasklist(state: WorkflowState, auggie: AuggieClient) -> bool:
 def _extract_tasklist_from_output(output: str, ticket_id: str) -> Optional[str]:
     """Extract markdown checkbox task list from AI output.
 
-    Finds all lines matching checkbox format and returns them as a task list.
+    Finds all lines matching checkbox format, preserving category metadata comments
+    and section headers for parallel execution support.
 
     Args:
         output: AI output text that may contain task list
@@ -112,25 +113,56 @@ def _extract_tasklist_from_output(output: str, ticket_id: str) -> Optional[str]:
         Formatted task list content, or None if no tasks found
     """
     # Pattern for task items: optional indent, optional bullet, checkbox, task name
-    pattern = re.compile(r"^(\s*)[-*]?\s*\[([xX ])\]\s*(.+)$", re.MULTILINE)
+    task_pattern = re.compile(r"^(\s*)[-*]?\s*\[([xX ])\]\s*(.+)$")
+    # Pattern for category metadata comments
+    metadata_pattern = re.compile(r"^\s*<!--\s*category:\s*.+-->\s*$")
+    # Pattern for section headers (## Fundamental Tasks, ## Independent Tasks, etc.)
+    section_pattern = re.compile(r"^##\s+(Fundamental|Independent)\s+Tasks.*$", re.IGNORECASE)
 
-    matches = pattern.findall(output)
-    if not matches:
+    output_lines = output.splitlines()
+    result_lines = [f"# Task List: {ticket_id}", ""]
+
+    task_count = 0
+    pending_metadata: list[str] = []  # Buffer for metadata before a task
+
+    for line in output_lines:
+        # Check for section headers
+        if section_pattern.match(line):
+            # Add blank line before section (if we have content)
+            if len(result_lines) > 2:
+                result_lines.append("")
+            result_lines.append(line)
+            pending_metadata = []  # Reset metadata buffer
+            continue
+
+        # Check for category metadata comments
+        if metadata_pattern.match(line):
+            pending_metadata.append(line.strip())
+            continue
+
+        # Check for task items
+        task_match = task_pattern.match(line)
+        if task_match:
+            indent, checkbox, task_name = task_match.groups()
+
+            # Add any pending metadata before this task
+            for meta in pending_metadata:
+                result_lines.append(meta)
+            pending_metadata = []
+
+            # Normalize indentation (2 spaces per level)
+            indent_level = len(indent) // 2
+            normalized_indent = "  " * indent_level
+            checkbox_char = checkbox.lower()  # Normalize to lowercase
+            result_lines.append(f"{normalized_indent}- [{checkbox_char}] {task_name.strip()}")
+            task_count += 1
+
+    if task_count == 0:
         log_message("No checkbox tasks found in AI output")
         return None
 
-    # Build the task list content
-    lines = [f"# Task List: {ticket_id}", "", "## Implementation Tasks", ""]
-
-    for indent, checkbox, task_name in matches:
-        # Preserve indentation (normalize to 2 spaces per level)
-        indent_level = len(indent) // 2
-        normalized_indent = "  " * indent_level
-        checkbox_char = checkbox.lower()  # Normalize to lowercase
-        lines.append(f"{normalized_indent}- [{checkbox_char}] {task_name.strip()}")
-
-    log_message(f"Extracted {len(matches)} tasks from AI output")
-    return "\n".join(lines) + "\n"
+    log_message(f"Extracted {task_count} tasks from AI output")
+    return "\n".join(result_lines) + "\n"
 
 
 def _generate_tasklist(
@@ -155,6 +187,7 @@ def _generate_tasklist(
     """
     plan_content = plan_path.read_text()
 
+    ticket_id = state.ticket.ticket_id
     prompt = f"""Based on this implementation plan, create a task list optimized for AI agent execution.
 
 Plan:
@@ -164,42 +197,82 @@ Plan:
 
 ### Size & Scope
 - Each task should represent a **complete, coherent unit of work**
-- Target 3-8 tasks for a typical feature (not 15-25 micro-tasks)
-- A task should implement a full capability, not fragments
+- Target 3-8 tasks for a typical feature
 - Include tests WITH implementation, not as separate tasks
 
-### Good Task Examples:
-- "Implement UserService with CRUD operations and unit tests"
-- "Add authentication middleware with JWT validation and integration tests"
-- "Create database migration for users table and seed data"
-- "Refactor payment module to use new pricing engine"
+### Task Categorization
 
-### Bad Task Examples (avoid these):
-- "Create new file" (too granular)
-- "Add import statements" (not a real unit of work)
-- "Write test for function X" (tests should be with implementation)
-- "Add type hints" (should be part of implementation task)
+Categorize each task into one of two categories:
 
-### Task Boundaries
-- Align tasks with **natural code boundaries**: modules, features, layers
-- A task should leave the codebase in a **working state**
-- If tasks depend on each other, note the dependency
+#### FUNDAMENTAL Tasks (Sequential Execution)
+Tasks that establish foundational infrastructure and MUST run in order:
+- Core data models, schemas, database migrations
+- Base classes, interfaces, or abstract implementations
+- Service layers that other components depend on
+- Configuration or setup that other tasks require
+- Any task where Task N+1 depends on Task N's output
+
+Mark fundamental tasks with: `<!-- category: fundamental, order: N -->`
+
+#### INDEPENDENT Tasks (Parallel Execution)
+Tasks that can run concurrently with no dependencies on each other:
+- UI components (after models/services exist)
+- Utility functions and helpers
+- Documentation updates
+- Separate API endpoints that don't share state
+- Test suites that don't modify shared resources
+
+**CRITICAL: File Disjointness Requirement & Resolution Strategy**
+Independent tasks running in parallel MUST touch disjoint sets of files.
+
+If you detect that multiple logical tasks need to edit the same shared file (e.g., `TestData.java`, `pom.xml`, `Enums.java`, configuration files), use the **"Setup Task Pattern"**:
+
+1.  **Extract Shared Changes**: Take the edits for the shared files from all features.
+2.  **Create Setup Task**: Create a single `FUNDAMENTAL` task (Order 1) named "Update Shared Resources" containing ONLY these shared file edits.
+3.  **Parallelize the Rest**: Now that the shared conflicts are resolved in the setup task, create the remaining feature-specific tasks as `INDEPENDENT`.
+
+**Example of Resolving Conflict in `TestData.java`:**
+Instead of:
+- Task A (Fundamental): Implement Feature A + Update TestData
+- Task B (Fundamental): Implement Feature B + Update TestData (Blocked by A)
+
+DO THIS:
+- Task 1 (Fundamental): **Prepare Shared Test Data** (Update `TestData.java` with mocks for BOTH A and B)
+- Task 2 (Independent): **Implement Feature A** (Logic + Unit Tests, no longer touching TestData)
+- Task 3 (Independent): **Implement Feature B** (Logic + Unit Tests, no longer touching TestData)
 
 ### Output Format
+
 **IMPORTANT:** Output ONLY the task list as plain markdown text. Do NOT use any task management tools.
 
-Format each task as a markdown checkbox:
-- [ ] Task description here
+```markdown
+# Task List: {ticket_id}
 
-Example output:
-- [ ] Implement UserService with CRUD operations and unit tests
-- [ ] Add authentication middleware with JWT validation
-- [ ] Create database migration for users table
+## Fundamental Tasks (Sequential)
+<!-- category: fundamental, order: 1 -->
+- [ ] [First foundational task]
 
-Order tasks by dependency (prerequisites first). Keep descriptions concise but specific.
+<!-- category: fundamental, order: 2 -->
+- [ ] [Second foundational task that depends on first]
 
-Be outcome-focused: describe WHAT to achieve, not HOW to do it step-by-step.
-The AI agent will determine the implementation approach."""
+## Independent Tasks (Parallel)
+<!-- category: independent, group: ui -->
+- [ ] [UI component task]
+
+<!-- category: independent, group: utils -->
+- [ ] [Utility task]
+```
+
+### Categorization Heuristics
+
+1. **If unsure, mark as FUNDAMENTAL** - Sequential is always safe
+2. **Data/Schema tasks are ALWAYS FUNDAMENTAL** - Order 1
+3. **Service/Logic tasks are USUALLY FUNDAMENTAL** - Order 2+
+4. **UI/Docs/Utils are USUALLY INDEPENDENT** - Can parallelize
+5. **Tests with their implementation are FUNDAMENTAL** - Part of that task
+6. **Shared file edits require EXTRACTION** - If two tasks edit the same file, extract the shared edits to a new FUNDAMENTAL setup task, then keep the original tasks INDEPENDENT.
+
+Order tasks by dependency (prerequisites first). Keep descriptions concise but specific."""
 
     # Use a planning-specific client if a planning model is configured
     if state.planning_model:

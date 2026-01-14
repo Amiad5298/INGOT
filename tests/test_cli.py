@@ -164,9 +164,355 @@ class TestCLIFlags:
         mock_config = MagicMock()
         mock_config.settings.default_jira_project = ""
         mock_config_class.return_value = mock_config
-        
+
         result = runner.invoke(app, ["--no-squash", "TEST-123"])
-        
+
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["squash_at_end"] is False
+
+
+class TestParallelFlags:
+    """Tests for parallel execution CLI flags."""
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_parallel_flag_enables_parallel(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--parallel flag enables parallel execution."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--parallel", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["parallel"] is True
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_no_parallel_flag_disables(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--no-parallel flag disables parallel execution."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--no-parallel", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["parallel"] is False
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_max_parallel_sets_value(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--max-parallel sets the maximum parallel tasks."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--max-parallel", "4", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["max_parallel"] == 4
+
+    @patch("ai_workflow.cli.show_banner")
+    def test_max_parallel_validates_range(self, mock_banner):
+        """--max-parallel validates range (1-5)."""
+        # Test value too low
+        result = runner.invoke(app, ["--max-parallel", "0", "TEST-123"])
+        assert result.exit_code != 0
+
+        # Test value too high
+        result = runner.invoke(app, ["--max-parallel", "10", "TEST-123"])
+        assert result.exit_code != 0
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_fail_fast_flag(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--fail-fast flag is passed to workflow."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--fail-fast", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["fail_fast"] is True
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_no_fail_fast_flag(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--no-fail-fast flag is passed to workflow."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--no-fail-fast", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["fail_fast"] is False
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_max_parallel_none_uses_config(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """No --max-parallel flag passes None to workflow (uses config)."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["max_parallel"] is None
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_fail_fast_none_uses_config(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """No --fail-fast/--no-fail-fast flag passes None to workflow (uses config)."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["fail_fast"] is None
+
+
+class TestRetryFlags:
+    """Tests for retry CLI flags."""
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_max_retries_sets_value(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--max-retries sets the maximum retry count."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--max-retries", "10", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["max_retries"] == 10
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_max_retries_zero_disables(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--max-retries 0 disables retries."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--max-retries", "0", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["max_retries"] == 0
+
+    @patch("ai_workflow.cli.show_banner")
+    @patch("ai_workflow.cli.ConfigManager")
+    @patch("ai_workflow.cli._check_prerequisites")
+    @patch("ai_workflow.cli._run_workflow")
+    def test_retry_base_delay_sets_value(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--retry-base-delay sets the base delay."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--retry-base-delay", "5.0", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["retry_base_delay"] == 5.0
+
+
+class TestEffectiveValueOverrides:
+    """Tests for effective value computation and override semantics in _run_workflow."""
+
+    @patch("ai_workflow.workflow.runner.run_spec_driven_workflow")
+    @patch("ai_workflow.integrations.jira.parse_jira_ticket")
+    def test_max_parallel_override_cli_beats_config(
+        self, mock_parse, mock_run_workflow
+    ):
+        """CLI --max-parallel 3 overrides config max_parallel_tasks=5."""
+        from ai_workflow.cli import _run_workflow
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 5
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            max_parallel=3,  # CLI provides 3
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["max_parallel_tasks"] == 3  # CLI wins over config=5
+
+    @patch("ai_workflow.workflow.runner.run_spec_driven_workflow")
+    @patch("ai_workflow.integrations.jira.parse_jira_ticket")
+    def test_max_parallel_none_uses_config(
+        self, mock_parse, mock_run_workflow
+    ):
+        """When CLI max_parallel is None, uses config.settings.max_parallel_tasks."""
+        from ai_workflow.cli import _run_workflow
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 5
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            max_parallel=None,  # CLI not provided
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["max_parallel_tasks"] == 5  # Uses config value
+
+    @patch("ai_workflow.workflow.runner.run_spec_driven_workflow")
+    @patch("ai_workflow.integrations.jira.parse_jira_ticket")
+    def test_no_fail_fast_overrides_config_true(
+        self, mock_parse, mock_run_workflow
+    ):
+        """CLI --no-fail-fast (False) overrides config fail_fast=True."""
+        from ai_workflow.cli import _run_workflow
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 3
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = True  # Config says fail_fast
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            fail_fast=False,  # CLI says --no-fail-fast
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["fail_fast"] is False  # CLI wins
+
+    @patch("ai_workflow.workflow.runner.run_spec_driven_workflow")
+    @patch("ai_workflow.integrations.jira.parse_jira_ticket")
+    def test_fail_fast_none_uses_config(
+        self, mock_parse, mock_run_workflow
+    ):
+        """When CLI fail_fast is None, uses config.settings.fail_fast."""
+        from ai_workflow.cli import _run_workflow
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 3
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = True  # Config has fail_fast=True
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            fail_fast=None,  # CLI not provided
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["fail_fast"] is True  # Uses config value
+
+    @patch("ai_workflow.integrations.jira.parse_jira_ticket")
+    def test_invalid_config_max_parallel_rejected(self, mock_parse):
+        """Invalid config max_parallel_tasks (e.g., 10) is rejected via effective validation."""
+        import click
+        from ai_workflow.cli import _run_workflow
+        from ai_workflow.utils.errors import ExitCode
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 10  # Invalid config value
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+
+        with pytest.raises(click.exceptions.Exit) as exc_info:
+            _run_workflow(
+                ticket="TEST-123",
+                config=mock_config,
+                max_parallel=None,  # Uses invalid config
+            )
+        assert exc_info.value.exit_code == ExitCode.GENERAL_ERROR
 

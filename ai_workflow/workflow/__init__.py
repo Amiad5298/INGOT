@@ -40,6 +40,7 @@ from ai_workflow.workflow.task_memory import (
 )
 from ai_workflow.workflow.tasks import (
     Task,
+    TaskCategory,
     TaskStatus,
     format_task_list,
     get_completed_tasks,
@@ -53,6 +54,7 @@ __all__ = [
     "WorkflowState",
     # Tasks
     "Task",
+    "TaskCategory",
     "TaskStatus",
     "parse_task_list",
     "get_pending_tasks",

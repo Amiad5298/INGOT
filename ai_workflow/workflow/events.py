@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from ai_workflow.ui.log_buffer import TaskLogBuffer
@@ -291,7 +291,7 @@ def create_task_output_event(task_index: int, task_name: str, line: str) -> Task
 def create_task_finished_event(
     task_index: int,
     task_name: str,
-    success: bool,
+    status: Literal["success", "failed", "skipped"],
     duration: float,
     error: str | None = None,
 ) -> TaskEvent:
@@ -300,7 +300,7 @@ def create_task_finished_event(
     Args:
         task_index: Zero-based index of the task.
         task_name: Name of the task.
-        success: Whether the task completed successfully.
+        status: Task completion status - one of "success", "failed", "skipped".
         duration: Task duration in seconds.
         error: Optional error message if task failed.
 
@@ -312,7 +312,7 @@ def create_task_finished_event(
         task_index=task_index,
         task_name=task_name,
         timestamp=time.time(),
-        data={"success": success, "duration": duration, "error": error},
+        data={"status": status, "duration": duration, "error": error},
     )
 
 

@@ -14,6 +14,7 @@ Features:
 from __future__ import annotations
 
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -86,13 +87,15 @@ def render_task_list(
     records: list[TaskRunRecord],
     selected_index: int = -1,
     ticket_id: str = "",
+    parallel_mode: bool = False,
 ) -> Panel:
-    """Render the task list panel.
+    """Render the task list panel with parallel execution support.
 
     Args:
         records: List of task run records.
         selected_index: Index of currently selected task (-1 for none).
         ticket_id: Ticket ID for header display.
+        parallel_mode: Whether parallel execution mode is enabled.
 
     Returns:
         Rich Panel containing the task table.
@@ -106,6 +109,8 @@ def render_task_list(
     table.add_column("Status", width=3)
     table.add_column("Task", ratio=1)
     table.add_column("Duration", width=10, justify="right")
+
+    running_count = sum(1 for r in records if r.status == TaskRunStatus.RUNNING)
 
     for i, record in enumerate(records):
         # Status icon with color
@@ -125,9 +130,11 @@ def render_task_list(
         elif record.status == TaskRunStatus.RUNNING:
             name_style = "bold"
 
-        # Running indicator
+        # Running indicator with parallel support
         name_text = record.task_name
-        if record.status == TaskRunStatus.RUNNING:
+        if record.status == TaskRunStatus.RUNNING and parallel_mode:
+            name_text = f"{name_text} ⚡"  # Parallel indicator
+        elif record.status == TaskRunStatus.RUNNING:
             name_text = f"{name_text} ← Running"
 
         # Duration
@@ -141,10 +148,16 @@ def render_task_list(
             Text.from_markup(duration_text),
         )
 
-    # Build header
+    # Build header with parallel mode indicator
     total = len(records)
     completed = sum(1 for r in records if r.status == TaskRunStatus.SUCCESS)
-    header = f"TASKS [{ticket_id}] [{completed}/{total} tasks]" if ticket_id else f"TASKS [{completed}/{total} tasks]"
+
+    if parallel_mode and running_count > 0:
+        header = f"TASKS [{ticket_id}] [{completed}/{total}] [⚡ {running_count} parallel]"
+    elif ticket_id:
+        header = f"TASKS [{ticket_id}] [{completed}/{total} tasks]"
+    else:
+        header = f"TASKS [{completed}/{total} tasks]"
 
     return Panel(
         table,
@@ -196,12 +209,16 @@ def render_log_panel(
 def render_status_bar(
     running: bool = False,
     verbose_mode: bool = False,
+    parallel_mode: bool = False,
+    running_count: int = 0,
 ) -> Text:
     """Render the keyboard shortcuts status bar.
 
     Args:
         running: Whether a task is currently running.
         verbose_mode: Whether verbose mode is enabled.
+        parallel_mode: Whether parallel execution mode is enabled.
+        running_count: Number of currently running tasks in parallel mode.
 
     Returns:
         Rich Text with keyboard shortcuts.
@@ -218,6 +235,9 @@ def render_status_bar(
     for key, action in shortcuts:
         text.append(key, style="bold cyan")
         text.append(f" {action}  ", style="dim")
+
+    if parallel_mode and running_count > 0:
+        text.append(f" | ⚡ {running_count} tasks running", style="bold yellow")
 
     return text
 
@@ -240,6 +260,7 @@ class TaskRunnerUI:
         selected_index: Currently selected task index.
         follow_mode: Whether log auto-scroll is enabled.
         verbose_mode: Whether verbose mode is enabled.
+        parallel_mode: Whether multiple tasks can run simultaneously.
     """
 
     ticket_id: str = ""
@@ -247,7 +268,9 @@ class TaskRunnerUI:
     selected_index: int = -1
     follow_mode: bool = True
     verbose_mode: bool = False
+    parallel_mode: bool = False  # Multiple tasks can run simultaneously
     _current_task_index: int = -1
+    _running_task_indices: set[int] = field(default_factory=set)  # Track parallel tasks
     _live: Live | None = field(default=None, init=False, repr=False)
     _log_dir: Path | None = field(default=None, init=False, repr=False)
     # Keyboard input handling
@@ -256,6 +279,8 @@ class TaskRunnerUI:
     _stop_input_thread: bool = field(default=False, init=False, repr=False)
     # Quit signal for execution loop
     quit_requested: bool = field(default=False, init=False, repr=False)
+    # Thread-safe event queue for parallel execution
+    _event_queue: queue.Queue = field(default_factory=queue.Queue, init=False, repr=False)
 
     def initialize_records(self, task_names: list[str]) -> None:
         """Initialize task run records from task names.
@@ -275,6 +300,14 @@ class TaskRunnerUI:
             log_dir: Path to the log directory.
         """
         self._log_dir = log_dir
+
+    def set_parallel_mode(self, enabled: bool) -> None:
+        """Enable or disable parallel execution display mode.
+
+        Args:
+            enabled: Whether parallel mode should be enabled.
+        """
+        self.parallel_mode = enabled
 
     def get_record(self, task_index: int) -> TaskRunRecord | None:
         """Get a task record by index.
@@ -310,16 +343,29 @@ class TaskRunnerUI:
         record = self.get_record(index)
         return record.task_name if record else ""
 
+    def _get_running_count(self) -> int:
+        """Get the number of currently running tasks.
+
+        Returns:
+            Number of running tasks (from set in parallel mode, or 1/0 in sequential).
+        """
+        if self.parallel_mode:
+            return len(self._running_task_indices)
+        return 1 if self._current_task_index >= 0 else 0
+
     def _render_layout(self) -> Group:
         """Render the complete TUI layout.
 
         Returns:
             Rich Group containing all panels.
         """
+        running_count = self._get_running_count()
+
         task_panel = render_task_list(
             self.records,
             selected_index=self.selected_index,
             ticket_id=self.ticket_id,
+            parallel_mode=self.parallel_mode,
         )
 
         log_panel = render_log_panel(
@@ -329,8 +375,10 @@ class TaskRunnerUI:
         )
 
         status_bar = render_status_bar(
-            running=self._current_task_index >= 0,
+            running=self._current_task_index >= 0 or running_count > 0,
             verbose_mode=self.verbose_mode,
+            parallel_mode=self.parallel_mode,
+            running_count=running_count,
         )
 
         return Group(task_panel, log_panel, status_bar)
@@ -369,9 +417,31 @@ class TaskRunnerUI:
             self._live = None
 
     def refresh(self) -> None:
-        """Refresh the display with current state."""
+        """Refresh the display with current state.
+
+        Drains the event queue first (for thread-safe parallel mode),
+        then updates the Live display.
+        """
+        self._drain_event_queue()
         if self._live is not None:
             self._live.update(self._render_layout())
+
+    def post_event(self, event: TaskEvent) -> None:
+        """Thread-safe: push event to queue (called from worker threads).
+
+        Args:
+            event: The task event to queue for processing.
+        """
+        self._event_queue.put(event)
+
+    def _drain_event_queue(self) -> None:
+        """Main thread: process all pending events from the queue."""
+        while True:
+            try:
+                event = self._event_queue.get_nowait()
+                self._apply_event(event)
+            except queue.Empty:
+                break
 
     def __enter__(self) -> TaskRunnerUI:
         """Context manager entry."""
@@ -476,9 +546,14 @@ class TaskRunnerUI:
 
     def _handle_quit(self) -> None:
         """Handle quit request."""
-        # Check if a task is running
-        if self._current_task_index >= 0:
-            # Task is running - set flag for execution loop to handle
+        # Check if any task is running (sequential or parallel mode)
+        has_running_tasks = (
+            self._current_task_index >= 0
+            or (self.parallel_mode and len(self._running_task_indices) > 0)
+        )
+
+        if has_running_tasks:
+            # Tasks are running - set flag for execution loop to handle
             # The execution loop will prompt for confirmation
             self.quit_requested = True
         else:
@@ -490,10 +565,27 @@ class TaskRunnerUI:
     # =========================================================================
 
     def handle_event(self, event: TaskEvent) -> None:
-        """Handle a task event and update UI accordingly.
+        """Handle a task event and update UI accordingly (sequential mode).
+
+        For sequential mode: applies the event and refreshes immediately.
+        For parallel mode: use post_event() to queue events, then refresh()
+        to drain the queue on the main thread.
 
         Args:
             event: The task event to process.
+        """
+        self._apply_event(event)
+        self.refresh()
+
+    def _apply_event(self, event: TaskEvent) -> None:
+        """Apply event to TUI state (main thread only).
+
+        This is the core event processing logic, extracted from handle_event
+        to support both sequential mode (direct call) and parallel mode
+        (called from _drain_event_queue).
+
+        Args:
+            event: The task event to apply.
         """
         if event.event_type == TaskEventType.TASK_STARTED:
             self._handle_task_started(event)
@@ -504,10 +596,8 @@ class TaskRunnerUI:
         elif event.event_type == TaskEventType.RUN_FINISHED:
             self._handle_run_finished(event)
 
-        self.refresh()
-
     def _handle_task_started(self, event: TaskEvent) -> None:
-        """Handle TASK_STARTED event.
+        """Handle TASK_STARTED event with parallel support.
 
         Args:
             event: The task started event.
@@ -516,7 +606,11 @@ class TaskRunnerUI:
         if record:
             record.status = TaskRunStatus.RUNNING
             record.start_time = event.timestamp
-            self._current_task_index = event.task_index
+
+            if self.parallel_mode:
+                self._running_task_indices.add(event.task_index)
+            else:
+                self._current_task_index = event.task_index
 
     def _handle_task_output(self, event: TaskEvent) -> None:
         """Handle TASK_OUTPUT event.
@@ -530,7 +624,7 @@ class TaskRunnerUI:
             record.log_buffer.write(line)
 
     def _handle_task_finished(self, event: TaskEvent) -> None:
-        """Handle TASK_FINISHED event.
+        """Handle TASK_FINISHED event with parallel support and tri-state status.
 
         Args:
             event: The task finished event.
@@ -539,15 +633,27 @@ class TaskRunnerUI:
         if record:
             record.end_time = event.timestamp
             if event.data:
-                if event.data.get("success", False):
+                # Support tri-state status: "success", "failed", "skipped"
+                status_str = event.data.get("status")
+                if status_str == "success":
                     record.status = TaskRunStatus.SUCCESS
+                elif status_str == "skipped":
+                    record.status = TaskRunStatus.SKIPPED
                 else:
                     record.status = TaskRunStatus.FAILED
                     record.error = event.data.get("error")
 
-            # Close the log buffer
-            if record.log_buffer:
-                record.log_buffer.close()
+            # CRITICAL: Close log buffer for ALL statuses (success, failed, skipped)
+            # Best-effort cleanup - catch exceptions to avoid breaking event processing
+            if record.log_buffer is not None:
+                try:
+                    record.log_buffer.close()
+                except Exception:
+                    pass  # Best-effort cleanup
+                record.log_buffer = None
+
+            if self.parallel_mode:
+                self._running_task_indices.discard(event.task_index)
 
     def _handle_run_finished(self, event: TaskEvent) -> None:
         """Handle RUN_FINISHED event.

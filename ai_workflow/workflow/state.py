@@ -15,6 +15,40 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class RateLimitConfig:
+    """Configuration for API rate limit handling.
+
+    Implements exponential backoff with jitter to handle rate limit errors
+    (HTTP 429) from concurrent API calls during parallel task execution.
+
+    Attributes:
+        max_retries: Maximum retry attempts before giving up
+        base_delay_seconds: Initial delay before first retry
+        max_delay_seconds: Maximum delay cap to prevent excessive waits
+        jitter_factor: Random jitter factor (0.5 = up to 50% of delay)
+        retryable_status_codes: HTTP status codes that trigger retry
+    """
+
+    max_retries: int = 5  # Maximum retry attempts
+    base_delay_seconds: float = 2.0  # Initial delay
+    max_delay_seconds: float = 60.0  # Cap on delay
+    jitter_factor: float = 0.5  # Random jitter (0-50% of delay)
+
+    # HTTP status codes that trigger retry
+    retryable_status_codes: tuple[int, ...] = (429, 502, 503, 504)
+
+    def __post_init__(self):
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be >= 0")
+        if self.max_retries > 0 and self.base_delay_seconds <= 0:
+            raise ValueError("base_delay_seconds must be > 0 when max_retries > 0")
+        if self.jitter_factor < 0 or self.jitter_factor > 1:
+            raise ValueError("jitter_factor must be in [0, 1]")
+        if self.max_delay_seconds < self.base_delay_seconds:
+            raise ValueError("max_delay_seconds must be >= base_delay_seconds")
+
+
+@dataclass
 class WorkflowState:
     """Tracks the current state of workflow execution.
 
@@ -72,6 +106,17 @@ class WorkflowState:
 
     # Task memory system (for cross-task learning without context pollution)
     task_memories: list["TaskMemory"] = field(default_factory=list)
+
+    # Parallel execution configuration
+    max_parallel_tasks: int = 3  # Default concurrency limit
+    parallel_execution_enabled: bool = True
+
+    # Rate limit configuration
+    rate_limit_config: RateLimitConfig = field(default_factory=RateLimitConfig)
+
+    # Parallel execution tracking
+    parallel_tasks_completed: list[str] = field(default_factory=list)
+    parallel_tasks_failed: list[str] = field(default_factory=list)
 
     @property
     def specs_dir(self) -> Path:
@@ -152,6 +197,7 @@ class WorkflowState:
 
 
 __all__ = [
+    "RateLimitConfig",
     "WorkflowState",
 ]
 
