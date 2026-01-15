@@ -34,7 +34,7 @@ This spec remediates implementation issues in the parallel execution feature aff
 
 ## Required Code Changes
 
-### File: `ai_workflow/cli.py`
+### File: `spec/cli.py`
 
 #### Change 1: `max_parallel` CLI parameter
 ```python
@@ -69,7 +69,7 @@ if effective_max_parallel < 1 or effective_max_parallel > 5:
 
 ---
 
-### File: `ai_workflow/workflow/state.py`
+### File: `spec/workflow/state.py`
 
 #### Change 1: Add `__post_init__` validation to `RateLimitConfig`
 ```python
@@ -94,7 +94,7 @@ class RateLimitConfig:
 
 ---
 
-### File: `ai_workflow/integrations/auggie.py`
+### File: `spec/integrations/auggie.py`
 
 #### Change 1: Add `AuggieRateLimitError` exception
 ```python
@@ -117,11 +117,11 @@ def _looks_like_rate_limit(output: str) -> bool:
 
 ---
 
-### File: `ai_workflow/workflow/step3_execute.py`
+### File: `spec/workflow/step3_execute.py`
 
 #### Change 1: Update `_execute_task_with_callback` to raise on rate limit
 ```python
-from ai_workflow.integrations.auggie import AuggieRateLimitError, _looks_like_rate_limit
+from spec.integrations.auggie import AuggieRateLimitError, _looks_like_rate_limit
 
 def _execute_task_with_callback(
     state: WorkflowState,
@@ -342,7 +342,7 @@ def _execute_parallel_with_tui(
 
 ---
 
-### File: `ai_workflow/ui/tui.py`
+### File: `spec/ui/tui.py`
 
 #### Change 1: Add event queue for thread-safe event posting
 ```python
@@ -429,7 +429,7 @@ def _apply_event(self, event: TaskEvent) -> None:
 
 ---
 
-### File: `ai_workflow/workflow/events.py`
+### File: `spec/workflow/events.py`
 
 #### Change 1: Update `create_task_finished_event` to use tri-state status
 ```python
@@ -478,7 +478,7 @@ def _apply_event(self, event: TaskEvent) -> None:
 
 ---
 
-### File: `ai_workflow/workflow/tasks.py`
+### File: `spec/workflow/tasks.py`
 
 #### Change 1: Stable sort for `get_fundamental_tasks`
 ```python
@@ -516,8 +516,8 @@ def get_fundamental_tasks(tasks: list[Task]) -> list[Task]:
 
 Mock `time.sleep` and `random.uniform` for fast, deterministic retry tests:
 ```python
-@patch('ai_workflow.utils.retry.time.sleep')
-@patch('ai_workflow.utils.retry.random.uniform', return_value=0.5)
+@patch('spec.utils.retry.time.sleep')
+@patch('spec.utils.retry.random.uniform', return_value=0.5)
 def test_retry_triggers_on_rate_limit_error(mock_random, mock_sleep):
     # Test runs instantly, mock_sleep.call_count verifies attempts
 ```

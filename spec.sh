@@ -42,16 +42,16 @@ set -o pipefail  # Exit on pipe failure
 # Script Metadata
 ################################################################################
 SCRIPT_VERSION="2.0.0"
-SCRIPT_NAME="AI Workflow Script"
+SCRIPT_NAME="SPEC"
 REQUIRED_AUGGIE_VERSION="0.12.0"
 REQUIRED_NODE_VERSION="22"
 
 # Logging configuration
-LOG_ENABLED="${AI_WORKFLOW_LOG:-false}"
-LOG_FILE="${AI_WORKFLOW_LOG_FILE:-${HOME}/.ai-workflow.log}"
+LOG_ENABLED="${SPEC_LOG:-false}"
+LOG_FILE="${SPEC_LOG_FILE:-${HOME}/.spec.log}"
 
 # Configuration file
-CONFIG_FILE="${HOME}/.ai-workflow-config"
+CONFIG_FILE="${HOME}/.spec-config"
 
 # CLI Flags
 NO_OPEN=false
@@ -1643,7 +1643,7 @@ check_git_dirty_state() {
         case "$choice" in
             1)
                 # Stash changes
-                local stash_msg="ai-workflow: auto-stash before ${context}"
+                local stash_msg="spec: auto-stash before ${context}"
                 if git stash push -m "$stash_msg"; then
                     print_success "Changes stashed successfully"
                     print_info "To restore later: git stash pop"
@@ -2836,8 +2836,8 @@ ${COLOR_BOLD}FEATURES:${COLOR_RESET}
        - Step 3: Execute tasks with focused AI context and automated task selection
 
 ${COLOR_BOLD}ENVIRONMENT VARIABLES:${COLOR_RESET}
-    AI_WORKFLOW_LOG          Enable logging (true/false, default: false)
-    AI_WORKFLOW_LOG_FILE     Log file path (default: ~/.ai-workflow.log)
+    SPEC_LOG          Enable logging (true/false, default: false)
+    SPEC_LOG_FILE     Log file path (default: ~/.spec.log)
 
 ${COLOR_BOLD}REQUIREMENTS:${COLOR_RESET}
     - Bash 4.3+ (macOS users: install via 'brew install bash')
@@ -2860,10 +2860,10 @@ ${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
     $0 --no-open
 
     # Enable logging
-    AI_WORKFLOW_LOG=true $0
+    SPEC_LOG=true $0
 
     # Use custom log file
-    AI_WORKFLOW_LOG=true AI_WORKFLOW_LOG_FILE=/tmp/workflow.log $0
+    SPEC_LOG=true SPEC_LOG_FILE=/tmp/workflow.log $0
 
 ${COLOR_BOLD}RULES/GUIDELINES:${COLOR_RESET}
     The script supports project rules in these locations (in order of preference):
@@ -2885,7 +2885,7 @@ ${COLOR_BOLD}EXECUTION NOTES:${COLOR_RESET}
     This file contains timestamps, commit hashes, and task status.
 
 ${COLOR_BOLD}CONFIGURATION:${COLOR_RESET}
-    Config file: ~/.ai-workflow-config
+    Config file: ~/.spec-config
     Use option 3 in the main menu to configure default settings.
 
 ${COLOR_BOLD}EXIT CODES:${COLOR_RESET}

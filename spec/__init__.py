@@ -1,7 +1,7 @@
 """SPEC - Spec-driven development workflow using Auggie CLI.
 
 This package provides a Python CLI application for spec-driven development
-workflows, converting the original AI-World.sh Bash script to Python.
+workflows, converting the original spec.sh Bash script to Python.
 """
 
 __version__ = "2.0.0"

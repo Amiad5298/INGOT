@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for AI Workflow tests."""
+"""Shared pytest fixtures for SPEC tests."""
 
 import pytest
 from pathlib import Path
@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 @pytest.fixture
 def temp_config_file(tmp_path: Path) -> Path:
     """Create a temporary config file with sample values."""
-    config_file = tmp_path / ".ai-workflow-config"
-    config_file.write_text('''# AI Workflow Configuration
+    config_file = tmp_path / ".spec-config"
+    config_file.write_text('''# SPEC Configuration
 DEFAULT_MODEL="claude-3"
 PLANNING_MODEL="claude-3-opus"
 IMPLEMENTATION_MODEL="claude-3-sonnet"
@@ -24,7 +24,7 @@ SQUASH_AT_END="true"
 @pytest.fixture
 def empty_config_file(tmp_path: Path) -> Path:
     """Create an empty config file."""
-    config_file = tmp_path / ".ai-workflow-config"
+    config_file = tmp_path / ".spec-config"
     config_file.write_text("")
     return config_file
 

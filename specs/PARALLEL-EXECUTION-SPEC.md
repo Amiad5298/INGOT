@@ -35,12 +35,12 @@ Step 2: Task Generation → Step 3: Sequential Execution
 
 | File | Purpose |
 |------|---------|
-| `ai_workflow/workflow/tasks.py` | Task dataclass, parsing, status management |
-| `ai_workflow/workflow/step2_tasklist.py` | Task list generation from plan |
-| `ai_workflow/workflow/step3_execute.py` | Sequential task execution |
-| `ai_workflow/workflow/state.py` | WorkflowState dataclass |
-| `ai_workflow/workflow/events.py` | Task events and run records |
-| `ai_workflow/ui/tui.py` | Terminal UI for execution display |
+| `spec/workflow/tasks.py` | Task dataclass, parsing, status management |
+| `spec/workflow/step2_tasklist.py` | Task list generation from plan |
+| `spec/workflow/step3_execute.py` | Sequential task execution |
+| `spec/workflow/state.py` | WorkflowState dataclass |
+| `spec/workflow/events.py` | Task events and run records |
+| `spec/ui/tui.py` | Terminal UI for execution display |
 
 ### Current Task Structure
 
@@ -377,7 +377,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Callable
 
-from ai_workflow.workflow.tasks import (
+from spec.workflow.tasks import (
     Task,
     TaskCategory,
     get_pending_tasks,
@@ -440,7 +440,7 @@ def step_3_execute(
     failed_tasks: list[str] = []
 
     # Determine execution mode
-    from ai_workflow.ui.tui import _should_use_tui
+    from spec.ui.tui import _should_use_tui
     use_tui_mode = _should_use_tui(use_tui)
 
     # PHASE 1: Execute fundamental tasks sequentially
@@ -610,7 +610,7 @@ def _execute_parallel_with_tui(
     Returns:
         List of failed task names
     """
-    from ai_workflow.ui.tui import TaskRunnerUI
+    from spec.ui.tui import TaskRunnerUI
 
     failed_tasks: list[str] = []
     max_workers = min(state.max_parallel_tasks, len(tasks))
@@ -726,7 +726,7 @@ import time
 from functools import wraps
 from typing import Callable, TypeVar
 
-from ai_workflow.workflow.state import RateLimitConfig
+from spec.workflow.state import RateLimitConfig
 
 T = TypeVar("T")
 
@@ -856,7 +856,7 @@ def _is_retryable_error(error: Exception, config: RateLimitConfig) -> bool:
 Update the task execution function to use the retry mechanism:
 
 ```python
-from ai_workflow.utils.retry import (
+from spec.utils.retry import (
     RateLimitExceededError,
     with_rate_limit_retry,
 )
@@ -1256,7 +1256,7 @@ class WorkflowConfig:
 ### 2. Example Config File
 
 ```yaml
-# .ai-workflow.yaml
+# .spec.yaml
 
 # Parallel execution settings
 parallel_execution_enabled: true
@@ -1276,7 +1276,7 @@ fail_fast: false
 # tests/test_parallel_execution.py
 
 import pytest
-from ai_workflow.workflow.tasks import (
+from spec.workflow.tasks import (
     Task,
     TaskCategory,
     TaskStatus,
@@ -1380,8 +1380,8 @@ class TestParallelExecution:
 
 import pytest
 from pathlib import Path
-from ai_workflow.workflow.state import WorkflowState
-from ai_workflow.workflow.step3_execute import step_3_execute
+from spec.workflow.state import WorkflowState
+from spec.workflow.step3_execute import step_3_execute
 
 
 class TestParallelWorkflow:

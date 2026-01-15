@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the missing tests for the `ai_workflow/workflow` module. The analysis compares each source file against existing test files to identify gaps in test coverage.
+This document outlines the missing tests for the `spec/workflow` module. The analysis compares each source file against existing test files to identify gaps in test coverage.
 
 ---
 
@@ -30,8 +30,8 @@ The `step1_plan.py` module has **0 dedicated tests**. Only `_build_plan_prompt` 
 #### Functions to Test:
 
 **`_get_log_base_dir()`**
-- Test default returns `Path(".ai_workflow/runs")`
-- Test respects `AI_WORKFLOW_LOG_DIR` environment variable
+- Test default returns `Path(".spec/runs")`
+- Test respects `SPEC_LOG_DIR` environment variable
 
 **`_create_plan_log_dir(ticket_id: str)`**
 - Test creates directory with correct structure (`{base}/ticket_id/plan_generation`)
@@ -90,8 +90,8 @@ The `step3_execute.py` module has **0 dedicated tests**.
 #### Functions to Test:
 
 **`_get_log_base_dir()`**
-- Test default returns `Path(".ai_workflow/runs")`
-- Test respects `AI_WORKFLOW_LOG_DIR` environment variable
+- Test default returns `Path(".spec/runs")`
+- Test respects `SPEC_LOG_DIR` environment variable
 
 **`_create_run_log_dir(ticket_id: str)`**
 - Test creates timestamped directory
@@ -217,7 +217,7 @@ The `runner.py` module has **0 dedicated tests**.
 **`workflow_cleanup(state)` context manager**
 - Test yields normally on success
 - Test catches `UserCancelledError` and offers cleanup
-- Test catches `AIWorkflowError` and offers cleanup
+- Test catches `SpecError` and offers cleanup
 - Test catches generic exceptions and offers cleanup
 - Test stores original branch
 
@@ -303,14 +303,14 @@ The `runner.py` module has **0 dedicated tests**.
 For each new test file, use the following structure:
 
 ```python
-"""Tests for ai_workflow.workflow.{module} module."""
+"""Tests for spec.workflow.{module} module."""
 
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Import module under test
-from ai_workflow.workflow.{module} import (
+from spec.workflow.{module} import (
     function1,
     function2,
 )
