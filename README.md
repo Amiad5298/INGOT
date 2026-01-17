@@ -71,7 +71,7 @@ Four purpose-built agents work together:
 
 ```bash
 # Install SPEC
-pip install spec
+pip install specflow
 
 # Navigate to your git repository
 cd your-project
@@ -169,7 +169,7 @@ Run logs are stored in `.spec/runs/{ticket}/` for debugging and audit purposes.
 ### Install from PyPI
 
 ```bash
-pip install spec
+pip install specflow
 ```
 
 ### Install from Source
