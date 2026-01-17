@@ -62,7 +62,7 @@ def step_2_create_tasklist(state: WorkflowState, auggie: AuggieClient) -> bool:
             # Generate task list
             print_step("Generating task list from plan...")
 
-            if not _generate_tasklist(state, plan_path, tasklist_path, auggie):
+            if not _generate_tasklist(state, plan_path, tasklist_path):
                 print_error("Failed to generate task list")
                 if not prompt_confirm("Retry?", default=True):
                     return False
@@ -169,7 +169,6 @@ def _generate_tasklist(
     state: WorkflowState,
     plan_path: Path,
     tasklist_path: Path,
-    auggie: AuggieClient,
 ) -> bool:
     """Generate task list from implementation plan using subagent.
 
@@ -180,7 +179,6 @@ def _generate_tasklist(
         state: Current workflow state
         plan_path: Path to implementation plan
         tasklist_path: Path to save task list
-        auggie: Auggie CLI client (unused, kept for signature compatibility)
 
     Returns:
         True if task list was generated and contains valid tasks

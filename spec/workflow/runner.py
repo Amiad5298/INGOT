@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from typing import Generator, Optional
 
 from spec.config.manager import ConfigManager
+from spec.integrations.agents import ensure_agents_installed
 from spec.integrations.auggie import AuggieClient
 from spec.integrations.git import (
     DirtyStateAction,
@@ -77,6 +78,11 @@ def run_spec_driven_workflow(
         True if workflow completed successfully
     """
     print_header(f"Starting Workflow: {ticket.ticket_id}")
+
+    # Ensure SPEC subagent files are installed
+    if not ensure_agents_installed():
+        print_error("Failed to install SPEC subagent files")
+        return False
 
     # Initialize state with subagent names from config
     state = WorkflowState(

@@ -764,9 +764,7 @@ def _execute_task(
     prompt = f"""Execute task: {task.name}
 
 Reference Plan:
-{plan_content}
-
-Complete this single task. Do not commit changes."""
+{plan_content}"""
 
     try:
         success, _ = auggie_client.run_print_with_output(
@@ -817,9 +815,7 @@ def _execute_task_with_callback(
     prompt = f"""Execute task: {task.name}
 
 Reference Plan:
-{plan_content}
-
-Complete this single task. Do not commit changes."""
+{plan_content}"""
 
     try:
         success, output = auggie_client.run_with_callback(
@@ -986,12 +982,14 @@ If you cannot reliably map changed source files to specific tests AND cannot run
 
 If NO production files were changed AND NO test files were changed, report "No code changes detected that require testing" and STOP."""
 
-    auggie_client = AuggieClient(model=state.implementation_model)
+    # Use spec-implementer subagent for running tests
+    auggie_client = AuggieClient()
 
     try:
         success, _ = auggie_client.run_print_with_output(
             prompt,
-            dont_save_session=True
+            agent=state.subagent_names["implementer"],
+            dont_save_session=True,
         )
         console.print()
         if success:

@@ -178,7 +178,6 @@ class TestGenerateTasklist:
             workflow_state,
             plan_path,
             tasklist_path,
-            mock_client,
         )
 
         # Assert
@@ -218,7 +217,7 @@ class TestGenerateTasklist:
         mock_auggie_class.return_value = mock_client
 
         # Act
-        result = _generate_tasklist(state, plan_path, tasklist_path, MagicMock())
+        result = _generate_tasklist(state, plan_path, tasklist_path)
 
         # Assert - new client is created and subagent from state is used
         mock_auggie_class.assert_called_once_with()
@@ -250,7 +249,7 @@ class TestGenerateTasklist:
         )
         mock_auggie_class.return_value = mock_client
 
-        result = _generate_tasklist(state, plan_path, tasklist_path, MagicMock())
+        result = _generate_tasklist(state, plan_path, tasklist_path)
 
         # Should fall back to default template
         assert result is True
@@ -318,7 +317,7 @@ class TestStep2CreateTasklist:
 - [ ] Edited task 3
 """
 
-        def mock_generate_side_effect(state, plan_path, tasklist_path, auggie):
+        def mock_generate_side_effect(state, plan_path, tasklist_path):
             tasklist_path.write_text(initial_content)
             return True
 
@@ -376,7 +375,7 @@ class TestStep2CreateTasklist:
         plan_path.write_text("# Plan")
         state.plan_file = plan_path
 
-        def mock_generate_effect(state, plan_path, tasklist_path, auggie):
+        def mock_generate_effect(state, plan_path, tasklist_path):
             tasklist_path.write_text("- [ ] Task\n")
             return True
 
@@ -415,7 +414,7 @@ class TestStep2CreateTasklist:
         plan_path.write_text("# Plan")
         state.plan_file = plan_path
 
-        mock_generate.side_effect = lambda s, pp, tp, a: (tp.write_text("- [ ] Task\n") or True)
+        mock_generate.side_effect = lambda s, pp, tp: (tp.write_text("- [ ] Task\n") or True)
         mock_menu.return_value = TaskReviewChoice.ABORT
 
         result = step_2_create_tasklist(state, MagicMock())
@@ -596,7 +595,7 @@ class TestGenerateTasklistRetry:
         mock_client.run_print_with_output.return_value = (False, "Error occurred")
         mock_auggie_class.return_value = mock_client
 
-        result = _generate_tasklist(state, plan_path, tasklist_path, MagicMock())
+        result = _generate_tasklist(state, plan_path, tasklist_path)
 
         assert result is False
 

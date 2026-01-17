@@ -510,23 +510,27 @@ class TestRunClarification:
 
     @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.workflow.step1_plan.prompt_confirm")
-    def test_uses_planning_model(
+    def test_uses_planner_subagent(
         self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
     ):
-        """Uses planning model for clarification."""
+        """Uses spec-planner subagent for clarification."""
         mock_confirm.return_value = True
         mock_client = MagicMock()
         mock_client.run_print.return_value = True
         mock_auggie_class.return_value = mock_client
 
-        workflow_state.planning_model = "clarification-model"
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
         mock_auggie = MagicMock()
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        mock_auggie_class.assert_called_once_with(model="clarification-model")
+        # Verify AuggieClient is created without model (uses agent instead)
+        mock_auggie_class.assert_called_once_with()
+        # Verify run_print is called with the planner subagent
+        call_kwargs = mock_client.run_print.call_args.kwargs
+        assert "agent" in call_kwargs
+        assert call_kwargs["agent"] == workflow_state.subagent_names["planner"]
 
 
 # =============================================================================
