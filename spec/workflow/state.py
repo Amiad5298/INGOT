@@ -10,6 +10,14 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from spec.integrations.jira import JiraTicket
 
+# Import subagent constants as single source of truth
+from spec.integrations.auggie import (
+    SPEC_AGENT_IMPLEMENTER,
+    SPEC_AGENT_PLANNER,
+    SPEC_AGENT_REVIEWER,
+    SPEC_AGENT_TASKLIST,
+)
+
 if TYPE_CHECKING:
     from spec.workflow.task_memory import TaskMemory
 
@@ -120,11 +128,12 @@ class WorkflowState:
     parallel_tasks_failed: list[str] = field(default_factory=list)
 
     # Subagent configuration (names loaded from settings)
+    # Defaults from auggie.py constants - the single source of truth
     subagent_names: dict[str, str] = field(default_factory=lambda: {
-        "planner": "spec-planner",
-        "tasklist": "spec-tasklist",
-        "implementer": "spec-implementer",
-        "reviewer": "spec-reviewer",
+        "planner": SPEC_AGENT_PLANNER,
+        "tasklist": SPEC_AGENT_TASKLIST,
+        "implementer": SPEC_AGENT_IMPLEMENTER,
+        "reviewer": SPEC_AGENT_REVIEWER,
     })
 
     @property

@@ -8,6 +8,7 @@ from spec.workflow.step3_execute import (
     _get_log_base_dir,
     _create_run_log_dir,
     _cleanup_old_runs,
+    _build_task_prompt,
     _execute_task,
     _execute_task_with_callback,
     _execute_fallback,
@@ -193,6 +194,81 @@ class TestCleanupOldRuns:
         with patch("shutil.rmtree", side_effect=PermissionError("Access denied")):
             # Should not raise, just ignore the error
             _cleanup_old_runs("TEST-123", keep_count=1)
+
+
+# =============================================================================
+# Tests for _build_task_prompt()
+# =============================================================================
+
+
+class TestBuildTaskPrompt:
+    """Tests for _build_task_prompt function."""
+
+    def test_includes_task_name(self, sample_task, tmp_path):
+        """Prompt includes task name."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan content")
+
+        result = _build_task_prompt(sample_task, plan_path)
+
+        assert "Implement feature" in result
+
+    def test_includes_parallel_mode_no(self, sample_task, tmp_path):
+        """Prompt includes Parallel mode: NO when not parallel."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path, is_parallel=False)
+
+        assert "Parallel mode: NO" in result
+
+    def test_includes_parallel_mode_yes(self, sample_task, tmp_path):
+        """Prompt includes Parallel mode: YES when parallel."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path, is_parallel=True)
+
+        assert "Parallel mode: YES" in result
+
+    def test_includes_plan_path_when_exists(self, sample_task, tmp_path):
+        """Prompt includes plan path when file exists."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path)
+
+        assert str(plan_path) in result
+        assert "codebase-retrieval" in result
+
+    def test_excludes_plan_path_when_not_exists(self, sample_task, tmp_path):
+        """Prompt excludes plan path when file does not exist."""
+        plan_path = tmp_path / "nonexistent.md"
+
+        result = _build_task_prompt(sample_task, plan_path)
+
+        assert str(plan_path) not in result
+        assert "codebase-retrieval" in result
+
+    def test_does_not_include_full_plan_content(self, sample_task, tmp_path):
+        """Prompt does NOT include full plan content - only path reference."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("UNIQUE_PLAN_CONTENT_MARKER_12345")
+
+        result = _build_task_prompt(sample_task, plan_path)
+
+        # The actual content should NOT be in the prompt
+        assert "UNIQUE_PLAN_CONTENT_MARKER_12345" not in result
+        # But the path should be
+        assert str(plan_path) in result
+
+    def test_includes_no_commit_constraint(self, sample_task, tmp_path):
+        """Prompt includes constraint about not committing."""
+        plan_path = tmp_path / "plan.md"
+
+        result = _build_task_prompt(sample_task, plan_path)
+
+        assert "Do NOT commit" in result
 
 
 # =============================================================================

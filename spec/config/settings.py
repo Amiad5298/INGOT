@@ -7,6 +7,14 @@ values, matching the original Bash script's configuration options.
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Import subagent constants as single source of truth
+from spec.integrations.auggie import (
+    SPEC_AGENT_IMPLEMENTER,
+    SPEC_AGENT_PLANNER,
+    SPEC_AGENT_REVIEWER,
+    SPEC_AGENT_TASKLIST,
+)
+
 
 @dataclass
 class Settings:
@@ -59,10 +67,11 @@ class Settings:
     fail_fast: bool = False
 
     # Subagent settings (customizable agent names)
-    subagent_planner: str = "spec-planner"
-    subagent_tasklist: str = "spec-tasklist"
-    subagent_implementer: str = "spec-implementer"
-    subagent_reviewer: str = "spec-reviewer"
+    # Defaults from auggie.py constants - the single source of truth
+    subagent_planner: str = SPEC_AGENT_PLANNER
+    subagent_tasklist: str = SPEC_AGENT_TASKLIST
+    subagent_implementer: str = SPEC_AGENT_IMPLEMENTER
+    subagent_reviewer: str = SPEC_AGENT_REVIEWER
 
     # Config key to attribute mapping
     _key_mapping: dict[str, str] = field(

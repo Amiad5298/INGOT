@@ -10,10 +10,18 @@ from typing import Optional
 from spec.utils.console import print_info, print_step, print_success, print_warning
 from spec.utils.logging import log_message
 
+# Import subagent constants as single source of truth
+from spec.integrations.auggie import (
+    SPEC_AGENT_IMPLEMENTER,
+    SPEC_AGENT_PLANNER,
+    SPEC_AGENT_REVIEWER,
+    SPEC_AGENT_TASKLIST,
+)
 
-# Default agent definitions
+
+# Default agent definitions - keyed by constants for consistency
 AGENT_DEFINITIONS = {
-    "spec-planner": '''---
+    SPEC_AGENT_PLANNER: '''---
 name: spec-planner
 description: SPEC workflow planner - creates implementation plans from requirements
 model: claude-sonnet-4-5
@@ -67,7 +75,7 @@ What this implementation explicitly does NOT include.
 - Include estimated complexity/effort hints where helpful
 - Use codebase-retrieval to understand the current architecture before planning
 ''',
-    "spec-tasklist": '''---
+    SPEC_AGENT_TASKLIST: '''---
 name: spec-tasklist
 description: SPEC workflow task generator - creates executable task lists
 model: claude-sonnet-4-5
@@ -137,7 +145,7 @@ If multiple logical tasks need to edit the same shared file:
 - [ ] [Feature task B - can run in parallel]
 ```
 ''',
-    "spec-implementer": '''---
+    SPEC_AGENT_IMPLEMENTER: '''---
 name: spec-implementer
 description: SPEC workflow implementer - executes individual tasks
 model: claude-sonnet-4-5
@@ -196,7 +204,7 @@ When complete, briefly summarize:
 
 Do not output the full file contents unless specifically helpful.
 ''',
-    "spec-reviewer": '''---
+    SPEC_AGENT_REVIEWER: '''---
 name: spec-reviewer
 description: SPEC workflow reviewer - validates completed tasks
 model: claude-sonnet-4-5

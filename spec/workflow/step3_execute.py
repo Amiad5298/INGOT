@@ -735,6 +735,47 @@ def _execute_parallel_with_tui(
     return failed_tasks
 
 
+def _build_task_prompt(task: Task, plan_path: Path, *, is_parallel: bool = False) -> str:
+    """Build a minimal prompt for task execution.
+
+    Passes a plan path reference rather than the full plan content to:
+    - Reduce token usage and context window pressure
+    - Let the agent retrieve only relevant sections via codebase-retrieval
+    - Avoid prompt bloat in parallel execution scenarios
+
+    Args:
+        task: Task to execute
+        plan_path: Path to the implementation plan file
+        is_parallel: Whether this task runs in parallel with others
+
+    Returns:
+        Minimal prompt string with task context
+    """
+    parallel_mode = "YES" if is_parallel else "NO"
+
+    # Base prompt with task name and parallel mode
+    prompt = f"""Execute task: {task.name}
+
+Parallel mode: {parallel_mode}"""
+
+    # Add plan reference if file exists
+    if plan_path.exists():
+        prompt += f"""
+
+Implementation plan: {plan_path}
+Use codebase-retrieval to read relevant sections of the plan as needed."""
+    else:
+        prompt += """
+
+Use codebase-retrieval to understand existing patterns before making changes."""
+
+    # Add critical constraints reminder
+    prompt += """
+
+Do NOT commit, git add, or push any changes."""
+
+    return prompt
+
 
 def _execute_task(
     state: WorkflowState,
@@ -759,12 +800,9 @@ def _execute_task(
     """
     auggie_client = AuggieClient()  # Model comes from agent definition file
 
-    plan_content = plan_path.read_text() if plan_path.exists() else ""
-
-    prompt = f"""Execute task: {task.name}
-
-Reference Plan:
-{plan_content}"""
+    # Build minimal prompt - pass plan path reference, not full content
+    # The agent uses codebase-retrieval to read relevant sections
+    prompt = _build_task_prompt(task, plan_path, is_parallel=False)
 
     try:
         success, _ = auggie_client.run_print_with_output(
@@ -810,12 +848,9 @@ def _execute_task_with_callback(
     """
     auggie_client = AuggieClient()  # Model comes from agent definition file
 
-    plan_content = plan_path.read_text() if plan_path.exists() else ""
-
-    prompt = f"""Execute task: {task.name}
-
-Reference Plan:
-{plan_content}"""
+    # Build minimal prompt - pass plan path reference, not full content
+    # The agent uses codebase-retrieval to read relevant sections
+    prompt = _build_task_prompt(task, plan_path, is_parallel=is_parallel)
 
     try:
         success, output = auggie_client.run_with_callback(
