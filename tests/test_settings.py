@@ -97,6 +97,47 @@ class TestParallelSettings:
         assert settings.get_attribute_for_key("FAIL_FAST") == "fail_fast"
 
 
+class TestSubagentSettings:
+    """Tests for subagent settings."""
+
+    def test_subagent_planner_default(self):
+        """subagent_planner defaults to spec-planner."""
+        settings = Settings()
+        assert settings.subagent_planner == "spec-planner"
+
+    def test_subagent_tasklist_default(self):
+        """subagent_tasklist defaults to spec-tasklist."""
+        settings = Settings()
+        assert settings.subagent_tasklist == "spec-tasklist"
+
+    def test_subagent_implementer_default(self):
+        """subagent_implementer defaults to spec-implementer."""
+        settings = Settings()
+        assert settings.subagent_implementer == "spec-implementer"
+
+    def test_subagent_reviewer_default(self):
+        """subagent_reviewer defaults to spec-reviewer."""
+        settings = Settings()
+        assert settings.subagent_reviewer == "spec-reviewer"
+
+    def test_subagent_custom_values(self):
+        """Subagent settings accept custom values."""
+        settings = Settings(
+            subagent_planner="custom-planner",
+            subagent_implementer="custom-impl",
+        )
+        assert settings.subagent_planner == "custom-planner"
+        assert settings.subagent_implementer == "custom-impl"
+
+    def test_subagent_config_key_mappings(self):
+        """Subagent settings have correct config key mappings."""
+        settings = Settings()
+        assert settings.get_attribute_for_key("SUBAGENT_PLANNER") == "subagent_planner"
+        assert settings.get_attribute_for_key("SUBAGENT_TASKLIST") == "subagent_tasklist"
+        assert settings.get_attribute_for_key("SUBAGENT_IMPLEMENTER") == "subagent_implementer"
+        assert settings.get_attribute_for_key("SUBAGENT_REVIEWER") == "subagent_reviewer"
+
+
 class TestConfigFile:
     """Tests for CONFIG_FILE constant."""
 

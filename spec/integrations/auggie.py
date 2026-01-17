@@ -23,6 +23,12 @@ from spec.utils.console import (
 )
 from spec.utils.logging import log_command, log_message
 
+# Subagent names used by SPEC workflow
+SPEC_AGENT_PLANNER = "spec-planner"
+SPEC_AGENT_TASKLIST = "spec-tasklist"
+SPEC_AGENT_IMPLEMENTER = "spec-implementer"
+SPEC_AGENT_REVIEWER = "spec-reviewer"
+
 
 class AuggieRateLimitError(Exception):
     """Raised when Auggie CLI output indicates a rate limit error."""
@@ -282,6 +288,7 @@ class AuggieClient:
     def _build_command(
         self,
         prompt: str,
+        agent: Optional[str] = None,
         model: Optional[str] = None,
         print_mode: bool = False,
         quiet: bool = False,
@@ -293,7 +300,8 @@ class AuggieClient:
 
         Args:
             prompt: The prompt to send to Auggie
-            model: Override model for this command
+            agent: Agent to use (model comes from agent definition file)
+            model: Override model for this command (ignored when agent is set)
             print_mode: Use --print flag
             quiet: Use --quiet flag
             dont_save_session: Use --dont-save-session flag
@@ -303,9 +311,13 @@ class AuggieClient:
         """
         cmd = ["auggie"]
 
-        effective_model = model or self.model
-        if effective_model:
-            cmd.extend(["--model", effective_model])
+        # Agent takes precedence - model comes from agent definition file
+        if agent:
+            cmd.extend(["--agent", agent])
+        else:
+            effective_model = model or self.model
+            if effective_model:
+                cmd.extend(["--model", effective_model])
 
         if dont_save_session:
             cmd.append("--dont-save-session")
@@ -323,6 +335,7 @@ class AuggieClient:
         self,
         prompt: str,
         *,
+        agent: Optional[str] = None,
         model: Optional[str] = None,
         print_mode: bool = False,
         quiet: bool = False,
@@ -332,7 +345,8 @@ class AuggieClient:
 
         Args:
             prompt: The prompt to send to Auggie
-            model: Override model for this command
+            agent: Agent to use (model comes from agent definition file)
+            model: Override model for this command (ignored when agent is set)
             print_mode: Use --print flag
             quiet: Use --quiet flag
             dont_save_session: Use --dont-save-session flag
@@ -342,6 +356,7 @@ class AuggieClient:
         """
         cmd = self._build_command(
             prompt,
+            agent=agent,
             model=model,
             print_mode=print_mode,
             quiet=quiet,
@@ -385,7 +400,14 @@ class AuggieClient:
         result = self.run(prompt, print_mode=True, quiet=True, **kwargs)
         return result.stdout
 
-    def run_print_with_output(self, prompt: str, **kwargs) -> tuple[bool, str]:
+    def run_print_with_output(
+        self,
+        prompt: str,
+        *,
+        agent: Optional[str] = None,
+        model: Optional[str] = None,
+        dont_save_session: bool = False,
+    ) -> tuple[bool, str]:
         """Run with --print flag, return success status and captured output.
 
         This method both prints output to terminal in real-time AND captures
@@ -393,7 +415,9 @@ class AuggieClient:
 
         Args:
             prompt: The prompt to send
-            **kwargs: Additional arguments for run_with_callback()
+            agent: Agent to use (model comes from agent definition file)
+            model: Override model for this command (ignored when agent is set)
+            dont_save_session: Use --dont-save-session flag
 
         Returns:
             Tuple of (success: bool, output: str) where output contains the
@@ -405,7 +429,9 @@ class AuggieClient:
         return self.run_with_callback(
             prompt,
             output_callback=lambda line: print(line),
-            **kwargs,
+            agent=agent,
+            model=model,
+            dont_save_session=dont_save_session,
         )
 
     def run_with_callback(
@@ -413,6 +439,7 @@ class AuggieClient:
         prompt: str,
         *,
         output_callback: Callable[[str], None],
+        agent: Optional[str] = None,
         model: Optional[str] = None,
         dont_save_session: bool = False,
     ) -> tuple[bool, str]:
@@ -426,7 +453,8 @@ class AuggieClient:
         Args:
             prompt: The prompt to send to Auggie
             output_callback: Callback function invoked for each output line
-            model: Override model for this command
+            agent: Agent to use (model comes from agent definition file)
+            model: Override model for this command (ignored when agent is set)
             dont_save_session: Use --dont-save-session flag
 
         Returns:
@@ -434,6 +462,7 @@ class AuggieClient:
         """
         cmd = self._build_command(
             prompt,
+            agent=agent,
             model=model,
             print_mode=True,
             dont_save_session=dont_save_session,
@@ -526,5 +555,10 @@ __all__ = [
     "install_auggie",
     "list_models",
     "_looks_like_rate_limit",
+    # Subagent constants
+    "SPEC_AGENT_PLANNER",
+    "SPEC_AGENT_TASKLIST",
+    "SPEC_AGENT_IMPLEMENTER",
+    "SPEC_AGENT_REVIEWER",
 ]
 

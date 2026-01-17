@@ -171,7 +171,7 @@ def _generate_tasklist(
     tasklist_path: Path,
     auggie: AuggieClient,
 ) -> bool:
-    """Generate task list from implementation plan.
+    """Generate task list from implementation plan using subagent.
 
     Captures AI output and persists the task list to disk, even if the AI
     does not create/write the file itself.
@@ -180,109 +180,28 @@ def _generate_tasklist(
         state: Current workflow state
         plan_path: Path to implementation plan
         tasklist_path: Path to save task list
-        auggie: Auggie CLI client
+        auggie: Auggie CLI client (unused, kept for signature compatibility)
 
     Returns:
         True if task list was generated and contains valid tasks
     """
     plan_content = plan_path.read_text()
 
-    ticket_id = state.ticket.ticket_id
-    prompt = f"""Based on this implementation plan, create a task list optimized for AI agent execution.
+    # Minimal prompt - subagent has detailed instructions
+    prompt = f"""Generate task list for: {state.ticket.ticket_id}
 
-Plan:
+Implementation Plan:
 {plan_content}
 
-## Task Generation Guidelines:
+Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
 
-### Size & Scope
-- Each task should represent a **complete, coherent unit of work**
-- Target 3-8 tasks for a typical feature
-- Include tests WITH implementation, not as separate tasks
-
-### Task Categorization
-
-Categorize each task into one of two categories:
-
-#### FUNDAMENTAL Tasks (Sequential Execution)
-Tasks that establish foundational infrastructure and MUST run in order:
-- Core data models, schemas, database migrations
-- Base classes, interfaces, or abstract implementations
-- Service layers that other components depend on
-- Configuration or setup that other tasks require
-- Any task where Task N+1 depends on Task N's output
-
-Mark fundamental tasks with: `<!-- category: fundamental, order: N -->`
-
-#### INDEPENDENT Tasks (Parallel Execution)
-Tasks that can run concurrently with no dependencies on each other:
-- UI components (after models/services exist)
-- Utility functions and helpers
-- Documentation updates
-- Separate API endpoints that don't share state
-- Test suites that don't modify shared resources
-
-**CRITICAL: File Disjointness Requirement & Resolution Strategy**
-Independent tasks running in parallel MUST touch disjoint sets of files.
-
-If you detect that multiple logical tasks need to edit the same shared file (e.g., `TestData.java`, `pom.xml`, `Enums.java`, configuration files), use the **"Setup Task Pattern"**:
-
-1.  **Extract Shared Changes**: Take the edits for the shared files from all features.
-2.  **Create Setup Task**: Create a single `FUNDAMENTAL` task (Order 1) named "Update Shared Resources" containing ONLY these shared file edits.
-3.  **Parallelize the Rest**: Now that the shared conflicts are resolved in the setup task, create the remaining feature-specific tasks as `INDEPENDENT`.
-
-**Example of Resolving Conflict in `TestData.java`:**
-Instead of:
-- Task A (Fundamental): Implement Feature A + Update TestData
-- Task B (Fundamental): Implement Feature B + Update TestData (Blocked by A)
-
-DO THIS:
-- Task 1 (Fundamental): **Prepare Shared Test Data** (Update `TestData.java` with mocks for BOTH A and B)
-- Task 2 (Independent): **Implement Feature A** (Logic + Unit Tests, no longer touching TestData)
-- Task 3 (Independent): **Implement Feature B** (Logic + Unit Tests, no longer touching TestData)
-
-### Output Format
-
-**IMPORTANT:** Output ONLY the task list as plain markdown text. Do NOT use any task management tools.
-
-```markdown
-# Task List: {ticket_id}
-
-## Fundamental Tasks (Sequential)
-<!-- category: fundamental, order: 1 -->
-- [ ] [First foundational task]
-
-<!-- category: fundamental, order: 2 -->
-- [ ] [Second foundational task that depends on first]
-
-## Independent Tasks (Parallel)
-<!-- category: independent, group: ui -->
-- [ ] [UI component task]
-
-<!-- category: independent, group: utils -->
-- [ ] [Utility task]
-```
-
-### Categorization Heuristics
-
-1. **If unsure, mark as FUNDAMENTAL** - Sequential is always safe
-2. **Data/Schema tasks are ALWAYS FUNDAMENTAL** - Order 1
-3. **Service/Logic tasks are USUALLY FUNDAMENTAL** - Order 2+
-4. **UI/Docs/Utils are USUALLY INDEPENDENT** - Can parallelize
-5. **Tests with their implementation are FUNDAMENTAL** - Part of that task
-6. **Shared file edits require EXTRACTION** - If two tasks edit the same file, extract the shared edits to a new FUNDAMENTAL setup task, then keep the original tasks INDEPENDENT.
-
-Order tasks by dependency (prerequisites first). Keep descriptions concise but specific."""
-
-    # Use a planning-specific client if a planning model is configured
-    if state.planning_model:
-        auggie_client = AuggieClient(model=state.planning_model)
-    else:
-        auggie_client = auggie
+    # Use subagent - model comes from agent definition
+    auggie_client = AuggieClient()
 
     # Use run_print_with_output to capture AI output
     success, output = auggie_client.run_print_with_output(
         prompt,
+        agent=state.subagent_names["tasklist"],
         dont_save_session=True,
     )
 

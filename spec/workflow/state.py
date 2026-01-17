@@ -70,6 +70,7 @@ class WorkflowState:
         current_step: Current workflow step (1, 2, or 3)
         retry_count: Number of retries for current task
         max_retries: Maximum retries before asking user
+        subagent_names: Dictionary mapping role names to agent names
     """
 
     # Ticket information
@@ -117,6 +118,14 @@ class WorkflowState:
     # Parallel execution tracking
     parallel_tasks_completed: list[str] = field(default_factory=list)
     parallel_tasks_failed: list[str] = field(default_factory=list)
+
+    # Subagent configuration (names loaded from settings)
+    subagent_names: dict[str, str] = field(default_factory=lambda: {
+        "planner": "spec-planner",
+        "tasklist": "spec-tasklist",
+        "implementer": "spec-implementer",
+        "reviewer": "spec-reviewer",
+    })
 
     @property
     def specs_dir(self) -> Path:

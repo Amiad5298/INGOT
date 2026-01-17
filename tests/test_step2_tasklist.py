@@ -12,6 +12,7 @@ from spec.workflow.step2_tasklist import (
     _edit_tasklist,
     _create_default_tasklist,
 )
+
 from spec.workflow.state import WorkflowState
 from spec.workflow.tasks import parse_task_list
 from spec.integrations.jira import JiraTicket
@@ -159,7 +160,7 @@ class TestGenerateTasklist:
         # Setup
         tasklist_path = tmp_path / "specs" / "TEST-123-tasklist.md"
         plan_path = workflow_state.plan_file
-        
+
         # Mock Auggie to return success with task list in output
         mock_client = MagicMock()
         mock_client.run_print_with_output.return_value = (
@@ -171,8 +172,7 @@ class TestGenerateTasklist:
 """
         )
         mock_auggie_class.return_value = mock_client
-        workflow_state.planning_model = "test-model"
-        
+
         # Act
         result = _generate_tasklist(
             workflow_state,
@@ -189,11 +189,13 @@ class TestGenerateTasklist:
         assert len(tasks) == 3
         assert tasks[0].name == "Create user module"
 
-    def test_uses_passed_auggie_when_no_planning_model(
+    @patch("spec.workflow.step2_tasklist.AuggieClient")
+    def test_uses_subagent_for_tasklist_generation(
         self,
+        mock_auggie_class,
         tmp_path,
     ):
-        """Uses the passed auggie client when no planning_model is set."""
+        """Uses state.subagent_names tasklist agent for task list generation."""
         # Setup
         ticket = JiraTicket(
             ticket_id="TEST-456",
@@ -201,7 +203,6 @@ class TestGenerateTasklist:
             summary="Test",
         )
         state = WorkflowState(ticket=ticket)
-        state.planning_model = ""  # No planning model
 
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir(parents=True)
@@ -209,21 +210,27 @@ class TestGenerateTasklist:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-456-tasklist.md"
 
-        mock_auggie = MagicMock()
-        mock_auggie.run_print_with_output.return_value = (
+        mock_client = MagicMock()
+        mock_client.run_print_with_output.return_value = (
             True,
             "- [ ] Single task\n"
         )
+        mock_auggie_class.return_value = mock_client
 
         # Act
-        result = _generate_tasklist(state, plan_path, tasklist_path, mock_auggie)
+        result = _generate_tasklist(state, plan_path, tasklist_path, MagicMock())
 
-        # Assert - the passed client should be used
-        mock_auggie.run_print_with_output.assert_called_once()
+        # Assert - new client is created and subagent from state is used
+        mock_auggie_class.assert_called_once_with()
+        call_kwargs = mock_client.run_print_with_output.call_args.kwargs
+        assert "agent" in call_kwargs
+        assert call_kwargs["agent"] == state.subagent_names["tasklist"]
         assert result is True
 
+    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_falls_back_to_default_when_no_tasks_extracted(
         self,
+        mock_auggie_class,
         tmp_path,
     ):
         """Falls back to default template when AI output has no checkbox tasks."""
@@ -236,13 +243,14 @@ class TestGenerateTasklist:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-789-tasklist.md"
 
-        mock_auggie = MagicMock()
-        mock_auggie.run_print_with_output.return_value = (
+        mock_client = MagicMock()
+        mock_client.run_print_with_output.return_value = (
             True,
             "I couldn't understand the plan. Please clarify."
         )
+        mock_auggie_class.return_value = mock_client
 
-        result = _generate_tasklist(state, plan_path, tasklist_path, mock_auggie)
+        result = _generate_tasklist(state, plan_path, tasklist_path, MagicMock())
 
         # Should fall back to default template
         assert result is True
@@ -572,7 +580,8 @@ class TestCreateDefaultTasklist:
 class TestGenerateTasklistRetry:
     """Tests for _generate_tasklist retry behavior."""
 
-    def test_returns_false_on_auggie_failure(self, tmp_path):
+    @patch("spec.workflow.step2_tasklist.AuggieClient")
+    def test_returns_false_on_auggie_failure(self, mock_auggie_class, tmp_path):
         """Returns False when Auggie command fails."""
         ticket = JiraTicket(ticket_id="TEST-FAIL", ticket_url="test", summary="Test")
         state = WorkflowState(ticket=ticket)
@@ -583,41 +592,11 @@ class TestGenerateTasklistRetry:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-FAIL-tasklist.md"
 
-        mock_auggie = MagicMock()
-        mock_auggie.run_print_with_output.return_value = (False, "Error occurred")
+        mock_client = MagicMock()
+        mock_client.run_print_with_output.return_value = (False, "Error occurred")
+        mock_auggie_class.return_value = mock_client
 
-        result = _generate_tasklist(state, plan_path, tasklist_path, mock_auggie)
+        result = _generate_tasklist(state, plan_path, tasklist_path, MagicMock())
 
         assert result is False
-
-    @patch("spec.workflow.step2_tasklist.AuggieClient")
-    def test_uses_planning_model_when_configured(self, mock_auggie_class, tmp_path):
-        """Uses planning_model client when configured."""
-        ticket = JiraTicket(ticket_id="TEST-MODEL", ticket_url="test", summary="Test")
-        state = WorkflowState(ticket=ticket)
-        state.planning_model = "gpt-4"
-
-        specs_dir = tmp_path / "specs"
-        specs_dir.mkdir(parents=True)
-        plan_path = specs_dir / "TEST-MODEL-plan.md"
-        plan_path.write_text("# Plan\n\nDo something.")
-        tasklist_path = specs_dir / "TEST-MODEL-tasklist.md"
-
-        mock_planning_client = MagicMock()
-        mock_planning_client.run_print_with_output.return_value = (
-            True,
-            "- [ ] Single task\n"
-        )
-        mock_auggie_class.return_value = mock_planning_client
-
-        mock_auggie = MagicMock()
-
-        result = _generate_tasklist(state, plan_path, tasklist_path, mock_auggie)
-
-        assert result is True
-        # Should have created a new client with planning model
-        mock_auggie_class.assert_called_once_with(model="gpt-4")
-        # The planning client should be used, not the passed auggie
-        mock_planning_client.run_print_with_output.assert_called_once()
-        mock_auggie.run_print_with_output.assert_not_called()
 

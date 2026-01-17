@@ -283,3 +283,26 @@ class TestWorkflowStateParallelFields:
         assert isinstance(state.rate_limit_config, RateLimitConfig)
         assert state.rate_limit_config.max_retries == 5
 
+    def test_subagent_names_default(self, state):
+        """subagent_names has correct defaults."""
+        assert state.subagent_names == {
+            "planner": "spec-planner",
+            "tasklist": "spec-tasklist",
+            "implementer": "spec-implementer",
+            "reviewer": "spec-reviewer",
+        }
+
+    def test_subagent_names_custom(self, ticket):
+        """subagent_names accepts custom values."""
+        state = WorkflowState(
+            ticket=ticket,
+            subagent_names={
+                "planner": "custom-planner",
+                "tasklist": "custom-tasklist",
+                "implementer": "custom-implementer",
+                "reviewer": "custom-reviewer",
+            },
+        )
+        assert state.subagent_names["planner"] == "custom-planner"
+        assert state.subagent_names["implementer"] == "custom-implementer"
+

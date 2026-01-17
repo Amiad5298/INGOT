@@ -243,6 +243,12 @@ class ConfigManager:
         console.print(f"    Max Parallel Tasks: {s.max_parallel_tasks}")
         console.print(f"    Fail Fast: {s.fail_fast}")
         console.print()
+        console.print("  [bold]Subagents:[/bold]")
+        console.print(f"    Planner: {s.subagent_planner}")
+        console.print(f"    Tasklist: {s.subagent_tasklist}")
+        console.print(f"    Implementer: {s.subagent_implementer}")
+        console.print(f"    Reviewer: {s.subagent_reviewer}")
+        console.print()
 
 
 __all__ = [

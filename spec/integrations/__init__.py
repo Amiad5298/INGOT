@@ -9,6 +9,10 @@ This package contains:
 from spec.integrations.auggie import (
     AuggieClient,
     AuggieModel,
+    SPEC_AGENT_IMPLEMENTER,
+    SPEC_AGENT_PLANNER,
+    SPEC_AGENT_REVIEWER,
+    SPEC_AGENT_TASKLIST,
     check_auggie_installed,
     get_auggie_version,
     install_auggie,
@@ -67,5 +71,10 @@ __all__ = [
     "check_auggie_installed",
     "install_auggie",
     "list_models",
+    # Subagent constants
+    "SPEC_AGENT_PLANNER",
+    "SPEC_AGENT_TASKLIST",
+    "SPEC_AGENT_IMPLEMENTER",
+    "SPEC_AGENT_REVIEWER",
 ]
 

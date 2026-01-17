@@ -8,13 +8,13 @@ from spec.workflow.step1_plan import (
     _get_log_base_dir,
     _create_plan_log_dir,
     _generate_plan_with_tui,
-    _generate_plan_fallback,
-    _build_plan_prompt,
+    _build_minimal_prompt,
     _save_plan_from_output,
     _display_plan_summary,
     _run_clarification,
     step_1_create_plan,
 )
+
 from spec.workflow.state import WorkflowState
 from spec.integrations.jira import JiraTicket
 
@@ -140,7 +140,7 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, "Test prompt", plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path)
 
         assert result is True
 
@@ -162,7 +162,7 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, "Test prompt", plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path)
 
         assert result is False
 
@@ -184,7 +184,7 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        _generate_plan_with_tui(workflow_state, "Test prompt", plan_path)
+        _generate_plan_with_tui(workflow_state, plan_path)
 
         mock_tui.set_log_path.assert_called_once()
         log_path_arg = mock_tui.set_log_path.call_args[0][0]
@@ -193,10 +193,10 @@ class TestGeneratePlanWithTui:
 
     @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.plan_tui.PlanGeneratorUI")
-    def test_auggie_client_called_with_correct_model(
+    def test_auggie_client_uses_subagent(
         self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
     ):
-        """Auggie client is called with correct model."""
+        """Auggie client is called with spec-planner subagent."""
         monkeypatch.setenv("SPEC_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
@@ -207,12 +207,16 @@ class TestGeneratePlanWithTui:
         mock_client.run_with_callback.return_value = (True, "Plan output")
         mock_auggie_class.return_value = mock_client
 
-        workflow_state.planning_model = "custom-planning-model"
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        _generate_plan_with_tui(workflow_state, "Test prompt", plan_path)
+        _generate_plan_with_tui(workflow_state, plan_path)
 
-        mock_auggie_class.assert_called_once_with(model="custom-planning-model")
+        # Client is created without model (agent provides it)
+        mock_auggie_class.assert_called_once_with()
+        # Verify agent from state.subagent_names is passed
+        call_kwargs = mock_client.run_with_callback.call_args.kwargs
+        assert "agent" in call_kwargs
+        assert call_kwargs["agent"] == workflow_state.subagent_names["planner"]
 
     @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.plan_tui.PlanGeneratorUI")
@@ -232,7 +236,7 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, "Test prompt", plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path)
 
         assert result is False
 
@@ -254,7 +258,7 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        _generate_plan_with_tui(workflow_state, "Test prompt", plan_path)
+        _generate_plan_with_tui(workflow_state, plan_path)
 
         # Verify dont_save_session=True is passed in the call
         mock_client.run_with_callback.assert_called_once()
@@ -264,86 +268,31 @@ class TestGeneratePlanWithTui:
 
 
 # =============================================================================
-# Tests for _generate_plan_fallback()
+# Tests for _build_minimal_prompt()
 # =============================================================================
 
 
-class TestGeneratePlanFallback:
-    """Tests for _generate_plan_fallback function."""
+class TestBuildMinimalPrompt:
+    """Tests for _build_minimal_prompt function."""
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
-    def test_returns_true_on_success(self, mock_auggie_class, workflow_state):
-        """Returns True on success."""
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = True
-        mock_auggie_class.return_value = mock_client
-
-        result = _generate_plan_fallback(workflow_state, "Test prompt")
-
-        assert result is True
-
-    @patch("spec.workflow.step1_plan.AuggieClient")
-    def test_returns_false_on_failure(self, mock_auggie_class, workflow_state):
-        """Returns False on failure."""
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = False
-        mock_auggie_class.return_value = mock_client
-
-        result = _generate_plan_fallback(workflow_state, "Test prompt")
-
-        assert result is False
-
-    @patch("spec.workflow.step1_plan.AuggieClient")
-    def test_uses_correct_planning_model(self, mock_auggie_class, workflow_state):
-        """Uses correct planning model."""
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = True
-        mock_auggie_class.return_value = mock_client
-
-        workflow_state.planning_model = "custom-model"
-        _generate_plan_fallback(workflow_state, "Test prompt")
-
-        mock_auggie_class.assert_called_once_with(model="custom-model")
-
-    @patch("spec.workflow.step1_plan.AuggieClient")
-    def test_dont_save_session_flag_is_passed(self, mock_auggie_class, workflow_state):
-        """Verifies dont_save_session=True is passed to Auggie client."""
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = True
-        mock_auggie_class.return_value = mock_client
-
-        _generate_plan_fallback(workflow_state, "Test prompt")
-
-        # Verify dont_save_session=True is passed in the call
-        mock_client.run_print.assert_called_once()
-        call_kwargs = mock_client.run_print.call_args.kwargs
-        assert "dont_save_session" in call_kwargs
-        assert call_kwargs["dont_save_session"] is True
-
-
-# =============================================================================
-# Tests for _build_plan_prompt()
-# =============================================================================
-
-
-class TestBuildPlanPrompt:
-    """Tests for _build_plan_prompt function."""
-
-    def test_prompt_includes_ticket_id(self, workflow_state):
+    def test_prompt_includes_ticket_id(self, workflow_state, tmp_path):
         """Prompt includes ticket ID."""
-        result = _build_plan_prompt(workflow_state)
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
+        result = _build_minimal_prompt(workflow_state, plan_path)
 
         assert "TEST-123" in result
 
-    def test_prompt_includes_ticket_title(self, workflow_state):
+    def test_prompt_includes_ticket_title(self, workflow_state, tmp_path):
         """Prompt includes ticket title."""
-        result = _build_plan_prompt(workflow_state)
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
+        result = _build_minimal_prompt(workflow_state, plan_path)
 
         assert "Test Feature" in result
 
-    def test_prompt_includes_ticket_description(self, workflow_state):
+    def test_prompt_includes_ticket_description(self, workflow_state, tmp_path):
         """Prompt includes ticket description."""
-        result = _build_plan_prompt(workflow_state)
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
+        result = _build_minimal_prompt(workflow_state, plan_path)
 
         assert "Test description" in result
 
@@ -351,8 +300,9 @@ class TestBuildPlanPrompt:
         """Prompt handles empty title gracefully."""
         ticket.title = None
         state = WorkflowState(ticket=ticket)
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _build_plan_prompt(state)
+        result = _build_minimal_prompt(state, plan_path)
 
         assert "Not available" in result
         assert "TEST-123" in result
@@ -361,34 +311,38 @@ class TestBuildPlanPrompt:
         """Prompt handles empty description gracefully."""
         ticket.description = None
         state = WorkflowState(ticket=ticket)
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _build_plan_prompt(state)
+        result = _build_minimal_prompt(state, plan_path)
 
         assert "Not available" in result
 
-    def test_prompt_includes_user_context_when_provided(self, workflow_state):
+    def test_prompt_includes_user_context_when_provided(self, workflow_state, tmp_path):
         """Prompt includes user context when provided."""
         workflow_state.user_context = "Additional context from the user about the implementation."
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _build_plan_prompt(workflow_state)
+        result = _build_minimal_prompt(workflow_state, plan_path)
 
         assert "Additional context from the user" in result
-        assert "Additional Context from User" in result
+        assert "Additional Context" in result
 
-    def test_prompt_excludes_user_context_section_when_not_provided(self, workflow_state):
+    def test_prompt_excludes_user_context_section_when_not_provided(self, workflow_state, tmp_path):
         """Prompt excludes user context section when not provided."""
         workflow_state.user_context = ""
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _build_plan_prompt(workflow_state)
+        result = _build_minimal_prompt(workflow_state, plan_path)
 
-        assert "Additional Context from User" not in result
+        assert "Additional Context" not in result
 
-    def test_prompt_includes_plan_file_path(self, workflow_state):
+    def test_prompt_includes_plan_file_path(self, workflow_state, tmp_path):
         """Prompt includes plan file path."""
-        result = _build_plan_prompt(workflow_state)
+        plan_path = tmp_path / "specs" / "TEST-123-plan.md"
+        result = _build_minimal_prompt(workflow_state, plan_path)
 
         # Should mention where to save the plan
-        assert "specs" in result or "plan" in result.lower()
+        assert str(plan_path) in result
 
 
 # =============================================================================
@@ -616,14 +570,12 @@ class TestStep1CreatePlanTuiMode:
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
-    @patch("spec.ui.tui._should_use_tui")
-    def test_calls_generate_plan_with_tui_in_tui_mode(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
+    def test_calls_generate_plan_with_tui(
+        self, mock_generate, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
-        """Calls _generate_plan_with_tui in TUI mode."""
+        """Calls _generate_plan_with_tui for plan generation."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = True
         mock_confirm.return_value = True
 
         specs_dir = tmp_path / "specs"
@@ -641,51 +593,12 @@ class TestStep1CreatePlanTuiMode:
 
         mock_generate.assert_called_once()
 
-
-# =============================================================================
-# Tests for step_1_create_plan() - Non-TUI mode
-# =============================================================================
-
-
-class TestStep1CreatePlanNonTuiMode:
-    """Tests for step_1_create_plan in non-TUI mode."""
-
-    @patch("spec.workflow.step1_plan.prompt_confirm")
-    @patch("spec.workflow.step1_plan._display_plan_summary")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
-    def test_calls_generate_plan_fallback_in_non_tui_mode(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
-    ):
-        """Calls _generate_plan_fallback in non-TUI mode."""
-        monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
-        mock_confirm.return_value = True
-
-        specs_dir = tmp_path / "specs"
-        plan_path = specs_dir / "TEST-123-plan.md"
-
-        def create_plan(*args, **kwargs):
-            specs_dir.mkdir(parents=True, exist_ok=True)
-            plan_path.write_text("# Plan")
-            return True
-
-        mock_generate.side_effect = create_plan
-        workflow_state.skip_clarification = True
-
-        step_1_create_plan(workflow_state, MagicMock())
-
-        mock_generate.assert_called_once()
-
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_false_when_plan_generation_fails(
-        self, mock_should_tui, mock_generate, workflow_state, tmp_path, monkeypatch
+        self, mock_generate, workflow_state, tmp_path, monkeypatch
     ):
         """Returns False when plan generation fails."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_generate.return_value = False  # Generation fails
 
         result = step_1_create_plan(workflow_state, MagicMock())
@@ -703,15 +616,13 @@ class TestStep1CreatePlanFileHandling:
 
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_saves_plan_file_on_success(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
+        self, mock_generate, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Saves plan file on success."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_confirm.return_value = True
 
         specs_dir = tmp_path / "specs"
@@ -733,15 +644,13 @@ class TestStep1CreatePlanFileHandling:
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._save_plan_from_output")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_calls_save_plan_from_output_when_plan_file_not_created(
-        self, mock_should_tui, mock_generate, mock_save_plan, mock_display, mock_confirm,
+        self, mock_generate, mock_save_plan, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Calls _save_plan_from_output when plan file not created."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_generate.return_value = True  # Success but no file
         mock_confirm.return_value = True
 
@@ -762,15 +671,13 @@ class TestStep1CreatePlanFileHandling:
 
     @patch("spec.workflow.step1_plan.print_error")
     @patch("spec.workflow.step1_plan._save_plan_from_output")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
-    def test_returns_false_when_fallback_save_fails_to_create_file(
-        self, mock_should_tui, mock_generate, mock_save_plan, mock_print_error,
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
+    def test_returns_false_when_save_fails_to_create_file(
+        self, mock_generate, mock_save_plan, mock_print_error,
         workflow_state, tmp_path, monkeypatch
     ):
-        """Returns False when _save_plan_from_output fails to create the file (impossible case)."""
+        """Returns False when _save_plan_from_output fails to create the file."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_generate.return_value = True  # Generation succeeds but no file
 
         specs_dir = tmp_path / "specs"
@@ -804,15 +711,13 @@ class TestStep1CreatePlanClarification:
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._run_clarification")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_calls_run_clarification_when_skip_clarification_false(
-        self, mock_should_tui, mock_generate, mock_clarify, mock_display, mock_confirm,
+        self, mock_generate, mock_clarify, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Calls _run_clarification when skip_clarification=False."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_confirm.return_value = True
         mock_clarify.return_value = True
 
@@ -834,15 +739,13 @@ class TestStep1CreatePlanClarification:
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._run_clarification")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_skips_clarification_when_skip_clarification_true(
-        self, mock_should_tui, mock_generate, mock_clarify, mock_display, mock_confirm,
+        self, mock_generate, mock_clarify, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Skips clarification when skip_clarification=True."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_confirm.return_value = True
 
         specs_dir = tmp_path / "specs"
@@ -863,15 +766,13 @@ class TestStep1CreatePlanClarification:
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._run_clarification")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_false_when_clarification_returns_false(
-        self, mock_should_tui, mock_generate, mock_clarify, mock_display, mock_confirm,
+        self, mock_generate, mock_clarify, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Returns False immediately when _run_clarification returns False."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_clarify.return_value = False  # Clarification fails/aborts
 
         specs_dir = tmp_path / "specs"
@@ -905,15 +806,13 @@ class TestStep1CreatePlanConfirmation:
 
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_true_when_plan_confirmed(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
+        self, mock_generate, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Returns True when plan confirmed."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_confirm.return_value = True  # User confirms
 
         specs_dir = tmp_path / "specs"
@@ -933,15 +832,13 @@ class TestStep1CreatePlanConfirmation:
 
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_false_when_plan_rejected(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
+        self, mock_generate, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Returns False when plan rejected."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_confirm.return_value = False  # User rejects
 
         specs_dir = tmp_path / "specs"
@@ -961,15 +858,13 @@ class TestStep1CreatePlanConfirmation:
 
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_updates_current_step_to_2_on_success(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
+        self, mock_generate, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Updates state.current_step to 2 on success."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_confirm.return_value = True
 
         specs_dir = tmp_path / "specs"
@@ -991,15 +886,13 @@ class TestStep1CreatePlanConfirmation:
 
     @patch("spec.workflow.step1_plan.prompt_confirm")
     @patch("spec.workflow.step1_plan._display_plan_summary")
-    @patch("spec.workflow.step1_plan._generate_plan_fallback")
-    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_does_not_update_current_step_on_rejection(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
+        self, mock_generate, mock_display, mock_confirm,
         workflow_state, tmp_path, monkeypatch
     ):
         """Does not update state.current_step when plan is rejected."""
         monkeypatch.chdir(tmp_path)
-        mock_should_tui.return_value = False
         mock_confirm.return_value = False  # Rejected
 
         specs_dir = tmp_path / "specs"

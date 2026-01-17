@@ -8,7 +8,6 @@ from spec.workflow.step3_execute import (
     _get_log_base_dir,
     _create_run_log_dir,
     _cleanup_old_runs,
-    _build_task_prompt,
     _execute_task,
     _execute_task_with_callback,
     _execute_fallback,
@@ -18,6 +17,7 @@ from spec.workflow.step3_execute import (
     _offer_commit_instructions,
     step_3_execute,
 )
+
 from spec.workflow.state import WorkflowState
 from spec.workflow.tasks import Task, TaskStatus, TaskCategory
 from spec.integrations.jira import JiraTicket
@@ -196,52 +196,6 @@ class TestCleanupOldRuns:
 
 
 # =============================================================================
-# Tests for _build_task_prompt()
-# =============================================================================
-
-
-class TestBuildTaskPrompt:
-    """Tests for _build_task_prompt function."""
-
-    def test_prompt_includes_task_name(self, sample_task, tmp_path):
-        """Prompt includes task name."""
-        plan_path = tmp_path / "plan.md"
-        plan_path.write_text("# Plan")
-
-        result = _build_task_prompt(sample_task, plan_path)
-
-        assert "Implement feature" in result
-
-    def test_prompt_includes_plan_path_when_exists(self, sample_task, tmp_path):
-        """Prompt includes plan path when exists."""
-        plan_path = tmp_path / "plan.md"
-        plan_path.write_text("# Plan")
-
-        result = _build_task_prompt(sample_task, plan_path)
-
-        assert str(plan_path) in result
-        assert "codebase-retrieval" in result
-
-    def test_prompt_excludes_plan_path_when_not_exists(self, sample_task, tmp_path):
-        """Prompt excludes plan path when not exists."""
-        plan_path = tmp_path / "nonexistent.md"
-
-        result = _build_task_prompt(sample_task, plan_path)
-
-        assert str(plan_path) not in result
-        assert "codebase-retrieval" in result
-
-    def test_prompt_includes_retrieval_instructions(self, sample_task, tmp_path):
-        """Prompt includes retrieval instructions."""
-        plan_path = tmp_path / "plan.md"
-
-        result = _build_task_prompt(sample_task, plan_path)
-
-        assert "codebase-retrieval" in result
-        assert "Do NOT commit" in result
-
-
-# =============================================================================
 # Tests for _execute_task()
 # =============================================================================
 
@@ -283,16 +237,20 @@ class TestExecuteTask:
         assert result is False
 
     @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_uses_correct_implementation_model(self, mock_auggie_class, workflow_state, sample_task):
-        """Uses correct implementation model."""
+    def test_uses_spec_implementer_agent(self, mock_auggie_class, workflow_state, sample_task):
+        """Uses state.subagent_names implementer agent."""
         mock_client = MagicMock()
         mock_client.run_print_with_output.return_value = (True, "Output")
         mock_auggie_class.return_value = mock_client
 
-        workflow_state.implementation_model = "custom-model"
         _execute_task(workflow_state, sample_task, workflow_state.get_plan_path())
 
-        mock_auggie_class.assert_called_once_with(model="custom-model")
+        # Verify AuggieClient is created without model (agent defines the model)
+        mock_auggie_class.assert_called_once_with()
+        # Verify agent from state.subagent_names is passed to run_print_with_output
+        call_kwargs = mock_client.run_print_with_output.call_args[1]
+        assert call_kwargs["agent"] == workflow_state.subagent_names["implementer"]
+        assert call_kwargs["dont_save_session"] is True
 
 
 # =============================================================================
@@ -337,7 +295,7 @@ class TestExecuteTaskWithCallback:
         mock_client = MagicMock()
 
         # Simulate callback being invoked during run_with_callback
-        def call_callback(prompt, output_callback, dont_save_session):
+        def call_callback(prompt, *, agent, output_callback, dont_save_session):
             output_callback("Line 1")
             output_callback("Line 2")
             return (True, "Done")
@@ -372,6 +330,25 @@ class TestExecuteTaskWithCallback:
         error_call = callback.call_args[0][0]
         assert "ERROR" in error_call
         assert "Connection failed" in error_call
+
+    @patch("spec.workflow.step3_execute.AuggieClient")
+    def test_uses_spec_implementer_agent(self, mock_auggie_class, workflow_state, sample_task):
+        """Uses state.subagent_names implementer agent."""
+        mock_client = MagicMock()
+        mock_client.run_with_callback.return_value = (True, "Output")
+        mock_auggie_class.return_value = mock_client
+
+        callback = MagicMock()
+        _execute_task_with_callback(
+            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+        )
+
+        # Verify AuggieClient is created without model (agent defines the model)
+        mock_auggie_class.assert_called_once_with()
+        # Verify agent from state.subagent_names is passed to run_with_callback
+        call_kwargs = mock_client.run_with_callback.call_args[1]
+        assert call_kwargs["agent"] == workflow_state.subagent_names["implementer"]
+        assert call_kwargs["dont_save_session"] is True
 
 
 # =============================================================================
@@ -1495,32 +1472,6 @@ class TestTaskRetry:
 # =============================================================================
 # Tests for Parallel Execution Enhancements
 # =============================================================================
-
-
-class TestParallelPromptGitRestrictions:
-    """Tests for git restrictions in parallel task prompts."""
-
-    def test_parallel_prompt_includes_git_restrictions(self, sample_task, tmp_path):
-        """Parallel mode prompt includes git restrictions."""
-        plan_path = tmp_path / "plan.md"
-        plan_path.write_text("# Plan")
-
-        result = _build_task_prompt(sample_task, plan_path, is_parallel=True)
-
-        assert "Do NOT run `git add`" in result
-        assert "git commit" in result
-        assert "git push" in result
-        assert "parallel" in result.lower()
-
-    def test_sequential_prompt_excludes_git_restrictions(self, sample_task, tmp_path):
-        """Sequential mode prompt does not include parallel git restrictions."""
-        plan_path = tmp_path / "plan.md"
-        plan_path.write_text("# Plan")
-
-        result = _build_task_prompt(sample_task, plan_path, is_parallel=False)
-
-        assert "Do NOT run `git add`" not in result
-        assert "parallel" not in result.lower()
 
 
 class TestParallelTaskMemorySkipped:

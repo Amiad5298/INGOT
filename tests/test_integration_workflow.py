@@ -8,7 +8,7 @@ from spec.workflow.step3_execute import _execute_task
 from spec.workflow.tasks import Task, TaskStatus
 from spec.workflow.state import WorkflowState
 from spec.workflow.task_memory import TaskMemory
-from spec.workflow.step1_plan import _build_plan_prompt
+from spec.workflow.step1_plan import _build_minimal_prompt
 from spec.integrations.jira import JiraTicket
 from spec.integrations.auggie import AuggieClient
 from spec.utils.error_analysis import ErrorAnalysis
@@ -292,8 +292,8 @@ class TestUserAdditionalContext:
         assert state_with_ticket.user_context == ""
 
 
-class TestBuildPlanPrompt:
-    """Tests for _build_plan_prompt function."""
+class TestBuildMinimalPrompt:
+    """Tests for _build_minimal_prompt function."""
 
     @pytest.fixture
     def state_with_ticket(self):
@@ -307,24 +307,27 @@ class TestBuildPlanPrompt:
         )
         return WorkflowState(ticket=ticket)
 
-    def test_prompt_without_user_context(self, state_with_ticket):
+    def test_prompt_without_user_context(self, state_with_ticket, tmp_path):
         """Prompt is built correctly without user context."""
-        prompt = _build_plan_prompt(state_with_ticket)
+        plan_path = tmp_path / "specs" / "TEST-789-plan.md"
+        prompt = _build_minimal_prompt(state_with_ticket, plan_path)
 
-        # Verify no user context section
-        assert "Additional Context from User" not in prompt
+        # Verify no user context section (note: section name changed)
+        assert "Additional Context:" not in prompt
         # Verify basic prompt structure
         assert "TEST-789" in prompt
         assert "Implement test feature" in prompt
         assert "Test description for the feature" in prompt
+        assert str(plan_path) in prompt
 
-    def test_prompt_with_user_context(self, state_with_ticket):
+    def test_prompt_with_user_context(self, state_with_ticket, tmp_path):
         """Prompt includes user context when provided."""
+        plan_path = tmp_path / "specs" / "TEST-789-plan.md"
         state_with_ticket.user_context = "Focus on performance optimization"
-        prompt = _build_plan_prompt(state_with_ticket)
+        prompt = _build_minimal_prompt(state_with_ticket, plan_path)
 
-        # Verify user context section is present
-        assert "Additional Context from User" in prompt
+        # Verify user context section is present (note: section name changed)
+        assert "Additional Context:" in prompt
         assert "Focus on performance optimization" in prompt
         # Verify basic prompt structure is still there
         assert "TEST-789" in prompt

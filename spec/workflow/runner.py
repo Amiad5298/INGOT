@@ -78,7 +78,7 @@ def run_spec_driven_workflow(
     """
     print_header(f"Starting Workflow: {ticket.ticket_id}")
 
-    # Initialize state
+    # Initialize state with subagent names from config
     state = WorkflowState(
         ticket=ticket,
         planning_model=planning_model or config.settings.default_model,
@@ -89,6 +89,12 @@ def run_spec_driven_workflow(
         max_parallel_tasks=max_parallel_tasks,
         fail_fast=fail_fast,
         rate_limit_config=rate_limit_config or RateLimitConfig(),
+        subagent_names={
+            "planner": config.settings.subagent_planner,
+            "tasklist": config.settings.subagent_tasklist,
+            "implementer": config.settings.subagent_implementer,
+            "reviewer": config.settings.subagent_reviewer,
+        },
     )
 
     # Initialize Auggie client

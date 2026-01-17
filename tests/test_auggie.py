@@ -8,6 +8,10 @@ from spec.integrations.auggie import (
     AuggieModel,
     AuggieClient,
     AuggieRateLimitError,
+    SPEC_AGENT_IMPLEMENTER,
+    SPEC_AGENT_PLANNER,
+    SPEC_AGENT_REVIEWER,
+    SPEC_AGENT_TASKLIST,
     version_gte,
     extract_model_id,
     get_auggie_version,
@@ -322,6 +326,44 @@ class TestBuildCommand:
         assert "--dont-save-session" in cmd
         assert cmd[-1] == "test prompt"
 
+    def test_with_agent(self):
+        """Includes --agent flag when agent is provided."""
+        client = AuggieClient()
+        cmd = client._build_command("test prompt", agent="spec-planner")
+
+        assert "--agent" in cmd
+        assert "spec-planner" in cmd
+        assert cmd == ["auggie", "--agent", "spec-planner", "test prompt"]
+
+    def test_agent_overrides_model(self):
+        """Agent takes precedence over model - model is not included when agent is set."""
+        client = AuggieClient(model="claude-3")
+        cmd = client._build_command("test prompt", agent="spec-implementer")
+
+        assert "--agent" in cmd
+        assert "spec-implementer" in cmd
+        # Model should NOT be in command when agent is set
+        assert "--model" not in cmd
+        assert "claude-3" not in cmd
+
+    def test_agent_with_all_flags(self):
+        """Agent works with all other flags."""
+        client = AuggieClient()
+        cmd = client._build_command(
+            "test prompt",
+            agent="spec-reviewer",
+            print_mode=True,
+            quiet=True,
+            dont_save_session=True,
+        )
+
+        assert "--agent" in cmd
+        assert "spec-reviewer" in cmd
+        assert "--print" in cmd
+        assert "--quiet" in cmd
+        assert "--dont-save-session" in cmd
+        assert cmd[-1] == "test prompt"
+
 
 class TestRunWithCallback:
     """Tests for AuggieClient.run_with_callback method."""
@@ -426,6 +468,27 @@ class TestRunWithCallback:
         cmd = mock_popen.call_args[0][0]
         assert "--model" in cmd
         assert "claude-3" in cmd
+
+    @patch("subprocess.Popen")
+    def test_passes_agent_to_command(self, mock_popen):
+        """Agent is included in command when provided."""
+        mock_process = MagicMock()
+        mock_process.stdout = iter([])
+        mock_process.returncode = 0
+        mock_process.wait.return_value = 0
+        mock_popen.return_value = mock_process
+
+        client = AuggieClient()
+
+        client.run_with_callback(
+            "test prompt",
+            output_callback=lambda line: None,
+            agent="spec-planner",
+        )
+
+        cmd = mock_popen.call_args[0][0]
+        assert "--agent" in cmd
+        assert "spec-planner" in cmd
 
     @patch("subprocess.Popen")
     def test_strips_newlines_from_callback(self, mock_popen):
@@ -542,3 +605,22 @@ class TestLooksLikeRateLimit:
         assert _looks_like_rate_limit("Rate Limit") is True
         assert _looks_like_rate_limit("QUOTA EXCEEDED") is True
 
+
+class TestSubagentConstants:
+    """Tests for subagent constants."""
+
+    def test_planner_constant(self):
+        """SPEC_AGENT_PLANNER has correct value."""
+        assert SPEC_AGENT_PLANNER == "spec-planner"
+
+    def test_tasklist_constant(self):
+        """SPEC_AGENT_TASKLIST has correct value."""
+        assert SPEC_AGENT_TASKLIST == "spec-tasklist"
+
+    def test_implementer_constant(self):
+        """SPEC_AGENT_IMPLEMENTER has correct value."""
+        assert SPEC_AGENT_IMPLEMENTER == "spec-implementer"
+
+    def test_reviewer_constant(self):
+        """SPEC_AGENT_REVIEWER has correct value."""
+        assert SPEC_AGENT_REVIEWER == "spec-reviewer"

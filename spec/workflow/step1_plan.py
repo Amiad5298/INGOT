@@ -62,14 +62,12 @@ def _create_plan_log_dir(ticket_id: str) -> Path:
 
 def _generate_plan_with_tui(
     state: WorkflowState,
-    prompt: str,
     plan_path: Path,
 ) -> bool:
-    """Generate plan with TUI progress display.
+    """Generate plan with TUI progress display using subagent.
 
     Args:
         state: Current workflow state.
-        prompt: The prompt to send to Auggie.
         plan_path: Path where the plan will be saved.
 
     Returns:
@@ -87,11 +85,15 @@ def _generate_plan_with_tui(
     )
     ui.set_log_path(log_path)
 
-    auggie_planning = AuggieClient(model=state.planning_model)
+    # Build minimal prompt - agent has the instructions
+    prompt = _build_minimal_prompt(state, plan_path)
+
+    auggie_client = AuggieClient()
 
     with ui:
-        success, _output = auggie_planning.run_with_callback(
+        success, _output = auggie_client.run_with_callback(
             prompt,
+            agent=state.subagent_names["planner"],
             output_callback=ui.handle_output_line,
             dont_save_session=True,
         )
@@ -105,18 +107,37 @@ def _generate_plan_with_tui(
     return success
 
 
-def _generate_plan_fallback(state: WorkflowState, prompt: str) -> bool:
-    """Generate plan with simple line-based output (non-TUI mode).
+def _build_minimal_prompt(state: WorkflowState, plan_path: Path) -> str:
+    """Build minimal prompt for plan generation.
+
+    The subagent has detailed instructions - we just pass context.
 
     Args:
         state: Current workflow state.
-        prompt: The prompt to send to Auggie.
+        plan_path: Path where plan should be saved.
 
     Returns:
-        True if plan generation succeeded.
+        Minimal prompt string with ticket context.
     """
-    auggie_planning = AuggieClient(model=state.planning_model)
-    return auggie_planning.run_print(prompt, dont_save_session=True)
+    prompt = f"""Create implementation plan for: {state.ticket.ticket_id}
+
+Ticket: {state.ticket.title or state.ticket.summary or 'Not available'}
+Description: {state.ticket.description or 'Not available'}"""
+
+    # Add user context if provided
+    if state.user_context:
+        prompt += f"""
+
+Additional Context:
+{state.user_context}"""
+
+    prompt += f"""
+
+Save the plan to: {plan_path}
+
+Codebase context will be retrieved automatically."""
+
+    return prompt
 
 
 def step_1_create_plan(state: WorkflowState, auggie: AuggieClient) -> bool:
@@ -148,19 +169,11 @@ def step_1_create_plan(state: WorkflowState, auggie: AuggieClient) -> bool:
     if state.ticket.description:
         print_info(f"Description: {state.ticket.description[:200]}...")
 
-    # Generate implementation plan
+    # Generate implementation plan using subagent
     print_step("Generating implementation plan...")
     plan_path = state.get_plan_path()
 
-    prompt = _build_plan_prompt(state)
-
-    # Determine TUI mode
-    from spec.ui.tui import _should_use_tui
-
-    if _should_use_tui():
-        success = _generate_plan_with_tui(state, prompt, plan_path)
-    else:
-        success = _generate_plan_fallback(state, prompt)
+    success = _generate_plan_with_tui(state, plan_path)
 
     if not success:
         print_error("Failed to generate implementation plan")
@@ -272,46 +285,6 @@ If the plan is complete and clear, simply respond with 'No clarifications needed
         print_warning("Clarification phase encountered an issue, but continuing...")
 
     return True
-
-
-def _build_plan_prompt(state: WorkflowState) -> str:
-    """Build the prompt for plan generation.
-
-    Args:
-        state: Current workflow state
-
-    Returns:
-        Prompt string for Auggie
-    """
-    plan_path = state.get_plan_path()
-
-    # Base prompt
-    prompt = f"""Create an implementation plan for Jira ticket {state.ticket.ticket_id}.
-
-Ticket title: {state.ticket.title or 'Not available'}
-Description: {state.ticket.description or 'Not available'}
-"""
-
-    # Add user context if provided
-    if state.user_context:
-        prompt += f"""
-## Additional Context from User
-{state.user_context}
-"""
-
-    prompt += f"""
-Create a detailed implementation plan and save it to: {plan_path}
-
-The plan should include:
-1. Summary of the task
-2. Technical approach
-3. Implementation steps (numbered)
-4. Testing strategy
-5. Potential risks or considerations
-
-Format as markdown. Be specific and actionable."""
-
-    return prompt
 
 
 def _save_plan_from_output(plan_path: Path, state: WorkflowState) -> None:

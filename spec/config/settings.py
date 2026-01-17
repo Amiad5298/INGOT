@@ -29,6 +29,10 @@ class Settings:
         parallel_execution_enabled: Enable parallel execution of independent tasks
         max_parallel_tasks: Maximum number of parallel tasks (1-5)
         fail_fast: Stop on first task failure
+        subagent_planner: Agent name for planning step
+        subagent_tasklist: Agent name for task list generation
+        subagent_implementer: Agent name for task execution
+        subagent_reviewer: Agent name for task validation
     """
 
     # Model settings
@@ -54,6 +58,12 @@ class Settings:
     max_parallel_tasks: int = 3
     fail_fast: bool = False
 
+    # Subagent settings (customizable agent names)
+    subagent_planner: str = "spec-planner"
+    subagent_tasklist: str = "spec-tasklist"
+    subagent_implementer: str = "spec-implementer"
+    subagent_reviewer: str = "spec-reviewer"
+
     # Config key to attribute mapping
     _key_mapping: dict[str, str] = field(
         default_factory=lambda: {
@@ -70,6 +80,10 @@ class Settings:
             "PARALLEL_EXECUTION_ENABLED": "parallel_execution_enabled",
             "MAX_PARALLEL_TASKS": "max_parallel_tasks",
             "FAIL_FAST": "fail_fast",
+            "SUBAGENT_PLANNER": "subagent_planner",
+            "SUBAGENT_TASKLIST": "subagent_tasklist",
+            "SUBAGENT_IMPLEMENTER": "subagent_implementer",
+            "SUBAGENT_REVIEWER": "subagent_reviewer",
         },
         repr=False,
     )

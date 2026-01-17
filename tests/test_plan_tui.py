@@ -395,9 +395,12 @@ class TestStep1TUIIntegration:
         mock_ui_class,
         workflow_state,
         tmp_path: Path,
+        monkeypatch,
     ):
         """Step 1 uses TUI when _should_use_tui returns True."""
         from spec.workflow.step1_plan import _generate_plan_with_tui
+
+        monkeypatch.setenv("SPEC_LOG_DIR", str(tmp_path))
 
         # Setup
         mock_ui = MagicMock()
@@ -410,37 +413,14 @@ class TestStep1TUIIntegration:
         mock_client.run_with_callback.return_value = (True, "Generated plan")
         mock_auggie_class.return_value = mock_client
 
-        # Act
+        # Act - note: new signature is (state, plan_path), prompt is built internally
         plan_path = workflow_state.get_plan_path()
-        prompt = "Generate a plan"
-        result = _generate_plan_with_tui(workflow_state, prompt, plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path)
 
         # Assert
         assert result is True
         mock_ui_class.assert_called_once()
         mock_client.run_with_callback.assert_called_once()
-
-    @patch("spec.workflow.step1_plan.AuggieClient")
-    def test_uses_fallback_in_non_tty(
-        self,
-        mock_auggie_class,
-        workflow_state,
-    ):
-        """Step 1 uses fallback when not in TTY."""
-        from spec.workflow.step1_plan import _generate_plan_fallback
-
-        # Setup
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = True
-        mock_auggie_class.return_value = mock_client
-
-        # Act
-        prompt = "Generate a plan"
-        result = _generate_plan_fallback(workflow_state, prompt)
-
-        # Assert
-        assert result is True
-        mock_client.run_print.assert_called_once()
 
     @patch("spec.ui.plan_tui.PlanGeneratorUI")
     @patch("spec.workflow.step1_plan.AuggieClient")
@@ -450,9 +430,12 @@ class TestStep1TUIIntegration:
         mock_ui_class,
         workflow_state,
         tmp_path: Path,
+        monkeypatch,
     ):
         """TUI returns False when user requests quit."""
         from spec.workflow.step1_plan import _generate_plan_with_tui
+
+        monkeypatch.setenv("SPEC_LOG_DIR", str(tmp_path))
 
         # Setup
         mock_ui = MagicMock()
@@ -465,10 +448,9 @@ class TestStep1TUIIntegration:
         mock_client.run_with_callback.return_value = (True, "Generated plan")
         mock_auggie_class.return_value = mock_client
 
-        # Act
+        # Act - note: new signature is (state, plan_path), prompt is built internally
         plan_path = workflow_state.get_plan_path()
-        prompt = "Generate a plan"
-        result = _generate_plan_with_tui(workflow_state, prompt, plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path)
 
         # Assert - should return False due to quit
         assert result is False
