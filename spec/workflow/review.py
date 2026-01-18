@@ -306,10 +306,14 @@ def run_phase_review(
     diff_output, is_truncated, git_error = _get_diff_for_review(state)
 
     if git_error:
-        # Git command failed - warn but continue (advisory behavior)
+        # Git command failed - prompt user instead of silently skipping
         print_warning("Could not retrieve git diff for review")
-        print_info("Continuing workflow (review could not inspect changes)")
-        return True
+        print_info("The review cannot inspect code changes without git diff output.")
+        if prompt_confirm("Continue workflow without code review?", default=True):
+            return True
+        else:
+            print_info("Workflow stopped by user (could not retrieve diff for review)")
+            return False
 
     if not diff_output.strip():
         print_info("No changes to review")
