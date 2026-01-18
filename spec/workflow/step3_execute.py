@@ -180,10 +180,13 @@ def _parse_review_status(output: str) -> str:
     if not output or not output.strip():
         return "NEEDS_ATTENTION"
 
-    # Pattern to match status line with optional bold markers
-    # Matches: **Status**: PASS, Status: PASS, **Status**: NEEDS_ATTENTION, etc.
+    # Unified pattern to match status line with optional bold markers
+    # Matches:
+    #   **Status**: PASS, **Status**: NEEDS_ATTENTION
+    #   Status: PASS, Status: NEEDS_ATTENTION
+    #   With whitespace variations around the colon
     # Case-insensitive for the status keywords
-    pattern = r'\*\*Status\*\*\s*:\s*(PASS|NEEDS_ATTENTION)|Status\s*:\s*(PASS|NEEDS_ATTENTION)'
+    pattern = r'(?:\*\*)?Status(?:\*\*)?\s*:\s*(PASS|NEEDS_ATTENTION)'
 
     matches = list(re.finditer(pattern, output, re.IGNORECASE))
 
@@ -205,7 +208,7 @@ def _parse_review_status(output: str) -> str:
 
     # Use the last match as the final verdict
     last_match = matches[-1]
-    status = last_match.group(1) or last_match.group(2)
+    status = last_match.group(1)
 
     return status.upper()
 
@@ -259,7 +262,7 @@ def _parse_stat_file_count(stat_output: str) -> int:
     return 0
 
 
-def _get_smart_diff(max_lines: int = 2000, max_files: int = 20) -> tuple[str, bool]:
+def _get_smart_diff(max_lines: int = 2000, max_files: int = 20) -> tuple[str, bool, bool]:
     """Get diff output, using --stat only for large changes.
 
     Implements smart diff strategy to handle large diffs that could
@@ -272,8 +275,9 @@ def _get_smart_diff(max_lines: int = 2000, max_files: int = 20) -> tuple[str, bo
         max_files: Maximum files before falling back to stat-only (default: 20)
 
     Returns:
-        Tuple of (diff_output, is_truncated) where is_truncated is True
-        if only stat output was returned due to large changeset
+        Tuple of (diff_output, is_truncated, git_error) where:
+        - is_truncated is True if only stat output was returned due to large changeset
+        - git_error is True if git command failed (diff may be unreliable)
     """
     # First get stat output to assess change size
     stat_result = subprocess.run(
@@ -281,11 +285,19 @@ def _get_smart_diff(max_lines: int = 2000, max_files: int = 20) -> tuple[str, bo
         capture_output=True,
         text=True,
     )
+
+    # Check for git errors
+    if stat_result.returncode != 0:
+        stderr = stat_result.stderr.strip() if stat_result.stderr else "unknown error"
+        print_warning(f"Git diff --stat failed (exit code {stat_result.returncode}): {stderr}")
+        # Return empty with error flag - caller should warn but continue
+        return "", False, True
+
     stat_output = stat_result.stdout
 
     if not stat_output.strip():
-        # No changes - return empty
-        return "", False
+        # No changes - return empty (not an error, just empty diff)
+        return "", False, False
 
     # Parse stat to get counts
     lines_changed = _parse_stat_total_lines(stat_output)
@@ -301,7 +313,7 @@ def _get_smart_diff(max_lines: int = 2000, max_files: int = 20) -> tuple[str, bo
 **Note**: This changeset is large ({files_changed} files, {lines_changed} lines changed).
 To review specific files in detail, use: `git diff -- <file_path>`
 Focus on files most critical to the implementation plan."""
-        return truncated_output, True
+        return truncated_output, True, False
 
     # Small enough for full diff
     full_result = subprocess.run(
@@ -309,7 +321,15 @@ Focus on files most critical to the implementation plan."""
         capture_output=True,
         text=True,
     )
-    return full_result.stdout, False
+
+    # Check for git errors on full diff
+    if full_result.returncode != 0:
+        stderr = full_result.stderr.strip() if full_result.stderr else "unknown error"
+        print_warning(f"Git diff failed (exit code {full_result.returncode}): {stderr}")
+        # Fall back to stat output with error flag
+        return stat_output, True, True
+
+    return full_result.stdout, False, False
 
 
 def _run_auto_fix(
@@ -448,8 +468,14 @@ def _run_phase_review(
     """
     print_step(f"Running {phase} phase review...")
 
-    # Get smart diff
-    diff_output, is_truncated = _get_smart_diff()
+    # Get smart diff (with git error handling)
+    diff_output, is_truncated, git_error = _get_smart_diff()
+
+    if git_error:
+        # Git command failed - warn but continue (advisory behavior)
+        print_warning("Could not retrieve git diff for review")
+        print_info("Continuing workflow (review could not inspect changes)")
+        return True
 
     if not diff_output.strip():
         print_info("No changes to review")
@@ -471,7 +497,18 @@ def _run_phase_review(
         print_info("Continuing workflow despite review failure")
         return True  # Continue workflow on review crash (advisory behavior)
 
-    # Parse review result using robust parser
+    # Check if execution succeeded before parsing output
+    if not success:
+        print_warning(f"Review execution returned failure (exit code non-zero)")
+        print_info("Review output may be incomplete or unreliable")
+        # Treat as NEEDS_ATTENTION for decision-making, but allow user to continue
+        if prompt_confirm("Continue workflow despite review execution failure?", default=True):
+            return True
+        else:
+            print_info("Workflow stopped by user after review execution failure")
+            return False
+
+    # Parse review result using robust parser (only when execution succeeded)
     status = _parse_review_status(output)
 
     if status == "PASS":
@@ -491,36 +528,52 @@ def _run_phase_review(
                 print_step(f"Re-running {phase} phase review after auto-fix...")
 
                 # Get updated diff
-                diff_output_retry, is_truncated_retry = _get_smart_diff()
+                diff_output_retry, is_truncated_retry, git_error_retry = _get_smart_diff()
 
-                if not diff_output_retry.strip():
+                if git_error_retry:
+                    print_warning("Could not retrieve git diff for re-review")
+                    # Fall through to continue prompt
+                elif not diff_output_retry.strip():
                     print_info("No changes to review after auto-fix")
                     return True
-
-                # Build new prompt
-                prompt_retry = _build_review_prompt(state, phase, diff_output_retry, is_truncated_retry)
-
-                # Re-run review
-                try:
-                    success_retry, output_retry = auggie_client.run_print_with_output(
-                        prompt_retry,
-                        agent=state.subagent_names["reviewer"],
-                        dont_save_session=True,
+                else:
+                    # Build new prompt
+                    prompt_retry = _build_review_prompt(
+                        state, phase, diff_output_retry, is_truncated_retry
                     )
 
-                    status_retry = _parse_review_status(output_retry)
+                    # Re-run review
+                    try:
+                        success_retry, output_retry = auggie_client.run_print_with_output(
+                            prompt_retry,
+                            agent=state.subagent_names["reviewer"],
+                            dont_save_session=True,
+                        )
 
-                    if status_retry == "PASS":
-                        print_success(f"{phase.capitalize()} review after auto-fix: PASS")
-                        return True
-                    else:
-                        print_warning(f"{phase.capitalize()} review after auto-fix: NEEDS_ATTENTION")
-                        print_info("Issues remain after auto-fix. Please review manually.")
+                        # Check execution success before parsing
+                        if not success_retry:
+                            print_warning("Re-review execution returned failure")
+                            # Fall through to continue prompt
+                        else:
+                            status_retry = _parse_review_status(output_retry)
+
+                            if status_retry == "PASS":
+                                print_success(
+                                    f"{phase.capitalize()} review after auto-fix: PASS"
+                                )
+                                return True
+                            else:
+                                print_warning(
+                                    f"{phase.capitalize()} review after auto-fix: NEEDS_ATTENTION"
+                                )
+                                print_info(
+                                    "Issues remain after auto-fix. Please review manually."
+                                )
+                                # Fall through to continue prompt below
+
+                    except Exception as e:
+                        print_warning(f"Re-review execution failed: {e}")
                         # Fall through to continue prompt below
-
-                except Exception as e:
-                    print_warning(f"Re-review execution failed: {e}")
-                    # Fall through to continue prompt below
         else:
             print_warning("Auto-fix reported issues")
 
