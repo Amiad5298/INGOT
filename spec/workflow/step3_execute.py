@@ -15,14 +15,16 @@ to maintain focus and avoid context pollution.
 Supports two display modes:
 - TUI mode: Rich interactive display with task list and log panels
 - Fallback mode: Simple line-based output for CI/non-TTY environments
+
+Helper modules:
+- git_utils: Git diff collection and parsing
+- review: Code review prompting and status parsing
+- autofix: Auto-fix logic for review feedback
+- log_management: Run log directory management
+- prompts: Task execution prompt templates
 """
 
-import os
-import re
-import shutil
-import subprocess
 import threading
-import time
 from concurrent.futures import (
     CancelledError,
     FIRST_COMPLETED,
@@ -55,13 +57,22 @@ from spec.utils.retry import (
     with_rate_limit_retry,
 )
 from spec.workflow.events import (
-    TaskRunStatus,
     create_task_finished_event,
     create_task_output_event,
     create_task_started_event,
     format_log_filename,
-    format_run_directory,
 )
+from spec.workflow.log_management import (
+    DEFAULT_LOG_RETENTION,
+    cleanup_old_runs as _cleanup_old_runs,
+    create_run_log_dir as _create_run_log_dir,
+    get_log_base_dir as _get_log_base_dir,
+)
+from spec.workflow.prompts import (
+    POST_IMPLEMENTATION_TEST_PROMPT,
+    build_task_prompt as _build_task_prompt,
+)
+from spec.workflow.review import run_phase_review as _run_phase_review
 from spec.workflow.state import WorkflowState
 from spec.workflow.task_memory import capture_task_memory
 from spec.workflow.tasks import (
@@ -78,511 +89,21 @@ if TYPE_CHECKING:
 
 
 # =============================================================================
-# Log Directory Management
+# Backwards-compatible re-exports from extracted modules
 # =============================================================================
-
-# Default log retention count
-DEFAULT_LOG_RETENTION = 10
-
-
-def _get_log_base_dir() -> Path:
-    """Get the base directory for run logs.
-
-    Returns:
-        Path to the log base directory.
-    """
-    env_dir = os.environ.get("SPEC_LOG_DIR")
-    if env_dir:
-        return Path(env_dir)
-    return Path(".spec/runs")
-
-
-def _create_run_log_dir(ticket_id: str) -> Path:
-    """Create a timestamped log directory for this run.
-
-    Args:
-        ticket_id: Ticket identifier for directory naming.
-
-    Returns:
-        Path to the created log directory.
-    """
-    base_dir = _get_log_base_dir()
-    ticket_dir = base_dir / ticket_id
-    run_dir = ticket_dir / format_run_directory()
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
-
-
-def _cleanup_old_runs(ticket_id: str, keep_count: int = DEFAULT_LOG_RETENTION) -> None:
-    """Remove old run directories beyond retention limit.
-
-    Args:
-        ticket_id: Ticket identifier.
-        keep_count: Number of runs to keep.
-    """
-    base_dir = _get_log_base_dir()
-    ticket_dir = base_dir / ticket_id
-
-    if not ticket_dir.exists():
-        return
-
-    # Get all run directories sorted by name (timestamp order)
-    run_dirs = sorted(
-        [d for d in ticket_dir.iterdir() if d.is_dir()],
-        key=lambda d: d.name,
-        reverse=True,
-    )
-
-    # Remove directories beyond retention limit
-    for old_dir in run_dirs[keep_count:]:
-        try:
-            shutil.rmtree(old_dir)
-        except Exception:
-            pass  # Ignore cleanup errors
-
-
-# =============================================================================
-# Review Helper Functions
-# =============================================================================
-
-
-def _parse_review_status(output: str) -> str:
-    """Parse review status from agent output.
-
-    Extracts the final status marker from review output, looking for
-    **Status**: PASS or **Status**: NEEDS_ATTENTION in the last occurrence.
-
-    This parser is robust to:
-    - Bold markers (**Status** or Status)
-    - Whitespace variations
-    - Case variations (PASS, Pass, pass)
-    - Multiple occurrences (uses last one as final verdict)
-    - PASS appearing in normal text (only counts if after Status: marker)
-
-    Args:
-        output: Review agent output text
-
-    Returns:
-        "PASS" if review passed, "NEEDS_ATTENTION" if issues found,
-        or "NEEDS_ATTENTION" if status cannot be determined (fail-safe)
-
-    Examples:
-        >>> _parse_review_status("**Status**: PASS\\n\\nLooks good!")
-        'PASS'
-        >>> _parse_review_status("Status: NEEDS_ATTENTION\\n\\nIssues found")
-        'NEEDS_ATTENTION'
-        >>> _parse_review_status("Some text with PASS in it\\n**Status**: NEEDS_ATTENTION")
-        'NEEDS_ATTENTION'
-        >>> _parse_review_status("Ambiguous output")
-        'NEEDS_ATTENTION'
-    """
-    if not output or not output.strip():
-        return "NEEDS_ATTENTION"
-
-    # Unified pattern to match status line with optional bold markers
-    # Matches:
-    #   **Status**: PASS, **Status**: NEEDS_ATTENTION
-    #   Status: PASS, Status: NEEDS_ATTENTION
-    #   With whitespace variations around the colon
-    # Case-insensitive for the status keywords
-    pattern = r'(?:\*\*)?Status(?:\*\*)?\s*:\s*(PASS|NEEDS_ATTENTION)'
-
-    matches = list(re.finditer(pattern, output, re.IGNORECASE))
-
-    if not matches:
-        # No explicit status marker found - check for standalone markers as fallback
-        # Only if they appear near the end (last 500 chars) to avoid false positives
-        tail = output[-500:] if len(output) > 500 else output
-
-        # Look for NEEDS_ATTENTION first (more specific)
-        if re.search(r'\bNEEDS_ATTENTION\b', tail, re.IGNORECASE):
-            return "NEEDS_ATTENTION"
-
-        # Then look for PASS (but be more strict - must be on its own line or after punctuation)
-        if re.search(r'(?:^|\n|[.!?]\s+)\*\*PASS\*\*|(?:^|\n|[.!?]\s+)PASS\s*(?:\n|$)', tail, re.IGNORECASE):
-            return "PASS"
-
-        # No clear marker found - default to NEEDS_ATTENTION (fail-safe)
-        return "NEEDS_ATTENTION"
-
-    # Use the last match as the final verdict
-    last_match = matches[-1]
-    status = last_match.group(1)
-
-    return status.upper()
-
-
-def _parse_stat_total_lines(stat_output: str) -> int:
-    """Parse total changed lines from git diff --stat output.
-
-    The stat output ends with a summary line like:
-    "10 files changed, 500 insertions(+), 100 deletions(-)"
-
-    Args:
-        stat_output: Output from git diff --stat
-
-    Returns:
-        Total lines changed (insertions + deletions)
-    """
-    # Match the summary line at the end of stat output
-    # Pattern: "X file(s) changed, Y insertion(s)(+), Z deletion(s)(-)"
-    match = re.search(
-        r"(\d+)\s+insertions?\(\+\).*?(\d+)\s+deletions?\(-\)",
-        stat_output,
-    )
-    if match:
-        return int(match.group(1)) + int(match.group(2))
-
-    # Try matching insertions only
-    match = re.search(r"(\d+)\s+insertions?\(\+\)", stat_output)
-    if match:
-        return int(match.group(1))
-
-    # Try matching deletions only
-    match = re.search(r"(\d+)\s+deletions?\(-\)", stat_output)
-    if match:
-        return int(match.group(1))
-
-    return 0
-
-
-def _parse_stat_file_count(stat_output: str) -> int:
-    """Parse number of changed files from git diff --stat output.
-
-    Args:
-        stat_output: Output from git diff --stat
-
-    Returns:
-        Number of files changed
-    """
-    match = re.search(r"(\d+)\s+files?\s+changed", stat_output)
-    if match:
-        return int(match.group(1))
-    return 0
-
-
-def _get_smart_diff(max_lines: int = 2000, max_files: int = 20) -> tuple[str, bool, bool]:
-    """Get diff output, using --stat only for large changes.
-
-    Implements smart diff strategy to handle large diffs that could
-    exceed AI context window limits. For large changes, returns only
-    the stat summary and instructs the reviewer to inspect specific
-    files as needed.
-
-    Args:
-        max_lines: Maximum lines before falling back to stat-only (default: 2000)
-        max_files: Maximum files before falling back to stat-only (default: 20)
-
-    Returns:
-        Tuple of (diff_output, is_truncated, git_error) where:
-        - is_truncated is True if only stat output was returned due to large changeset
-        - git_error is True if git command failed (diff may be unreliable)
-    """
-    # First get stat output to assess change size
-    stat_result = subprocess.run(
-        ["git", "diff", "--stat"],
-        capture_output=True,
-        text=True,
-    )
-
-    # Check for git errors
-    if stat_result.returncode != 0:
-        stderr = stat_result.stderr.strip() if stat_result.stderr else "unknown error"
-        print_warning(f"Git diff --stat failed (exit code {stat_result.returncode}): {stderr}")
-        # Return empty with error flag - caller should warn but continue
-        return "", False, True
-
-    stat_output = stat_result.stdout
-
-    if not stat_output.strip():
-        # No changes - return empty (not an error, just empty diff)
-        return "", False, False
-
-    # Parse stat to get counts
-    lines_changed = _parse_stat_total_lines(stat_output)
-    files_changed = _parse_stat_file_count(stat_output)
-
-    # Check if diff is too large
-    if lines_changed > max_lines or files_changed > max_files:
-        # Return stat-only with instructions
-        truncated_output = f"""## Git Diff Summary (Large Changeset)
-
-{stat_output}
-
-**Note**: This changeset is large ({files_changed} files, {lines_changed} lines changed).
-To review specific files in detail, use: `git diff -- <file_path>`
-Focus on files most critical to the implementation plan."""
-        return truncated_output, True, False
-
-    # Small enough for full diff
-    full_result = subprocess.run(
-        ["git", "diff"],
-        capture_output=True,
-        text=True,
-    )
-
-    # Check for git errors on full diff
-    if full_result.returncode != 0:
-        stderr = full_result.stderr.strip() if full_result.stderr else "unknown error"
-        print_warning(f"Git diff failed (exit code {full_result.returncode}): {stderr}")
-        # Fall back to stat output with error flag
-        return stat_output, True, True
-
-    return full_result.stdout, False, False
-
-
-def _run_auto_fix(
-    state: WorkflowState,
-    review_feedback: str,
-    log_dir: Path,
-) -> bool:
-    """Attempt to fix issues identified in review.
-
-    Spins up an implementer agent to address the issues found during
-    code review. The agent receives the review feedback and attempts
-    to fix the identified problems.
-
-    Args:
-        state: Current workflow state
-        review_feedback: The review output containing identified issues
-        log_dir: Directory for log files
-
-    Returns:
-        True if fix was attempted successfully (agent completed),
-        False if agent crashed or was cancelled
-    """
-    print_step("Attempting auto-fix based on review feedback...")
-
-    prompt = f"""Fix the following issues identified during code review:
-
-{review_feedback}
-
-Implementation plan for context: {state.get_plan_path()}
-
-Instructions:
-1. Address each issue listed above
-2. Do NOT introduce new features or refactor unrelated code
-3. Focus only on fixing the identified problems
-4. If a test is missing, create a minimal test that covers the gap
-5. If error handling is missing, add appropriate handling
-
-Do NOT commit any changes."""
-
-    auggie_client = AuggieClient()
-
-    try:
-        success, _ = auggie_client.run_print_with_output(
-            prompt,
-            agent=state.subagent_names["implementer"],
-            dont_save_session=True,
-        )
-        if success:
-            print_success("Auto-fix completed")
-        else:
-            print_warning("Auto-fix reported issues")
-        return success
-    except Exception as e:
-        print_error(f"Auto-fix failed: {e}")
-        return False
-
-
-def _build_review_prompt(
-    state: WorkflowState,
-    phase: str,
-    diff_output: str,
-    is_truncated: bool,
-) -> str:
-    """Build the prompt for the reviewer agent.
-
-    Args:
-        state: Current workflow state
-        phase: Phase being reviewed ("fundamental" or "final")
-        diff_output: Git diff output (full or stat-only)
-        is_truncated: Whether diff was truncated due to size
-
-    Returns:
-        Formatted prompt string for the reviewer
-    """
-    plan_path = state.get_plan_path()
-
-    prompt = f"""Review the code changes from the {phase} phase of implementation.
-
-## Implementation Plan
-File: {plan_path}
-(Use codebase-retrieval to read relevant sections as needed)
-
-## Code Changes
-{diff_output}
-"""
-
-    if is_truncated:
-        prompt += """
-## Large Changeset Instructions
-This is a large changeset. The diff above shows only the file summary.
-Use `git diff -- <file_path>` to inspect specific files that need detailed review.
-Focus on files most critical to the implementation plan.
-"""
-
-    prompt += """
-## Review Instructions
-1. Check that changes align with the implementation plan
-2. Identify any issues, bugs, or missing functionality
-3. Look for missing tests, error handling, or edge cases
-
-## Output Format
-End your review with one of:
-- **PASS** - Changes look good, ready to proceed
-- **NEEDS_ATTENTION** - Issues found that should be addressed
-
-If NEEDS_ATTENTION, list specific issues in this format:
-**Issues**:
-1. [ISSUE_TYPE] Description of the issue
-2. [ISSUE_TYPE] Description of the issue
-...
-"""
-
-    return prompt
-
-
-def _run_phase_review(
-    state: WorkflowState,
-    log_dir: Path,
-    phase: str,
-) -> bool:
-    """Run review checkpoint and optionally auto-fix.
-
-    Executes the spec-reviewer agent to validate completed work.
-    If issues are found, offers the user the option to attempt
-    automatic fixes using the implementer agent, and optionally
-    re-run the review after fixes.
-
-    Args:
-        state: Current workflow state
-        log_dir: Directory for log files
-        phase: Phase identifier ("fundamental" or "final")
-
-    Returns:
-        True if review passed or user chose to continue,
-        False if user explicitly chose to stop after failed review
-    """
-    print_step(f"Running {phase} phase review...")
-
-    # Get smart diff (with git error handling)
-    diff_output, is_truncated, git_error = _get_smart_diff()
-
-    if git_error:
-        # Git command failed - warn but continue (advisory behavior)
-        print_warning("Could not retrieve git diff for review")
-        print_info("Continuing workflow (review could not inspect changes)")
-        return True
-
-    if not diff_output.strip():
-        print_info("No changes to review")
-        return True
-
-    # Build prompt
-    prompt = _build_review_prompt(state, phase, diff_output, is_truncated)
-
-    # Run review
-    auggie_client = AuggieClient()
-    try:
-        success, output = auggie_client.run_print_with_output(
-            prompt,
-            agent=state.subagent_names["reviewer"],
-            dont_save_session=True,
-        )
-    except Exception as e:
-        print_warning(f"Review execution failed: {e}")
-        print_info("Continuing workflow despite review failure")
-        return True  # Continue workflow on review crash (advisory behavior)
-
-    # Check if execution succeeded before parsing output
-    if not success:
-        print_warning(f"Review execution returned failure (exit code non-zero)")
-        print_info("Review output may be incomplete or unreliable")
-        # Treat as NEEDS_ATTENTION for decision-making, but allow user to continue
-        if prompt_confirm("Continue workflow despite review execution failure?", default=True):
-            return True
-        else:
-            print_info("Workflow stopped by user after review execution failure")
-            return False
-
-    # Parse review result using robust parser (only when execution succeeded)
-    status = _parse_review_status(output)
-
-    if status == "PASS":
-        print_success(f"{phase.capitalize()} review: PASS")
-        return True
-
-    # Review found issues
-    print_warning(f"{phase.capitalize()} review: NEEDS_ATTENTION")
-
-    # Offer auto-fix
-    if prompt_confirm("Would you like to attempt auto-fix?", default=False):
-        fix_success = _run_auto_fix(state, output, log_dir)
-
-        if fix_success:
-            # Offer to re-run review after auto-fix
-            if prompt_confirm("Run review again after auto-fix?", default=True):
-                print_step(f"Re-running {phase} phase review after auto-fix...")
-
-                # Get updated diff
-                diff_output_retry, is_truncated_retry, git_error_retry = _get_smart_diff()
-
-                if git_error_retry:
-                    print_warning("Could not retrieve git diff for re-review")
-                    # Fall through to continue prompt
-                elif not diff_output_retry.strip():
-                    print_info("No changes to review after auto-fix")
-                    return True
-                else:
-                    # Build new prompt
-                    prompt_retry = _build_review_prompt(
-                        state, phase, diff_output_retry, is_truncated_retry
-                    )
-
-                    # Re-run review
-                    try:
-                        success_retry, output_retry = auggie_client.run_print_with_output(
-                            prompt_retry,
-                            agent=state.subagent_names["reviewer"],
-                            dont_save_session=True,
-                        )
-
-                        # Check execution success before parsing
-                        if not success_retry:
-                            print_warning("Re-review execution returned failure")
-                            # Fall through to continue prompt
-                        else:
-                            status_retry = _parse_review_status(output_retry)
-
-                            if status_retry == "PASS":
-                                print_success(
-                                    f"{phase.capitalize()} review after auto-fix: PASS"
-                                )
-                                return True
-                            else:
-                                print_warning(
-                                    f"{phase.capitalize()} review after auto-fix: NEEDS_ATTENTION"
-                                )
-                                print_info(
-                                    "Issues remain after auto-fix. Please review manually."
-                                )
-                                # Fall through to continue prompt below
-
-                    except Exception as e:
-                        print_warning(f"Re-review execution failed: {e}")
-                        # Fall through to continue prompt below
-        else:
-            print_warning("Auto-fix reported issues")
-
-    # Ask user if they want to continue or stop
-    if prompt_confirm("Continue workflow despite review issues?", default=True):
-        return True
-    else:
-        print_info("Workflow stopped by user after review")
-        return False
+# These functions have been moved to separate modules but are re-exported here
+# to maintain backwards compatibility with existing code and tests.
+
+from spec.workflow.autofix import run_auto_fix as _run_auto_fix
+from spec.workflow.git_utils import (
+    get_smart_diff as _get_smart_diff,
+    parse_stat_file_count as _parse_stat_file_count,
+    parse_stat_total_lines as _parse_stat_total_lines,
+)
+from spec.workflow.review import (
+    build_review_prompt as _build_review_prompt,
+    parse_review_status as _parse_review_status,
+)
 
 
 def step_3_execute(
@@ -1199,48 +720,6 @@ def _execute_parallel_with_tui(
     return failed_tasks
 
 
-def _build_task_prompt(task: Task, plan_path: Path, *, is_parallel: bool = False) -> str:
-    """Build a minimal prompt for task execution.
-
-    Passes a plan path reference rather than the full plan content to:
-    - Reduce token usage and context window pressure
-    - Let the agent retrieve only relevant sections via codebase-retrieval
-    - Avoid prompt bloat in parallel execution scenarios
-
-    Args:
-        task: Task to execute
-        plan_path: Path to the implementation plan file
-        is_parallel: Whether this task runs in parallel with others
-
-    Returns:
-        Minimal prompt string with task context
-    """
-    parallel_mode = "YES" if is_parallel else "NO"
-
-    # Base prompt with task name and parallel mode
-    prompt = f"""Execute task: {task.name}
-
-Parallel mode: {parallel_mode}"""
-
-    # Add plan reference if file exists
-    if plan_path.exists():
-        prompt += f"""
-
-Implementation plan: {plan_path}
-Use codebase-retrieval to read relevant sections of the plan as needed."""
-    else:
-        prompt += """
-
-Use codebase-retrieval to understand existing patterns before making changes."""
-
-    # Add critical constraints reminder
-    prompt += """
-
-Do NOT commit, git add, or push any changes."""
-
-    return prompt
-
-
 def _execute_task(
     state: WorkflowState,
     task: Task,
@@ -1441,52 +920,12 @@ def _run_post_implementation_tests(state: WorkflowState) -> None:
     console.print("[dim]AI will identify and run tests that cover the code changed in this run...[/dim]")
     console.print()
 
-    prompt = """Identify and run the tests that are relevant to the code changes made in this run.
-
-## Step 1: Identify Changed Production Code
-- Run `git diff --name-only` and `git status --porcelain` to list all files changed in this run.
-- Separate the changed files into two categories:
-  a) **Test files**: files in directories like `test/`, `tests/`, `__tests__/`, or matching patterns like `*.spec.*`, `*_test.*`, `test_*.*`
-  b) **Production/source files**: all other changed files (excluding test paths above)
-
-## Step 2: Determine Relevant Tests to Run
-Find the minimal, most targeted set of tests that cover the changes:
-- **If test files were modified/added**: include those tests.
-- **If production/source files were modified/added**: use codebase-retrieval and repository conventions to find tests that cover those files. Look for:
-  - Tests located in the same module/package area as the changed source files
-  - Tests named similarly to the changed files (e.g., `foo.py` → `test_foo.py`, `foo_test.py`, `foo.spec.ts`)
-  - Tests referenced by existing docs, scripts, or test configuration in the repo
-- Prefer the smallest targeted set. If the repo supports running tests by file, class, or package, use that to scope execution.
-
-## Step 3: Transparency Before Execution
-Before running any tests:
-- Print the exact command(s) you plan to run.
-- Briefly explain how these tests were selected (e.g., "These tests correspond to module X which was changed" or "These are the modified test files").
-
-## Step 4: Execute Tests
-Run the identified tests and clearly report success or failure.
-
-## Critical Constraints
-- Do NOT commit any changes
-- Do NOT push any changes
-- Do NOT run the entire project test suite by default
-- Only expand the test scope if a targeted run is not possible in this repo
-
-## Fallback Behavior
-If you cannot reliably map changed source files to specific tests AND cannot run targeted tests in this repo:
-1. Explain why targeted test selection is not possible.
-2. Propose 1-2 broader-but-still-reasonable commands (e.g., module-level tests, package-level tests).
-3. Ask the user for confirmation before running them.
-4. Do NOT silently fall back to "run everything".
-
-If NO production files were changed AND NO test files were changed, report "No code changes detected that require testing" and STOP."""
-
     # Use spec-implementer subagent for running tests
     auggie_client = AuggieClient()
 
     try:
         success, _ = auggie_client.run_print_with_output(
-            prompt,
+            POST_IMPLEMENTATION_TEST_PROMPT,
             agent=state.subagent_names["implementer"],
             dont_save_session=True,
         )
