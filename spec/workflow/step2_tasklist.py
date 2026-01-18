@@ -22,28 +22,65 @@ from spec.utils.console import (
 )
 from spec.utils.logging import log_message
 from spec.workflow.state import WorkflowState
-from spec.workflow.tasks import parse_task_list, format_task_list, Task, TaskCategory
+from spec.workflow.tasks import (
+    parse_task_list,
+    format_task_list,
+    Task,
+    TaskCategory,
+    normalize_path,
+    deduplicate_paths,
+    PathSecurityError,
+)
 
 
-def _validate_file_disjointness(tasks: list[Task]) -> list[str]:
+def _validate_file_disjointness(
+    tasks: list[Task],
+    repo_root: Optional[Path] = None,
+) -> list[str]:
     """Validate that independent tasks have disjoint file sets.
 
     Independent tasks running in parallel must not target the same files
     to prevent race conditions and data loss.
 
+    Uses normalized paths for comparison to ensure equivalent paths
+    (e.g., ./src/file.py and src/file.py) are treated as the same file.
+
+    Also emits warnings for:
+    - Independent tasks with no target_files (disjointness cannot be validated)
+    - Paths that attempt to escape the repository root (security violation)
+
     Args:
         tasks: List of all tasks
+        repo_root: Optional repository root for path normalization and security
 
     Returns:
-        List of warning messages for overlapping files
+        List of warning messages for overlapping files or missing metadata
     """
     independent = [t for t in tasks if t.category == TaskCategory.INDEPENDENT]
     warnings: list[str] = []
 
-    # Build file -> tasks mapping
+    # Build normalized file -> tasks mapping
     file_to_tasks: dict[str, list[str]] = {}
+
     for task in independent:
-        for file_path in task.target_files:
+        # Warn if independent task has no target_files
+        if not task.target_files:
+            warnings.append(
+                f"Missing target_files metadata: Independent task '{task.name}' "
+                f"has no files specified. Disjointness cannot be validated."
+            )
+            continue
+
+        # Normalize and deduplicate paths within the task
+        try:
+            normalized_files = deduplicate_paths(task.target_files, repo_root)
+        except PathSecurityError as e:
+            warnings.append(
+                f"Security violation in task '{task.name}': {e}"
+            )
+            continue
+
+        for file_path in normalized_files:
             if file_path not in file_to_tasks:
                 file_to_tasks[file_path] = []
             file_to_tasks[file_path].append(task.name)

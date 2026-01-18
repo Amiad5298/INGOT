@@ -671,7 +671,7 @@ class TestValidateFileDisjointness:
         assert errors == []
 
     def test_handles_empty_target_files(self):
-        """Handles tasks with empty target_files gracefully."""
+        """Warns on independent tasks with empty target_files."""
         tasks = [
             Task(
                 name="Task without files",
@@ -687,7 +687,10 @@ class TestValidateFileDisjointness:
 
         errors = _validate_file_disjointness(tasks)
 
-        assert errors == []
+        # Now warns on missing target_files for independent tasks
+        assert len(errors) == 1
+        assert "Missing target_files metadata" in errors[0]
+        assert "Task without files" in errors[0]
 
     def test_detects_multiple_collisions(self):
         """Detects multiple file collisions."""
