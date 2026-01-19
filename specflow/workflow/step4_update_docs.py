@@ -11,18 +11,15 @@ It snapshots non-doc files before the agent runs and reverts any non-doc
 changes introduced by the agent.
 """
 
-import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional, Protocol
+from typing import Optional, Protocol
 
 from specflow.integrations.auggie import AuggieClient
 from specflow.integrations.git import (
     DiffResult,
     get_diff_from_baseline,
-    get_changed_files_list,
-    get_untracked_files_list,
     has_any_changes,
 )
 from specflow.utils.console import print_error, print_header, print_info, print_success, print_warning
@@ -136,12 +133,14 @@ class FileSnapshot:
         path: File path relative to repo root.
         was_untracked: True if file was untracked (status code '??') at snapshot time.
         was_dirty: True if file had pre-agent modifications (tracked but modified).
-        content: Byte content if file existed and was dirty pre-agent.
+        existed: True if file existed at snapshot time.
+        content: Byte content if file existed pre-agent (for both dirty and untracked files).
     """
 
     path: str
     was_untracked: bool = False
     was_dirty: bool = False
+    existed: bool = True
     content: Optional[bytes] = None
 
     @classmethod
@@ -159,21 +158,23 @@ class FileSnapshot:
         # File is dirty if it has any tracked modification (not untracked)
         is_dirty = not is_untracked and status_code.strip() != ""
 
+        path = Path(filepath)
+        file_exists = path.exists() and path.is_file()
         content = None
-        if is_dirty:
-            # Only capture content for files that were already dirty pre-agent
-            # so we can restore them to their pre-agent dirty state
-            path = Path(filepath)
-            if path.exists() and path.is_file():
-                try:
-                    content = path.read_bytes()
-                except (OSError, IOError):
-                    pass
+
+        # Capture content for files that exist (both dirty and untracked)
+        # so we can restore them to their pre-agent state
+        if file_exists:
+            try:
+                content = path.read_bytes()
+            except (OSError, IOError):
+                pass
 
         return cls(
             path=filepath,
             was_untracked=is_untracked,
             was_dirty=is_dirty,
+            existed=file_exists,
             content=content,
         )
 
@@ -318,9 +319,11 @@ class NonDocSnapshot:
         """Revert specified files to their snapshot state.
 
         Revert strategy:
-        - Pre-dirty files: Restore saved content.
-        - Pre-untracked files: Delete them (agent shouldn't modify untracked).
+        - Pre-dirty files with content: Restore saved content.
+        - Pre-untracked files with content: Restore saved content.
+        - Pre-untracked files without content (new files created by agent): Delete them.
         - Previously clean tracked files: Use git restore.
+        - Deleted files with saved content: Restore the content.
 
         Args:
             filepaths: List of files to revert.
@@ -333,13 +336,21 @@ class NonDocSnapshot:
             snapshot = self.snapshots.get(filepath)
 
             if snapshot is None:
-                # No snapshot - shouldn't happen, but try git restore
+                # No snapshot - file was created by agent, try git restore or delete
+                path = Path(filepath)
                 if _git_restore_file(filepath):
                     reverted.append(filepath)
+                elif path.exists():
+                    # If git restore fails, it might be a new untracked file - delete it
+                    try:
+                        path.unlink()
+                        reverted.append(filepath)
+                    except (OSError, IOError):
+                        pass
                 continue
 
-            if snapshot.was_dirty and snapshot.content is not None:
-                # Restore to pre-agent dirty state by writing back content
+            # If we have saved content, always restore it (works for dirty, untracked, deleted)
+            if snapshot.content is not None:
                 try:
                     path = Path(filepath)
                     path.parent.mkdir(parents=True, exist_ok=True)
@@ -347,8 +358,8 @@ class NonDocSnapshot:
                     reverted.append(filepath)
                 except (OSError, IOError):
                     pass
-            elif snapshot.was_untracked:
-                # File was untracked pre-agent - delete it if it exists
+            elif snapshot.was_untracked and not snapshot.existed:
+                # File was untracked and didn't exist pre-agent (agent created it) - delete
                 try:
                     path = Path(filepath)
                     if path.exists():
@@ -356,10 +367,11 @@ class NonDocSnapshot:
                         reverted.append(filepath)
                 except (OSError, IOError):
                     pass
-            else:
+            elif not snapshot.was_untracked:
                 # File was tracked and clean pre-agent - use git restore
                 if _git_restore_file(filepath):
                     reverted.append(filepath)
+            # else: untracked file existed but we failed to capture content - can't restore
 
         return reverted
 
@@ -565,14 +577,16 @@ def _build_doc_update_prompt(state: WorkflowState, diff_result: DiffResult) -> s
 **YOU MUST ONLY EDIT DOCUMENTATION FILES.**
 
 Documentation files include:
-- Files with extensions: .md, .rst, .txt, .adoc
-- Files in directories: docs/, doc/, documentation/, .github/
-- Files named: README, CHANGELOG, CONTRIBUTING, LICENSE, AUTHORS, etc.
+- Files with extensions: .md, .rst, .txt, .adoc, .asciidoc
+- Files in directories: docs/, doc/, documentation/
+- .github/ doc files: README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, ISSUE_TEMPLATE, PULL_REQUEST_TEMPLATE
+- Root files named: README, CHANGELOG, CONTRIBUTING, LICENSE, AUTHORS, etc.
 
 **DO NOT EDIT:**
 - Source code files (.py, .js, .ts, .go, .java, .rs, etc.)
 - Configuration files (.json, .yaml, .toml, .ini, etc.)
 - Test files
+- .github/workflows/, .github/actions/, .github/scripts/ (these are code, not docs)
 - Any other non-documentation files
 
 Any changes to non-documentation files will be automatically reverted.
