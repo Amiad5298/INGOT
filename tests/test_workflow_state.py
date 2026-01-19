@@ -290,6 +290,7 @@ class TestWorkflowStateParallelFields:
             "tasklist": "spec-tasklist",
             "implementer": "spec-implementer",
             "reviewer": "spec-reviewer",
+            "doc_updater": "spec-doc-updater",
         }
 
     def test_subagent_names_custom(self, ticket):
@@ -301,8 +302,10 @@ class TestWorkflowStateParallelFields:
                 "tasklist": "custom-tasklist",
                 "implementer": "custom-implementer",
                 "reviewer": "custom-reviewer",
+                "doc_updater": "custom-doc-updater",
             },
         )
         assert state.subagent_names["planner"] == "custom-planner"
         assert state.subagent_names["implementer"] == "custom-implementer"
+        assert state.subagent_names["doc_updater"] == "custom-doc-updater"
 

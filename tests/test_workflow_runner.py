@@ -12,6 +12,7 @@ from specflow.workflow.runner import (
     _offer_cleanup,
 )
 from specflow.workflow.state import WorkflowState
+from specflow.workflow.step4_update_docs import Step4Result
 from specflow.integrations.jira import JiraTicket
 from specflow.utils.errors import SpecError, UserCancelledError
 
@@ -1190,4 +1191,126 @@ class TestSetupBranchSpecialCharacters:
         # Raw string formatting (no sanitization)
         expected_branch = "test-999-Fix: API/endpoint (v2) - urgent!!!"
         assert workflow_state.branch_name == expected_branch
+
+
+# =============================================================================
+# Tests for run_spec_driven_workflow() - Step 4 (Documentation Updates)
+# =============================================================================
+
+
+class TestRunSpecDrivenWorkflowStep4:
+    """Tests for run_spec_driven_workflow Step 4 documentation updates."""
+
+    @patch("specflow.workflow.runner.AuggieClient")
+    @patch("specflow.workflow.runner._show_completion")
+    @patch("specflow.workflow.runner.step_4_update_docs")
+    @patch("specflow.workflow.runner.step_3_execute")
+    @patch("specflow.workflow.runner.step_2_create_tasklist")
+    @patch("specflow.workflow.runner.step_1_create_plan")
+    @patch("specflow.workflow.runner.get_current_commit")
+    @patch("specflow.workflow.runner._setup_branch")
+    @patch("specflow.workflow.runner.prompt_confirm")
+    @patch("specflow.workflow.runner.fetch_ticket_info")
+    @patch("specflow.workflow.runner.is_dirty")
+    @patch("specflow.workflow.runner.get_current_branch")
+    def test_calls_step_4_when_auto_update_docs_enabled(
+        self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_step4, mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that step_4_update_docs is called when auto_update_docs=True."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+        mock_step4.return_value = Step4Result(success=True)
+
+        run_spec_driven_workflow(
+            ticket=ticket,
+            config=mock_config,
+            auto_update_docs=True,
+        )
+
+        mock_step4.assert_called_once()
+
+    @patch("specflow.workflow.runner.AuggieClient")
+    @patch("specflow.workflow.runner._show_completion")
+    @patch("specflow.workflow.runner.step_4_update_docs")
+    @patch("specflow.workflow.runner.step_3_execute")
+    @patch("specflow.workflow.runner.step_2_create_tasklist")
+    @patch("specflow.workflow.runner.step_1_create_plan")
+    @patch("specflow.workflow.runner.get_current_commit")
+    @patch("specflow.workflow.runner._setup_branch")
+    @patch("specflow.workflow.runner.prompt_confirm")
+    @patch("specflow.workflow.runner.fetch_ticket_info")
+    @patch("specflow.workflow.runner.is_dirty")
+    @patch("specflow.workflow.runner.get_current_branch")
+    def test_skips_step_4_when_auto_update_docs_disabled(
+        self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_step4, mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that step_4_update_docs is NOT called when auto_update_docs=False."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+
+        run_spec_driven_workflow(
+            ticket=ticket,
+            config=mock_config,
+            auto_update_docs=False,
+        )
+
+        mock_step4.assert_not_called()
+
+    @patch("specflow.workflow.runner.AuggieClient")
+    @patch("specflow.workflow.runner._show_completion")
+    @patch("specflow.workflow.runner.step_4_update_docs")
+    @patch("specflow.workflow.runner.step_3_execute")
+    @patch("specflow.workflow.runner.step_2_create_tasklist")
+    @patch("specflow.workflow.runner.step_1_create_plan")
+    @patch("specflow.workflow.runner.get_current_commit")
+    @patch("specflow.workflow.runner._setup_branch")
+    @patch("specflow.workflow.runner.prompt_confirm")
+    @patch("specflow.workflow.runner.fetch_ticket_info")
+    @patch("specflow.workflow.runner.is_dirty")
+    @patch("specflow.workflow.runner.get_current_branch")
+    def test_step_4_failure_does_not_fail_workflow(
+        self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
+        mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
+        mock_step4, mock_completion, mock_auggie_client, ticket, mock_config
+    ):
+        """Test that step_4 failure does not fail the overall workflow."""
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_fetch.return_value = ticket
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+        # Step 4 result with error (non-blocking)
+        mock_step4.return_value = Step4Result(success=True, error_message="Agent failed")
+
+        result = run_spec_driven_workflow(
+            ticket=ticket,
+            config=mock_config,
+            auto_update_docs=True,
+        )
+
+        # Workflow should still succeed even if step 4 has issues
+        assert result is True
+        mock_completion.assert_called_once()
 

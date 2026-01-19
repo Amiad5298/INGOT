@@ -28,6 +28,7 @@ SPECFLOW_AGENT_PLANNER = "spec-planner"
 SPECFLOW_AGENT_TASKLIST = "spec-tasklist"
 SPECFLOW_AGENT_IMPLEMENTER = "spec-implementer"
 SPECFLOW_AGENT_REVIEWER = "spec-reviewer"
+SPECFLOW_AGENT_DOC_UPDATER = "spec-doc-updater"
 
 
 class AuggieRateLimitError(Exception):
@@ -560,5 +561,6 @@ __all__ = [
     "SPECFLOW_AGENT_TASKLIST",
     "SPECFLOW_AGENT_IMPLEMENTER",
     "SPECFLOW_AGENT_REVIEWER",
+    "SPECFLOW_AGENT_DOC_UPDATER",
 ]
 

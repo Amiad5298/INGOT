@@ -13,6 +13,7 @@ from specflow.workflow.git_utils import DirtyTreePolicy
 
 # Import subagent constants as single source of truth
 from specflow.integrations.auggie import (
+    SPECFLOW_AGENT_DOC_UPDATER,
     SPECFLOW_AGENT_IMPLEMENTER,
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
@@ -76,10 +77,11 @@ class WorkflowState:
         tasklist_file: Path to the task list file
         completed_tasks: List of completed task names
         checkpoint_commits: List of checkpoint commit hashes
-        current_step: Current workflow step (1, 2, or 3)
+        current_step: Current workflow step (1, 2, 3, or 4)
         retry_count: Number of retries for current task
         max_retries: Maximum retries before asking user
         subagent_names: Dictionary mapping role names to agent names
+            (planner, tasklist, implementer, reviewer, doc_updater)
     """
 
     # Ticket information
@@ -143,6 +145,7 @@ class WorkflowState:
         "tasklist": SPECFLOW_AGENT_TASKLIST,
         "implementer": SPECFLOW_AGENT_IMPLEMENTER,
         "reviewer": SPECFLOW_AGENT_REVIEWER,
+        "doc_updater": SPECFLOW_AGENT_DOC_UPDATER,
     })
 
     @property
