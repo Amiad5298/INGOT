@@ -293,6 +293,8 @@ class TestGetDiffFromBaseline:
     def test_returns_diff_result_with_content(self, mock_run):
         """Returns DiffResult with diff content from baseline commit."""
         # Mock all the subprocess calls that get_diff_from_baseline makes
+        # Order: committed diff, staged diff, unstaged diff, staged files, unstaged files,
+        #        committed files, staged stat, unstaged stat, committed stat, untracked
         mock_run.side_effect = [
             # 1. git diff --no-color --no-ext-diff base..HEAD (committed)
             MagicMock(returncode=0, stdout="diff --git a/file.py b/file.py\n+new line", stderr=""),
@@ -300,11 +302,19 @@ class TestGetDiffFromBaseline:
             MagicMock(returncode=0, stdout="", stderr=""),
             # 3. git diff --no-color --no-ext-diff (unstaged)
             MagicMock(returncode=0, stdout="", stderr=""),
-            # 4. git diff --name-status base..HEAD
+            # 4. git diff --name-only --cached (staged files)
+            MagicMock(returncode=0, stdout="", stderr=""),
+            # 5. git diff --name-only (unstaged files)
+            MagicMock(returncode=0, stdout="", stderr=""),
+            # 6. git diff --name-status base..HEAD (committed files)
             MagicMock(returncode=0, stdout="M\tfile.py", stderr=""),
-            # 5. git diff --stat base..HEAD
+            # 7. git diff --stat --cached (staged stat)
+            MagicMock(returncode=0, stdout="", stderr=""),
+            # 8. git diff --stat (unstaged stat)
+            MagicMock(returncode=0, stdout="", stderr=""),
+            # 9. git diff --stat base..HEAD (committed stat)
             MagicMock(returncode=0, stdout=" file.py | 1 +\n 1 file changed, 1 insertion(+)", stderr=""),
-            # 6. git ls-files --others --exclude-standard
+            # 10. git ls-files --others --exclude-standard
             MagicMock(returncode=0, stdout="", stderr=""),
         ]
 
@@ -323,8 +333,12 @@ class TestGetDiffFromBaseline:
             MagicMock(returncode=0, stdout="", stderr=""),  # committed
             MagicMock(returncode=0, stdout="", stderr=""),  # staged
             MagicMock(returncode=0, stdout="", stderr=""),  # unstaged
-            MagicMock(returncode=0, stdout="", stderr=""),  # name-status
-            MagicMock(returncode=0, stdout="", stderr=""),  # stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # committed files
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # committed stat
             MagicMock(returncode=0, stdout="", stderr=""),  # untracked
         ]
 
@@ -353,19 +367,22 @@ class TestGetDiffFromBaseline:
     @patch("specflow.integrations.git.subprocess.run")
     def test_empty_commit_falls_back_to_staged_unstaged_untracked(self, mock_run):
         """Falls back to staged+unstaged+untracked when base_commit is empty."""
+        # When no base commit: staged diff, unstaged diff, staged files, unstaged files,
+        #                      staged stat, unstaged stat, untracked
         mock_run.side_effect = [
-            # Skip committed (no base commit)
             # 1. git diff --cached (staged)
             MagicMock(returncode=0, stdout="staged diff content", stderr=""),
             # 2. git diff (unstaged)
             MagicMock(returncode=0, stdout="unstaged diff content", stderr=""),
-            # 3. git diff --name-only --cached (fallback changed files)
+            # 3. git diff --name-only --cached (staged files)
             MagicMock(returncode=0, stdout="staged_file.py", stderr=""),
-            # 4. git diff --name-only (fallback changed files)
+            # 4. git diff --name-only (unstaged files)
             MagicMock(returncode=0, stdout="unstaged_file.py", stderr=""),
-            # 5. git diff --stat HEAD (fallback diffstat)
-            MagicMock(returncode=0, stdout=" 2 files changed", stderr=""),
-            # 6. git ls-files --others --exclude-standard
+            # 5. git diff --stat --cached (staged stat)
+            MagicMock(returncode=0, stdout=" 1 file changed", stderr=""),
+            # 6. git diff --stat (unstaged stat)
+            MagicMock(returncode=0, stdout=" 1 file changed", stderr=""),
+            # 7. git ls-files --others --exclude-standard
             MagicMock(returncode=0, stdout="new_file.txt", stderr=""),
         ]
 
@@ -385,11 +402,12 @@ class TestGetDiffFromBaseline:
     def test_empty_commit_none_value_also_falls_back(self, mock_run):
         """None base_commit also falls back to staged+unstaged+untracked."""
         mock_run.side_effect = [
-            MagicMock(returncode=0, stdout="staged content", stderr=""),  # staged
-            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged
+            MagicMock(returncode=0, stdout="staged content", stderr=""),  # staged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged diff
             MagicMock(returncode=0, stdout="file.py", stderr=""),  # staged files
             MagicMock(returncode=0, stdout="", stderr=""),  # unstaged files
-            MagicMock(returncode=0, stdout="1 file changed", stderr=""),  # diffstat
+            MagicMock(returncode=0, stdout="1 file changed", stderr=""),  # staged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged stat
             MagicMock(returncode=0, stdout="", stderr=""),  # untracked
         ]
 
@@ -402,12 +420,16 @@ class TestGetDiffFromBaseline:
     def test_includes_all_change_types(self, mock_run):
         """Includes committed, staged, unstaged changes with section headers."""
         mock_run.side_effect = [
-            MagicMock(returncode=0, stdout="committed changes", stderr=""),
-            MagicMock(returncode=0, stdout="staged changes", stderr=""),
-            MagicMock(returncode=0, stdout="unstaged changes", stderr=""),
-            MagicMock(returncode=0, stdout="M\tfile.py", stderr=""),
-            MagicMock(returncode=0, stdout=" file.py | 1 +", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout="committed changes", stderr=""),  # committed diff
+            MagicMock(returncode=0, stdout="staged changes", stderr=""),  # staged diff
+            MagicMock(returncode=0, stdout="unstaged changes", stderr=""),  # unstaged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged files
+            MagicMock(returncode=0, stdout="M\tfile.py", stderr=""),  # committed files
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged stat
+            MagicMock(returncode=0, stdout=" file.py | 1 +", stderr=""),  # committed stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # untracked
         ]
 
         result = get_diff_from_baseline("abc123")
@@ -424,11 +446,15 @@ class TestGetDiffFromBaseline:
     def test_includes_untracked_files(self, mock_run):
         """Includes untracked files in diff output."""
         mock_run.side_effect = [
-            MagicMock(returncode=0, stdout="", stderr=""),  # committed
-            MagicMock(returncode=0, stdout="", stderr=""),  # staged
-            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged
-            MagicMock(returncode=0, stdout="", stderr=""),  # name-status
-            MagicMock(returncode=0, stdout="", stderr=""),  # stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # committed diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # committed files
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # committed stat
             MagicMock(returncode=0, stdout="new_file.txt", stderr=""),  # untracked
         ]
 
@@ -458,12 +484,16 @@ class TestGetDiffFromBaseline:
     def test_populates_diffstat(self, mock_run):
         """Populates diffstat summary in result."""
         mock_run.side_effect = [
-            MagicMock(returncode=0, stdout="diff content", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
-            MagicMock(returncode=0, stdout="M\tfile.py", stderr=""),
-            MagicMock(returncode=0, stdout=" file.py | 10 +++++++---\n 1 file changed, 7 insertions(+), 3 deletions(-)", stderr=""),
-            MagicMock(returncode=0, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout="diff content", stderr=""),  # committed diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged files
+            MagicMock(returncode=0, stdout="M\tfile.py", stderr=""),  # committed files
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged stat
+            MagicMock(returncode=0, stdout=" file.py | 10 +++++++---\n 1 file changed, 7 insertions(+), 3 deletions(-)", stderr=""),  # committed stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # untracked
         ]
 
         result = get_diff_from_baseline("abc123")

@@ -522,7 +522,40 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
         if unstaged_result.stdout.strip():
             diff_sections.append("=== Unstaged Changes ===\n" + unstaged_result.stdout)
 
-        # 4. Get changed files list (only if we have a base commit)
+        # 4. Get changed files list
+        # Always collect staged + unstaged files to capture working tree changes
+        # even when base_commit exists (base..HEAD may be empty if no commits yet)
+        staged_files_result = subprocess.run(
+            ["git", "diff", "--name-only", "--cached"],
+            capture_output=True,
+            text=True,
+        )
+        log_command("git diff --name-only --cached", staged_files_result.returncode)
+
+        unstaged_files_result = subprocess.run(
+            ["git", "diff", "--name-only"],
+            capture_output=True,
+            text=True,
+        )
+        log_command("git diff --name-only", unstaged_files_result.returncode)
+
+        if staged_files_result.returncode == 0:
+            changed_files.extend([
+                f for f in staged_files_result.stdout.strip().split("\n") if f.strip()
+            ])
+        else:
+            stderr = staged_files_result.stderr.strip() if staged_files_result.stderr else "unknown error"
+            print_warning(f"Failed to list staged files: {stderr}")
+
+        if unstaged_files_result.returncode == 0:
+            changed_files.extend([
+                f for f in unstaged_files_result.stdout.strip().split("\n") if f.strip()
+            ])
+        else:
+            stderr = unstaged_files_result.stderr.strip() if unstaged_files_result.stderr else "unknown error"
+            print_warning(f"Failed to list unstaged files: {stderr}")
+
+        # Also get committed changes if we have a base commit
         if not no_base_commit:
             name_status_result = subprocess.run(
                 ["git", "diff", "--name-status", f"{base_commit}..HEAD"],
@@ -534,77 +567,55 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
             if name_status_result.returncode != 0:
                 stderr = name_status_result.stderr.strip() if name_status_result.stderr else "unknown error"
                 print_warning(f"Failed to get changed files list: {stderr}")
-                # Non-fatal: continue with empty changed_files
+                # Non-fatal: continue with what we have
             elif name_status_result.stdout.strip():
-                changed_files = [
+                changed_files.extend([
                     line.split("\t", 1)[-1]
                     for line in name_status_result.stdout.strip().split("\n")
                     if line.strip()
-                ]
-        else:
-            # Fallback: collect changed files from staged + unstaged
-            staged_files_result = subprocess.run(
-                ["git", "diff", "--name-only", "--cached"],
-                capture_output=True,
-                text=True,
-            )
-            log_command("git diff --name-only --cached", staged_files_result.returncode)
-
-            unstaged_files_result = subprocess.run(
-                ["git", "diff", "--name-only"],
-                capture_output=True,
-                text=True,
-            )
-            log_command("git diff --name-only", unstaged_files_result.returncode)
-
-            if staged_files_result.returncode == 0:
-                changed_files.extend([
-                    f for f in staged_files_result.stdout.strip().split("\n") if f.strip()
                 ])
-            else:
-                stderr = staged_files_result.stderr.strip() if staged_files_result.stderr else "unknown error"
-                print_warning(f"Failed to list staged files: {stderr}")
 
-            if unstaged_files_result.returncode == 0:
-                changed_files.extend([
-                    f for f in unstaged_files_result.stdout.strip().split("\n") if f.strip()
-                ])
-            else:
-                stderr = unstaged_files_result.stderr.strip() if unstaged_files_result.stderr else "unknown error"
-                print_warning(f"Failed to list unstaged files: {stderr}")
+        changed_files = list(set(changed_files))  # Deduplicate
 
-            changed_files = list(set(changed_files))  # Deduplicate
+        # 5. Get diffstat summary
+        # Always include staged + unstaged diffstat
+        diffstat_parts = []
 
-        # 5. Get diffstat summary (only if we have a base commit)
+        # Staged diffstat
+        staged_stat_result = subprocess.run(
+            ["git", "diff", "--stat", "--cached"],
+            capture_output=True,
+            text=True,
+        )
+        log_command("git diff --stat --cached", staged_stat_result.returncode)
+
+        if staged_stat_result.returncode == 0 and staged_stat_result.stdout.strip():
+            diffstat_parts.append("Staged:\n" + staged_stat_result.stdout.strip())
+
+        # Unstaged diffstat
+        unstaged_stat_result = subprocess.run(
+            ["git", "diff", "--stat"],
+            capture_output=True,
+            text=True,
+        )
+        log_command("git diff --stat", unstaged_stat_result.returncode)
+
+        if unstaged_stat_result.returncode == 0 and unstaged_stat_result.stdout.strip():
+            diffstat_parts.append("Unstaged:\n" + unstaged_stat_result.stdout.strip())
+
+        # Committed diffstat (if we have a base commit)
         if not no_base_commit:
-            stat_result = subprocess.run(
+            committed_stat_result = subprocess.run(
                 ["git", "diff", "--stat", f"{base_commit}..HEAD"],
                 capture_output=True,
                 text=True,
             )
-            log_command(f"git diff --stat {base_commit}..HEAD", stat_result.returncode)
+            log_command(f"git diff --stat {base_commit}..HEAD", committed_stat_result.returncode)
 
-            if stat_result.returncode != 0:
-                stderr = stat_result.stderr.strip() if stat_result.stderr else "unknown error"
-                print_warning(f"Failed to get diffstat: {stderr}")
-                # Non-fatal: continue with empty diffstat
-            elif stat_result.stdout.strip():
-                diffstat = stat_result.stdout.strip()
-        else:
-            # Fallback: generate diffstat from staged + unstaged
-            combined_stat_result = subprocess.run(
-                ["git", "diff", "--stat", "HEAD"],
-                capture_output=True,
-                text=True,
-            )
-            log_command("git diff --stat HEAD", combined_stat_result.returncode)
+            if committed_stat_result.returncode == 0 and committed_stat_result.stdout.strip():
+                diffstat_parts.insert(0, "Committed:\n" + committed_stat_result.stdout.strip())
 
-            if combined_stat_result.returncode != 0:
-                stderr = combined_stat_result.stderr.strip() if combined_stat_result.stderr else "unknown error"
-                print_warning(f"Failed to get diffstat (fallback): {stderr}")
-                # Non-fatal: continue with empty diffstat
-            elif combined_stat_result.stdout.strip():
-                diffstat = combined_stat_result.stdout.strip()
+        diffstat = "\n\n".join(diffstat_parts)
 
         # 6. Get untracked files: git ls-files --others --exclude-standard
         untracked_result = subprocess.run(
@@ -651,10 +662,49 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
         )
 
 
+def _is_doc_file_for_diff(filepath: str) -> bool:
+    """Check if a file is a documentation file (for diff content inclusion).
+
+    This is a simple check to determine if we should include full content
+    for untracked files. Only documentation files get full content to
+    avoid leaking secrets or other sensitive non-doc files.
+
+    Args:
+        filepath: Path to the file.
+
+    Returns:
+        True if the file appears to be documentation.
+    """
+    path = Path(filepath)
+    doc_extensions = {".md", ".rst", ".txt", ".adoc", ".asciidoc"}
+    doc_directories = ("docs/", "doc/", "documentation/", "wiki/")
+    doc_names = {"README", "CHANGELOG", "CONTRIBUTING", "LICENSE", "AUTHORS", "HISTORY"}
+
+    # Check by extension
+    if path.suffix.lower() in doc_extensions:
+        return True
+
+    # Check if in a docs directory (but NOT .github/workflows or similar)
+    filepath_lower = filepath.lower().replace("\\", "/")
+    for pattern in doc_directories:
+        if pattern in filepath_lower:
+            return True
+
+    # Check by filename stem
+    if path.stem.upper() in doc_names:
+        return True
+
+    return False
+
+
 def _generate_untracked_file_diff(
     filepath: str, max_file_size: int = 50_000
 ) -> str:
     """Generate diff-like output for a single untracked file.
+
+    Only includes full content for documentation files to avoid
+    leaking secrets or sensitive information. Non-doc files get
+    a filename-only entry.
 
     Args:
         filepath: Path to the untracked file.
@@ -668,6 +718,15 @@ def _generate_untracked_file_diff(
     try:
         if not os.path.isfile(filepath):
             return f"diff --git a/{filepath} b/{filepath}\nnew file (not readable)\n"
+
+        # For non-doc files, only include filename (avoid secrets/noise)
+        if not _is_doc_file_for_diff(filepath):
+            file_size = os.path.getsize(filepath)
+            return (
+                f"diff --git a/{filepath} b/{filepath}\n"
+                f"new file mode 100644\n"
+                f"[NEW FILE: {filepath} ({file_size} bytes) - content omitted (non-doc)]\n"
+            )
 
         file_size = os.path.getsize(filepath)
 
@@ -691,7 +750,7 @@ def _generate_untracked_file_diff(
         except (OSError, IOError):
             pass
 
-        # Read and format text file
+        # Read and format text file (doc files only)
         with open(filepath, encoding="utf-8", errors="replace") as f:
             content = f.read()
 

@@ -12,6 +12,7 @@ from specflow.workflow.runner import (
     _offer_cleanup,
 )
 from specflow.workflow.state import WorkflowState
+from specflow.workflow.step4_update_docs import Step4Result
 from specflow.integrations.jira import JiraTicket
 from specflow.utils.errors import SpecError, UserCancelledError
 
@@ -1227,7 +1228,7 @@ class TestRunSpecDrivenWorkflowStep4:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
-        mock_step4.return_value = True
+        mock_step4.return_value = Step4Result(success=True)
 
         run_spec_driven_workflow(
             ticket=ticket,
@@ -1300,7 +1301,8 @@ class TestRunSpecDrivenWorkflowStep4:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
-        mock_step4.return_value = False  # Step 4 fails
+        # Step 4 result with error (non-blocking)
+        mock_step4.return_value = Step4Result(success=True, error_message="Agent failed")
 
         result = run_spec_driven_workflow(
             ticket=ticket,
@@ -1308,7 +1310,7 @@ class TestRunSpecDrivenWorkflowStep4:
             auto_update_docs=True,
         )
 
-        # Workflow should still succeed even if step 4 fails
+        # Workflow should still succeed even if step 4 has issues
         assert result is True
         mock_completion.assert_called_once()
 

@@ -47,7 +47,25 @@ DOC_PATH_PATTERNS = (
     "doc/",
     "documentation/",
     "wiki/",
-    ".github/",
+)
+
+# Specific .github/ paths that ARE documentation (not workflows, actions, etc.)
+GITHUB_DOC_PATTERNS = (
+    ".github/readme",
+    ".github/contributing",
+    ".github/code_of_conduct",
+    ".github/security",
+    ".github/support",
+    ".github/funding",
+    ".github/issue_template",
+    ".github/pull_request_template",
+)
+
+# .github/ paths that are NOT documentation (code/config)
+GITHUB_NON_DOC_PATTERNS = (
+    ".github/workflows/",
+    ".github/actions/",
+    ".github/scripts/",
 )
 
 # Files that are always considered documentation
@@ -74,16 +92,33 @@ def is_doc_file(filepath: str) -> bool:
         True if the file is a documentation file
     """
     path = Path(filepath)
+    filepath_lower = filepath.lower().replace("\\", "/")
 
-    # Check by extension
+    # Check by extension first
     if path.suffix.lower() in DOC_FILE_EXTENSIONS:
+        # Even with doc extension, exclude .github/workflows/*.md etc.
+        for non_doc_pattern in GITHUB_NON_DOC_PATTERNS:
+            if non_doc_pattern in filepath_lower:
+                return False
         return True
 
-    # Check if in a docs directory
-    filepath_lower = filepath.lower().replace("\\", "/")
+    # Check if in a standard docs directory
     for pattern in DOC_PATH_PATTERNS:
         if pattern in filepath_lower:
             return True
+
+    # Special handling for .github/ - only allow specific doc patterns
+    if ".github/" in filepath_lower:
+        # Check if it's explicitly a non-doc path
+        for non_doc_pattern in GITHUB_NON_DOC_PATTERNS:
+            if non_doc_pattern in filepath_lower:
+                return False
+        # Check if it matches a known doc pattern
+        for doc_pattern in GITHUB_DOC_PATTERNS:
+            if doc_pattern in filepath_lower:
+                return True
+        # Default: files directly in .github/ with doc names might be docs
+        # but don't treat arbitrary .github files as docs
 
     # Check by filename (without extension)
     stem = path.stem.upper()
@@ -95,62 +130,95 @@ def is_doc_file(filepath: str) -> bool:
 
 @dataclass
 class FileSnapshot:
-    """Snapshot of a file's state for restoration."""
+    """Snapshot of a file's state for restoration.
+
+    Attributes:
+        path: File path relative to repo root.
+        was_untracked: True if file was untracked (status code '??') at snapshot time.
+        was_dirty: True if file had pre-agent modifications (tracked but modified).
+        content: Byte content if file existed and was dirty pre-agent.
+    """
 
     path: str
-    existed: bool
+    was_untracked: bool = False
+    was_dirty: bool = False
     content: Optional[bytes] = None
 
     @classmethod
-    def capture(cls, filepath: str) -> "FileSnapshot":
-        """Capture the current state of a file."""
-        path = Path(filepath)
-        if path.exists() and path.is_file():
-            try:
-                content = path.read_bytes()
-                return cls(path=filepath, existed=True, content=content)
-            except (OSError, IOError):
-                return cls(path=filepath, existed=True, content=None)
-        return cls(path=filepath, existed=False, content=None)
+    def capture(cls, filepath: str, status_code: str) -> "FileSnapshot":
+        """Capture the current state of a file based on git status code.
 
-    def restore(self) -> bool:
-        """Restore file to its captured state.
+        Args:
+            filepath: Path to the file.
+            status_code: Two-character git status code (e.g., '??', 'M ', ' M', 'MM').
 
         Returns:
-            True if restoration was performed
+            FileSnapshot with appropriate state captured.
         """
-        path = Path(self.path)
-        if self.existed and self.content is not None:
-            # Restore original content
-            try:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(self.content)
-                return True
-            except (OSError, IOError):
-                return False
-        elif not self.existed:
-            # File didn't exist before, remove it
-            try:
-                if path.exists():
-                    path.unlink()
-                return True
-            except (OSError, IOError):
-                return False
-        return False
+        is_untracked = status_code == "??"
+        # File is dirty if it has any tracked modification (not untracked)
+        is_dirty = not is_untracked and status_code.strip() != ""
+
+        content = None
+        if is_dirty:
+            # Only capture content for files that were already dirty pre-agent
+            # so we can restore them to their pre-agent dirty state
+            path = Path(filepath)
+            if path.exists() and path.is_file():
+                try:
+                    content = path.read_bytes()
+                except (OSError, IOError):
+                    pass
+
+        return cls(
+            path=filepath,
+            was_untracked=is_untracked,
+            was_dirty=is_dirty,
+            content=content,
+        )
+
+
+def _git_restore_file(filepath: str) -> bool:
+    """Restore a tracked file using git restore.
+
+    Uses 'git restore --worktree --staged -- <file>' to fully restore
+    a tracked file to its committed state.
+
+    Args:
+        filepath: Path to the file to restore.
+
+    Returns:
+        True if restoration succeeded.
+    """
+    result = subprocess.run(
+        ["git", "restore", "--worktree", "--staged", "--", filepath],
+        capture_output=True,
+    )
+    return result.returncode == 0
 
 
 @dataclass
 class NonDocSnapshot:
-    """Snapshot of all non-doc files for enforcement."""
+    """Snapshot of all non-doc files for enforcement.
+
+    This class tracks the pre-agent state of non-documentation files so that
+    any changes made by the doc-updater agent can be detected and reverted.
+
+    Key behaviors:
+    - For untracked files ('??'): No content captured; revert by deleting.
+    - For tracked dirty files: Content captured; revert by writing back content.
+    - For tracked clean files that become dirty: Use git restore to revert.
+    """
 
     snapshots: dict[str, FileSnapshot] = field(default_factory=dict)
 
     @classmethod
     def capture_non_doc_state(cls) -> "NonDocSnapshot":
-        """Capture state of all non-doc tracked and modified files."""
+        """Capture state of all non-doc files with changes (tracked or untracked)."""
         snapshot = cls()
 
-        # Get all tracked files that are modified
+        # Use git status --porcelain for parseable output
+        # Format: XY filename (where XY is 2-char status code)
         result = subprocess.run(
             ["git", "status", "--porcelain", "-uall"],
             capture_output=True,
@@ -166,7 +234,7 @@ class NonDocSnapshot:
 
             # Parse porcelain format: XY filename
             # X = index status, Y = worktree status
-            status = line[:2]
+            status_code = line[:2]
             filepath = line[3:].strip()
 
             # Handle renamed files (format: old -> new)
@@ -177,28 +245,41 @@ class NonDocSnapshot:
             if is_doc_file(filepath):
                 continue
 
-            snapshot.snapshots[filepath] = FileSnapshot.capture(filepath)
+            snapshot.snapshots[filepath] = FileSnapshot.capture(filepath, status_code)
 
         return snapshot
 
     def detect_changes(self) -> list[str]:
         """Detect which non-doc files have changed since snapshot.
 
+        This detects:
+        1. Pre-dirty files that were modified further.
+        2. Previously clean tracked files that are now dirty.
+        3. New untracked files created by the agent.
+
         Returns:
-            List of file paths that were modified
+            List of file paths that were modified.
         """
         changed = []
 
-        # Check existing snapshots for modifications
+        # Check existing pre-dirty snapshots for further modifications
         for filepath, old_snapshot in self.snapshots.items():
-            current = FileSnapshot.capture(filepath)
+            if old_snapshot.was_dirty and old_snapshot.content is not None:
+                # Compare content to detect changes to pre-dirty files
+                path = Path(filepath)
+                if path.exists() and path.is_file():
+                    try:
+                        current_content = path.read_bytes()
+                        if current_content != old_snapshot.content:
+                            changed.append(filepath)
+                    except (OSError, IOError):
+                        # Can't read file - assume changed
+                        changed.append(filepath)
+                else:
+                    # File was deleted
+                    changed.append(filepath)
 
-            if old_snapshot.existed != current.existed:
-                changed.append(filepath)
-            elif old_snapshot.content != current.content:
-                changed.append(filepath)
-
-        # Check for new non-doc files
+        # Get current git status to detect new changes
         result = subprocess.run(
             ["git", "status", "--porcelain", "-uall"],
             capture_output=True,
@@ -210,42 +291,76 @@ class NonDocSnapshot:
                 if not line.strip():
                     continue
 
+                status_code = line[:2]
                 filepath = line[3:].strip()
                 if " -> " in filepath:
                     filepath = filepath.split(" -> ")[-1]
 
-                if not is_doc_file(filepath) and filepath not in self.snapshots:
-                    # New non-doc file created by agent
-                    changed.append(filepath)
+                # Skip doc files
+                if is_doc_file(filepath):
+                    continue
+
+                if filepath not in self.snapshots:
+                    # File not in our snapshot - agent created/modified it
+                    is_untracked = status_code == "??"
+                    # Record it for revert handling
                     self.snapshots[filepath] = FileSnapshot(
-                        path=filepath, existed=False
+                        path=filepath,
+                        was_untracked=is_untracked,
+                        was_dirty=False,  # It wasn't dirty before agent ran
+                        content=None,
                     )
+                    changed.append(filepath)
 
         return list(set(changed))
 
     def revert_changes(self, filepaths: list[str]) -> list[str]:
         """Revert specified files to their snapshot state.
 
+        Revert strategy:
+        - Pre-dirty files: Restore saved content.
+        - Pre-untracked files: Delete them (agent shouldn't modify untracked).
+        - Previously clean tracked files: Use git restore.
+
         Args:
-            filepaths: List of files to revert
+            filepaths: List of files to revert.
 
         Returns:
-            List of files that were successfully reverted
+            List of files that were successfully reverted.
         """
         reverted = []
         for filepath in filepaths:
-            if filepath in self.snapshots:
-                if self.snapshots[filepath].restore():
+            snapshot = self.snapshots.get(filepath)
+
+            if snapshot is None:
+                # No snapshot - shouldn't happen, but try git restore
+                if _git_restore_file(filepath):
                     reverted.append(filepath)
-            else:
-                # File was created and doesn't have a snapshot - delete it
-                path = Path(filepath)
+                continue
+
+            if snapshot.was_dirty and snapshot.content is not None:
+                # Restore to pre-agent dirty state by writing back content
                 try:
+                    path = Path(filepath)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(snapshot.content)
+                    reverted.append(filepath)
+                except (OSError, IOError):
+                    pass
+            elif snapshot.was_untracked:
+                # File was untracked pre-agent - delete it if it exists
+                try:
+                    path = Path(filepath)
                     if path.exists():
                         path.unlink()
                         reverted.append(filepath)
                 except (OSError, IOError):
                     pass
+            else:
+                # File was tracked and clean pre-agent - use git restore
+                if _git_restore_file(filepath):
+                    reverted.append(filepath)
+
         return reverted
 
 
