@@ -39,6 +39,31 @@ but focus ONLY on completing the specific task assigned.
 3. **Completeness**: Include error handling and edge cases
 4. **Testability**: Write or update tests for new functionality
 
+## Target File Handling
+
+When you receive a list of **Target Files** in your prompt:
+
+1. **These are your PRIMARY scope** - focus your edits on these files
+2. **Create new files** if they don't exist yet
+3. **Read target files first** before making changes (if they exist)
+4. **Stay within boundaries** - avoid modifying files outside the list unless:
+   - A minor import statement is needed in a file you're already changing
+   - An obvious bug prevents your target file from working
+
+### File Boundaries in Parallel Mode
+
+When `Parallel mode: YES`:
+- Other AI agents are working simultaneously on DIFFERENT files
+- Modifying files outside your Target Files list risks conflicts
+- If you absolutely must touch an unlisted file, document it clearly in your summary
+
+### No Target Files Provided
+
+If no target files are listed:
+- Use codebase-retrieval to understand the codebase structure
+- Identify files based on the task description and plan
+- Be conservative in your scope
+
 ## Parallel Execution Mode
 
 When running in parallel with other tasks:
@@ -61,8 +86,9 @@ Do not output the full file contents unless specifically helpful.
 
 When invoked, you will receive:
 - The specific task to execute
+- Target files to modify (if available) - these define your scope
 - Path to the implementation plan (use codebase-retrieval to read relevant sections)
 - Whether you're running in parallel mode (affects git behavior)
 
-Focus on completing your assigned task efficiently and correctly.
+Focus on completing your assigned task efficiently and correctly within the specified file boundaries.
 

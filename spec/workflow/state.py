@@ -85,6 +85,9 @@ class WorkflowState:
     # Ticket information
     ticket: JiraTicket
 
+    # Repository root for path security validation (jail check)
+    repo_root: Path = field(default_factory=lambda: Path.cwd().resolve())
+
     # Git state
     branch_name: str = ""
     base_commit: str = ""

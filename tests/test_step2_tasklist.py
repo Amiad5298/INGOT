@@ -11,10 +11,12 @@ from spec.workflow.step2_tasklist import (
     _display_tasklist,
     _edit_tasklist,
     _create_default_tasklist,
+    _validate_file_disjointness,
+    StrictFileScopingError,
 )
 
 from spec.workflow.state import WorkflowState
-from spec.workflow.tasks import parse_task_list
+from spec.workflow.tasks import parse_task_list, Task, TaskCategory, TaskStatus, PathSecurityError
 from spec.integrations.jira import JiraTicket
 from spec.ui.menus import TaskReviewChoice
 
@@ -598,4 +600,264 @@ class TestGenerateTasklistRetry:
         result = _generate_tasklist(state, plan_path, tasklist_path)
 
         assert result is False
+
+
+# =============================================================================
+# Tests for _validate_file_disjointness (Predictive Context)
+# =============================================================================
+
+
+class TestValidateFileDisjointness:
+    """Tests for _validate_file_disjointness function.
+
+    SECURITY: All tests now require repo_root parameter (no default).
+    STRICT MODE: Empty target_files on INDEPENDENT tasks raises exception.
+    """
+
+    def test_returns_empty_for_disjoint_files(self, tmp_path):
+        """Returns empty list when independent tasks have disjoint files."""
+        tasks = [
+            Task(
+                name="Create login endpoint",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/api/login.py", "tests/api/test_login.py"],
+            ),
+            Task(
+                name="Create register endpoint",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/api/register.py", "tests/api/test_register.py"],
+            ),
+        ]
+
+        errors = _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        assert errors == []
+
+    def test_detects_file_collision(self, tmp_path):
+        """Detects when two independent tasks target the same file."""
+        tasks = [
+            Task(
+                name="Add login feature",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/api/auth.py", "tests/api/test_auth.py"],
+            ),
+            Task(
+                name="Add logout feature",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/api/auth.py", "tests/api/test_logout.py"],
+            ),
+        ]
+
+        errors = _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        assert len(errors) == 1
+        assert "src/api/auth.py" in errors[0]
+        assert "Add login feature" in errors[0]
+        assert "Add logout feature" in errors[0]
+
+    def test_ignores_fundamental_tasks(self, tmp_path):
+        """Ignores fundamental tasks in collision detection."""
+        tasks = [
+            Task(
+                name="Setup database schema",
+                category=TaskCategory.FUNDAMENTAL,
+                target_files=["src/db/schema.py"],
+            ),
+            Task(
+                name="Add user model",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/db/schema.py", "src/models/user.py"],
+            ),
+        ]
+
+        errors = _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        # No error because fundamental tasks are not checked for collisions
+        assert errors == []
+
+    def test_raises_on_empty_target_files_strict_mode(self, tmp_path):
+        """STRICT MODE: Raises StrictFileScopingError on INDEPENDENT tasks without target_files."""
+        tasks = [
+            Task(
+                name="Task without files",
+                category=TaskCategory.INDEPENDENT,
+                target_files=[],
+            ),
+            Task(
+                name="Task with files",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/file.py"],
+            ),
+        ]
+
+        with pytest.raises(StrictFileScopingError) as exc_info:
+            _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        assert "Task without files" in str(exc_info.value)
+        assert "Strict file scoping required" in str(exc_info.value)
+        assert exc_info.value.task_name == "Task without files"
+
+    def test_detects_multiple_collisions(self, tmp_path):
+        """Detects multiple file collisions."""
+        tasks = [
+            Task(
+                name="Task A",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/shared.py", "src/utils.py"],
+            ),
+            Task(
+                name="Task B",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/shared.py"],
+            ),
+            Task(
+                name="Task C",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/utils.py"],
+            ),
+        ]
+
+        errors = _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        assert len(errors) == 2
+        # Check both collisions are reported
+        error_text = " ".join(errors)
+        assert "src/shared.py" in error_text
+        assert "src/utils.py" in error_text
+
+    def test_returns_empty_for_no_independent_tasks(self, tmp_path):
+        """Returns empty list when there are no independent tasks."""
+        tasks = [
+            Task(
+                name="Setup task",
+                category=TaskCategory.FUNDAMENTAL,
+                target_files=["src/setup.py"],
+            ),
+            Task(
+                name="Config task",
+                category=TaskCategory.FUNDAMENTAL,
+                target_files=["src/config.py"],
+            ),
+        ]
+
+        errors = _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        assert errors == []
+
+    def test_raises_on_path_traversal_attack(self, tmp_path):
+        """SECURITY: Raises PathSecurityError on directory traversal attempt."""
+        tasks = [
+            Task(
+                name="Malicious task",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["../outside_repo.py", "src/inside.py"],
+            ),
+        ]
+
+        with pytest.raises(PathSecurityError) as exc_info:
+            _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        assert "outside_repo.py" in str(exc_info.value)
+        assert "escapes repository root" in str(exc_info.value)
+
+    def test_detects_collision_with_path_normalization(self, tmp_path):
+        """SECURITY: Detects collision between ./src/foo.py and src/foo.py (normalization)."""
+        tasks = [
+            Task(
+                name="Task A using ./src",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["./src/foo.py"],
+            ),
+            Task(
+                name="Task B using src",
+                category=TaskCategory.INDEPENDENT,
+                target_files=["src/foo.py"],
+            ),
+        ]
+
+        errors = _validate_file_disjointness(tasks, repo_root=tmp_path)
+
+        # Both paths normalize to src/foo.py, so there should be a collision
+        assert len(errors) == 1
+        assert "src/foo.py" in errors[0]
+        assert "Task A using ./src" in errors[0]
+        assert "Task B using src" in errors[0]
+
+
+# =============================================================================
+# Tests for _extract_tasklist_from_output with files metadata
+# =============================================================================
+
+
+class TestExtractTasklistWithFilesMetadata:
+    """Tests for _extract_tasklist_from_output preserving files metadata."""
+
+    def test_preserves_files_metadata(self):
+        """Preserves <!-- files: ... --> metadata comments."""
+        output = """Here is the task list:
+
+## Fundamental Tasks
+<!-- category: fundamental, order: 1 -->
+<!-- files: src/db/schema.py -->
+- [ ] Create database schema
+
+## Independent Tasks
+<!-- category: independent, group: api -->
+<!-- files: src/api/login.py, tests/api/test_login.py -->
+- [ ] Create login endpoint
+"""
+        result = _extract_tasklist_from_output(output, "TEST-123")
+
+        assert result is not None
+        assert "<!-- files: src/db/schema.py -->" in result
+        assert "<!-- files: src/api/login.py, tests/api/test_login.py -->" in result
+
+    def test_preserves_both_category_and_files_metadata(self):
+        """Preserves both category and files metadata on separate lines."""
+        output = """<!-- category: fundamental, order: 1 -->
+<!-- files: src/models/user.py -->
+- [ ] Create user model
+"""
+        result = _extract_tasklist_from_output(output, "TEST-123")
+
+        assert result is not None
+        assert "<!-- category: fundamental, order: 1 -->" in result
+        assert "<!-- files: src/models/user.py -->" in result
+        assert "- [ ] Create user model" in result
+
+    def test_preserves_files_metadata_order(self):
+        """Preserves order of metadata comments before task."""
+        output = """<!-- category: independent, group: utils -->
+<!-- files: src/utils/helpers.py -->
+- [ ] Create helper utilities
+"""
+        result = _extract_tasklist_from_output(output, "TEST-123")
+
+        assert result is not None
+        lines = result.splitlines()
+        # Find the indices
+        category_idx = next(i for i, l in enumerate(lines) if "category:" in l)
+        files_idx = next(i for i, l in enumerate(lines) if "files:" in l)
+        task_idx = next(i for i, l in enumerate(lines) if "Create helper" in l)
+
+        # Category should come before files, files before task
+        assert category_idx < files_idx < task_idx
+
+    def test_handles_multiple_tasks_with_files(self):
+        """Handles multiple tasks each with their own files metadata."""
+        output = """<!-- category: independent, group: api -->
+<!-- files: src/api/login.py -->
+- [ ] Create login endpoint
+
+<!-- category: independent, group: api -->
+<!-- files: src/api/register.py -->
+- [ ] Create register endpoint
+"""
+        result = _extract_tasklist_from_output(output, "TEST-123")
+
+        assert result is not None
+        assert "<!-- files: src/api/login.py -->" in result
+        assert "<!-- files: src/api/register.py -->" in result
+        assert "- [ ] Create login endpoint" in result
+        assert "- [ ] Create register endpoint" in result
 

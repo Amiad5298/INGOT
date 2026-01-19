@@ -64,23 +64,56 @@ Example:
 
 **IMPORTANT:** Output ONLY the task list as plain markdown text. Do NOT use any task management tools.
 
+For each task, include a `files:` metadata comment listing the files that task should create or modify.
+
 ```markdown
 # Task List: [TICKET-ID]
 
 ## Fundamental Tasks (Sequential)
 <!-- category: fundamental, order: 1 -->
-- [ ] [First foundational task]
+<!-- files: src/models/user.py, src/db/migrations/001_users.py -->
+- [ ] Create User model and database migration
 
 <!-- category: fundamental, order: 2 -->
-- [ ] [Second foundational task that depends on first]
+<!-- files: src/services/auth_service.py, src/utils/password.py -->
+- [ ] Implement authentication service with password hashing
 
 ## Independent Tasks (Parallel)
-<!-- category: independent, group: ui -->
-- [ ] [UI component task]
+<!-- category: independent, group: api -->
+<!-- files: src/api/endpoints/login.py, tests/api/test_login.py -->
+- [ ] Create login API endpoint with tests
 
-<!-- category: independent, group: utils -->
-- [ ] [Utility task]
+<!-- category: independent, group: api -->
+<!-- files: src/api/endpoints/register.py, tests/api/test_register.py -->
+- [ ] Create registration API endpoint with tests
 ```
+
+## File Prediction Requirements
+
+For each task, you MUST include a `<!-- files: ... -->` comment listing ALL files the task will create or modify.
+
+### Guidelines for File Prediction
+
+1. **Be Specific**: Use full relative paths from repository root
+2. **Include Tests**: If the task includes testing, list test files
+3. **New Files**: Include files that will be created (they don't need to exist yet)
+4. **Shared Files**: If a file is shared between tasks, use the Setup Task Pattern
+
+### How to Predict Files
+
+1. Read the implementation plan carefully for file references
+2. Infer files from the task description:
+   - "Add user model" → `src/models/user.py`
+   - "Create login endpoint" → `src/api/login.py`
+3. Follow project conventions visible in the plan
+4. When uncertain, err on the side of inclusion
+
+### Validation Rules
+
+- Independent (parallel) tasks MUST have disjoint file sets
+- If two independent tasks list the same file, you MUST:
+  1. Extract shared file edits to a FUNDAMENTAL setup task, OR
+  2. Merge the tasks into one
 
 ## Categorization Heuristics
 

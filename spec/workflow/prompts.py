@@ -21,13 +21,15 @@ def build_task_prompt(task: Task, plan_path: Path, *, is_parallel: bool = False)
     - Let the agent retrieve only relevant sections via codebase-retrieval
     - Avoid prompt bloat in parallel execution scenarios
 
+    Now includes explicit target files for predictive context.
+
     Args:
         task: Task to execute
         plan_path: Path to the implementation plan file
         is_parallel: Whether this task runs in parallel with others
 
     Returns:
-        Minimal prompt string with task context
+        Minimal prompt string with task context and file targeting
     """
     parallel_mode = "YES" if is_parallel else "NO"
 
@@ -35,6 +37,22 @@ def build_task_prompt(task: Task, plan_path: Path, *, is_parallel: bool = False)
     prompt = f"""Execute task: {task.name}
 
 Parallel mode: {parallel_mode}"""
+
+    # Add target files if available (predictive context)
+    if task.target_files:
+        files_list = "\n".join(f"  - {f}" for f in task.target_files)
+        prompt += f"""
+
+Target Files (focus your changes on these files):
+{files_list}
+
+IMPORTANT: Limit your modifications to the target files listed above.
+If you believe additional files need changes, complete the listed files first,
+then briefly note what else might need updating."""
+    else:
+        prompt += """
+
+No specific target files provided. Use codebase-retrieval to identify relevant files."""
 
     # Add plan reference if file exists
     if plan_path.exists():
