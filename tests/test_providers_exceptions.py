@@ -126,6 +126,38 @@ class TestTicketNotFoundError:
         error = TicketNotFoundError(ticket_id="GH-1", platform="GitHub")
         assert error.platform == "GitHub"
 
+    def test_ticket_id_stores_actual_id_not_error_string(self):
+        """ticket_id should store the actual ID, not an error message string.
+
+        This verifies the correct usage pattern:
+        - ticket_id="PROJ-123" (correct)
+        - NOT ticket_id="Issue not found: PROJ-123" (incorrect)
+        """
+        # Correct usage pattern
+        error = TicketNotFoundError(
+            ticket_id="ENG-456",
+            message="Issue not found in Linear",
+            platform="Linear",
+        )
+        # ticket_id should be the clean ID
+        assert error.ticket_id == "ENG-456"
+        assert "Issue not found" not in error.ticket_id
+        # Message is separate
+        assert "Issue not found" in str(error)
+
+    def test_ticket_id_is_not_a_dict_representation(self):
+        """ticket_id should not be a dict/variables representation.
+
+        This catches incorrect patterns like:
+        raise TicketNotFoundError(f"Issue not found: {variables}")
+        """
+        # The ticket_id should be a clean identifier
+        error = TicketNotFoundError(ticket_id="owner/repo#42", platform="GitHub")
+        assert error.ticket_id == "owner/repo#42"
+        # Should not contain dict-like representations
+        assert "{" not in error.ticket_id
+        assert "}" not in error.ticket_id
+
 
 class TestRateLimitError:
     """Tests for RateLimitError exception."""

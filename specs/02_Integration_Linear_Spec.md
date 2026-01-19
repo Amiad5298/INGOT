@@ -355,6 +355,7 @@ from specflow.integrations.providers.registry import ProviderRegistry
 from specflow.integrations.providers.cache import cached_fetch
 from specflow.integrations.providers.exceptions import (
     AuthenticationError,
+    IssueTrackerError,
     TicketNotFoundError,
     RateLimitError,
 )
@@ -495,8 +496,16 @@ class LinearProvider(IssueTrackerProvider):
         if "errors" in result:
             error_msg = result["errors"][0].get("message", "Unknown GraphQL error")
             if "not found" in error_msg.lower():
-                raise TicketNotFoundError(f"Issue not found: {variables}")
-            raise Exception(f"Linear API error: {error_msg}")
+                ticket_id = variables.get("id", str(variables))
+                raise TicketNotFoundError(
+                    ticket_id=ticket_id,
+                    message=f"Issue not found: {error_msg}",
+                    platform=self.name,
+                )
+            raise IssueTrackerError(
+                message=f"Linear API error: {error_msg}",
+                platform=self.name,
+            )
 
         return result["data"]
 
@@ -507,7 +516,10 @@ class LinearProvider(IssueTrackerProvider):
 
         issue = data.get("issue")
         if not issue:
-            raise TicketNotFoundError(f"Issue not found: {ticket_id}")
+            raise TicketNotFoundError(
+                ticket_id=ticket_id,
+                platform=self.name,
+            )
 
         return self._map_to_generic(issue)
 

@@ -475,7 +475,10 @@ class AzureDevOpsProvider(IssueTrackerProvider):
         response = session.get(url, params={"api-version": self.API_VERSION})
 
         if response.status_code == 404:
-            raise TicketNotFoundError(f"Work item not found: {ticket_id}")
+            raise TicketNotFoundError(
+                ticket_id=ticket_id,
+                platform=self.name,
+            )
         elif response.status_code == 401:
             raise AuthenticationError("Azure DevOps authentication failed")
         elif response.status_code == 403:

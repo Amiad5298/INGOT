@@ -418,6 +418,7 @@ from specflow.integrations.providers.registry import ProviderRegistry
 from specflow.integrations.providers.cache import cached_fetch
 from specflow.integrations.providers.exceptions import (
     AuthenticationError,
+    IssueTrackerError,
     TicketNotFoundError,
     RateLimitError,
 )
@@ -557,7 +558,10 @@ class MondayProvider(IssueTrackerProvider):
         result = response.json()
         if "errors" in result:
             error_msg = result["errors"][0].get("message", "Unknown error")
-            raise Exception(f"Monday.com API error: {error_msg}")
+            raise IssueTrackerError(
+                message=f"Monday.com API error: {error_msg}",
+                platform=self.name,
+            )
 
         return result.get("data", {})
 
@@ -575,7 +579,10 @@ class MondayProvider(IssueTrackerProvider):
 
         items = data.get("items", [])
         if not items:
-            raise TicketNotFoundError(f"Item not found: {ticket_id}")
+            raise TicketNotFoundError(
+                ticket_id=ticket_id,
+                platform=self.name,
+            )
 
         item = items[0]
         return self._map_to_generic(item)

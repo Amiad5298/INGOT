@@ -566,21 +566,25 @@ class ProviderRegistry:
     def register(cls, provider_class: Type[IssueTrackerProvider]) -> Type[IssueTrackerProvider]:
         """Register a provider class (can be used as decorator).
 
+        Providers MUST declare a class attribute `PLATFORM: Platform` to be
+        registered. This avoids instantiation side-effects during registration.
+
         Args:
             provider_class: The provider class to register
 
         Returns:
             The same class (for decorator use)
-        """
-        # Create temporary instance to get platform
-        temp = provider_class.__new__(provider_class)
-        if hasattr(provider_class, 'PLATFORM'):
-            platform = provider_class.PLATFORM
-        else:
-            # Fallback: instantiate to get platform property
-            temp.__init__()
-            platform = temp.platform
 
+        Raises:
+            TypeError: If provider_class does not declare PLATFORM class attribute
+        """
+        if not hasattr(provider_class, 'PLATFORM'):
+            raise TypeError(
+                f"Provider class {provider_class.__name__} must declare a "
+                f"PLATFORM class attribute (e.g., PLATFORM = Platform.JIRA)"
+            )
+
+        platform = provider_class.PLATFORM
         cls._providers[platform] = provider_class
         return provider_class
 

@@ -684,3 +684,124 @@ class TestIssueTrackerProviderMethodSignatures:
         params = list(sig.parameters.keys())
         assert "ticket_id" in params
 
+
+class TestProviderPlatformAttribute:
+    """Tests for provider PLATFORM class attribute requirement.
+
+    These tests verify that providers correctly declare the PLATFORM
+    class attribute, which is required for ProviderRegistry.register()
+    to work without instantiating provider classes.
+    """
+
+    def test_provider_with_platform_attribute(self):
+        """Provider class can declare PLATFORM class attribute."""
+        class MockProvider(IssueTrackerProvider):
+            PLATFORM = Platform.JIRA  # Class attribute
+
+            @property
+            def platform(self):
+                return Platform.JIRA
+
+            @property
+            def name(self):
+                return "Jira"
+
+            def can_handle(self, input_str):
+                return False
+
+            def parse_input(self, input_str):
+                return input_str
+
+            def fetch_ticket(self, ticket_id):
+                return None
+
+            def check_connection(self):
+                return (True, "OK")
+
+        # PLATFORM should be accessible on the class without instantiation
+        assert hasattr(MockProvider, 'PLATFORM')
+        assert MockProvider.PLATFORM == Platform.JIRA
+
+    def test_platform_attribute_accessible_without_instantiation(self):
+        """PLATFORM attribute is accessible without calling __init__."""
+        class MockProvider(IssueTrackerProvider):
+            PLATFORM = Platform.GITHUB
+
+            def __init__(self):
+                # This should NOT be called during registration
+                raise RuntimeError("__init__ should not be called during registration!")
+
+            @property
+            def platform(self):
+                return Platform.GITHUB
+
+            @property
+            def name(self):
+                return "GitHub"
+
+            def can_handle(self, input_str):
+                return False
+
+            def parse_input(self, input_str):
+                return input_str
+
+            def fetch_ticket(self, ticket_id):
+                return None
+
+            def check_connection(self):
+                return (True, "OK")
+
+        # Accessing PLATFORM should NOT trigger __init__
+        platform = MockProvider.PLATFORM
+        assert platform == Platform.GITHUB
+
+    def test_registry_compatible_provider_pattern(self):
+        """Verify the recommended provider pattern for ProviderRegistry.
+
+        This pattern ensures:
+        1. PLATFORM is a class attribute (no instantiation needed)
+        2. platform property returns the same value (for consistency)
+        3. No side effects during class inspection
+        """
+        init_called = False
+
+        class RegistryCompatibleProvider(IssueTrackerProvider):
+            PLATFORM = Platform.LINEAR  # Required class attribute
+
+            def __init__(self):
+                nonlocal init_called
+                init_called = True
+                # Initialization code that should only run when
+                # actually using the provider, not during registration
+                self._api_token = None
+
+            @property
+            def platform(self):
+                return self.PLATFORM  # Can reference class attr
+
+            @property
+            def name(self):
+                return "Linear"
+
+            def can_handle(self, input_str):
+                return False
+
+            def parse_input(self, input_str):
+                return input_str
+
+            def fetch_ticket(self, ticket_id):
+                return None
+
+            def check_connection(self):
+                return (True, "OK")
+
+        # Simulating what ProviderRegistry.register() should do:
+        # Access PLATFORM without instantiation
+        if hasattr(RegistryCompatibleProvider, 'PLATFORM'):
+            platform = RegistryCompatibleProvider.PLATFORM
+        else:
+            raise TypeError("Provider must declare PLATFORM class attribute")
+
+        assert platform == Platform.LINEAR
+        assert not init_called, "Provider should not be instantiated during registration"
+

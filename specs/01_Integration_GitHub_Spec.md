@@ -396,7 +396,10 @@ class GitHubProvider(IssueTrackerProvider):
         response = session.get(f"{self.API_BASE}/repos/{owner}/{repo}/issues/{number}")
 
         if response.status_code == 404:
-            raise TicketNotFoundError(f"Issue not found: {ticket_id}")
+            raise TicketNotFoundError(
+                ticket_id=ticket_id,
+                platform=self.name,
+            )
         elif response.status_code == 401:
             raise AuthenticationError("GitHub authentication failed")
         elif response.status_code == 403:

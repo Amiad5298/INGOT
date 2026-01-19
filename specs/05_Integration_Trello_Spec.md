@@ -449,7 +449,10 @@ class TrelloProvider(IssueTrackerProvider):
         )
 
         if response.status_code == 404:
-            raise TicketNotFoundError(f"Card not found: {ticket_id}")
+            raise TicketNotFoundError(
+                ticket_id=ticket_id,
+                platform=self.name,
+            )
         elif response.status_code == 401:
             raise AuthenticationError("Trello authentication failed")
         elif response.status_code == 429:
