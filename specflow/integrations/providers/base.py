@@ -17,7 +17,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
+
+# Pre-compiled regex patterns for performance optimization
+# These are compiled once at module load time instead of on each function call
+_PATTERN_NON_ALPHANUMERIC_HYPHEN = re.compile(r"[^a-z0-9-]")
+_PATTERN_MULTIPLE_HYPHENS = re.compile(r"-+")
 
 
 def sanitize_for_branch_component(value: str) -> str:
@@ -43,10 +48,10 @@ def sanitize_for_branch_component(value: str) -> str:
         return ""
     # Lowercase first
     result = value.lower()
-    # Replace any non-[a-z0-9-] with hyphens
-    result = re.sub(r"[^a-z0-9-]", "-", result)
-    # Collapse multiple hyphens
-    result = re.sub(r"-+", "-", result)
+    # Replace any non-[a-z0-9-] with hyphens (using pre-compiled pattern)
+    result = _PATTERN_NON_ALPHANUMERIC_HYPHEN.sub("-", result)
+    # Collapse multiple hyphens (using pre-compiled pattern)
+    result = _PATTERN_MULTIPLE_HYPHENS.sub("-", result)
     # Strip leading/trailing hyphens
     result = result.strip("-")
     return result
@@ -119,6 +124,75 @@ class TicketType(Enum):
     UNKNOWN = "unknown"  # Unable to determine type
 
 
+class PlatformMetadata(TypedDict, total=False):
+    """Type definition for platform-specific metadata fields.
+
+    This TypedDict provides structure for the platform_metadata field in
+    GenericTicket. All fields are optional (total=False) as different
+    platforms provide different data.
+
+    Common fields across platforms:
+        raw_response: The complete raw API response from the platform
+        project_key: Project/repository identifier (Jira: PROJECT, GitHub: owner/repo)
+        priority: Platform-specific priority value
+        epic_link: Parent epic/feature link (Jira, Linear)
+        sprint: Sprint/iteration information
+        story_points: Estimation value (Jira, Linear)
+        milestone: Milestone/release information (GitHub)
+        components: List of component names (Jira)
+
+    Platform-specific fields:
+        Jira:
+            issue_type_id: Jira issue type ID
+            resolution: Resolution status
+            fix_versions: Target release versions
+        GitHub:
+            repository: Full repository name (owner/repo)
+            issue_number: Numeric issue/PR number
+            is_pull_request: Whether this is a PR vs issue
+            state_reason: Reason for closure (completed, not_planned, etc.)
+        Linear:
+            team_key: Linear team identifier
+            cycle: Current cycle information
+            parent_id: Parent issue ID for sub-issues
+        Azure DevOps:
+            work_item_type: Azure work item type
+            area_path: Area classification
+            iteration_path: Iteration/sprint path
+    """
+
+    # Common fields
+    raw_response: dict[str, Any]
+    project_key: str
+    priority: str
+    epic_link: str
+    sprint: str
+    story_points: float
+    milestone: str
+    components: list[str]
+
+    # Jira-specific
+    issue_type_id: str
+    resolution: str
+    fix_versions: list[str]
+
+    # GitHub-specific
+    repository: str
+    issue_number: int
+    is_pull_request: bool
+    state_reason: str
+
+    # Linear-specific
+    team_key: str
+    cycle: str
+    parent_id: str
+
+    # Azure DevOps-specific
+    work_item_type: str
+    area_path: str
+    iteration_path: str
+
+
 @dataclass
 class GenericTicket:
     """Platform-agnostic ticket representation.
@@ -140,7 +214,9 @@ class GenericTicket:
         updated_at: Last update timestamp
         branch_summary: Short summary suitable for git branch name
         full_info: Complete raw ticket information for context
-        platform_metadata: Platform-specific fields for edge cases
+        platform_metadata: Platform-specific fields for edge cases.
+            See PlatformMetadata TypedDict for expected structure.
+            Providers should populate relevant fields based on their platform.
     """
 
     # Core identifiers
@@ -168,8 +244,8 @@ class GenericTicket:
     branch_summary: str = ""
     full_info: str = ""
 
-    # Platform-specific raw data
-    platform_metadata: dict[str, Any] = field(default_factory=dict)
+    # Platform-specific raw data (see PlatformMetadata for structure)
+    platform_metadata: PlatformMetadata = field(default_factory=dict)  # type: ignore[assignment]
 
     @property
     def display_id(self) -> str:
@@ -196,6 +272,9 @@ class GenericTicket:
     # Default max length for branch summary (same as sanitize_title_for_branch)
     _BRANCH_SUMMARY_MAX_LENGTH: int = 50
 
+    # Default fallback summary when ticket ID/title sanitize to empty strings
+    _FALLBACK_SUMMARY = "unnamed-ticket"
+
     @property
     def safe_branch_name(self) -> str:
         """Generate safe git branch name from ticket.
@@ -209,6 +288,7 @@ class GenericTicket:
         - Disallowed git sequences (.., @{, trailing /, .lock suffix)
         - Empty branch_summary (generates from title)
         - Empty sanitized ticket ID (uses deterministic fallback)
+        - Empty sanitized summary (uses 'unnamed-ticket' fallback)
         - Long branch_summary (truncated to max 50 chars)
 
         Output is deterministic, lowercase, and contains only git-safe
@@ -218,6 +298,7 @@ class GenericTicket:
         - Never returns just prefix without ticket component
         - Always has format: prefix/id or prefix/id-summary
         - Maximum summary length is enforced
+        - Always produces a valid, non-empty branch name
 
         Returns:
             Git-compatible branch name like 'feat/proj-123-add-user-login'
@@ -242,6 +323,12 @@ class GenericTicket:
             safe_summary = sanitize_title_for_branch(self.title)
         else:
             safe_summary = ""
+
+        # Handle edge case where summary sanitizes to empty string
+        # (e.g., title/summary contained only emojis or special characters)
+        if not safe_summary and (self.branch_summary or self.title):
+            # Original had content but it all got stripped - use fallback
+            safe_summary = self._FALLBACK_SUMMARY
 
         # Build branch name
         if safe_summary:
@@ -294,7 +381,8 @@ class GenericTicket:
             branch = branch[:-5]
 
         # Collapse any consecutive hyphens created by replacements
-        branch = re.sub(r"-+", "-", branch)
+        # (using pre-compiled pattern for performance)
+        branch = _PATTERN_MULTIPLE_HYPHENS.sub("-", branch)
 
         # Strip any trailing hyphens that might result
         branch = branch.rstrip("-")

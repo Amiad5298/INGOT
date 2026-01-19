@@ -18,6 +18,7 @@ from specflow.integrations.providers.base import (
     GenericTicket,
     IssueTrackerProvider,
     Platform,
+    PlatformMetadata,
     TicketStatus,
     TicketType,
     sanitize_title_for_branch,
@@ -43,6 +44,7 @@ __all__ = [
     "TicketType",
     # Data Models
     "GenericTicket",
+    "PlatformMetadata",
     # Utility Functions
     "sanitize_title_for_branch",
     # Abstract Base Classes
