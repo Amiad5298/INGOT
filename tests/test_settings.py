@@ -120,6 +120,11 @@ class TestSubagentSettings:
         settings = Settings()
         assert settings.subagent_reviewer == "spec-reviewer"
 
+    def test_subagent_doc_updater_default(self):
+        """subagent_doc_updater defaults to spec-doc-updater."""
+        settings = Settings()
+        assert settings.subagent_doc_updater == "spec-doc-updater"
+
     def test_subagent_custom_values(self):
         """Subagent settings accept custom values."""
         settings = Settings(
@@ -136,6 +141,26 @@ class TestSubagentSettings:
         assert settings.get_attribute_for_key("SUBAGENT_TASKLIST") == "subagent_tasklist"
         assert settings.get_attribute_for_key("SUBAGENT_IMPLEMENTER") == "subagent_implementer"
         assert settings.get_attribute_for_key("SUBAGENT_REVIEWER") == "subagent_reviewer"
+        assert settings.get_attribute_for_key("SUBAGENT_DOC_UPDATER") == "subagent_doc_updater"
+
+
+class TestDocUpdateSettings:
+    """Tests for documentation update settings."""
+
+    def test_auto_update_docs_default(self):
+        """auto_update_docs defaults to True."""
+        settings = Settings()
+        assert settings.auto_update_docs is True
+
+    def test_auto_update_docs_can_be_disabled(self):
+        """auto_update_docs can be set to False."""
+        settings = Settings(auto_update_docs=False)
+        assert settings.auto_update_docs is False
+
+    def test_auto_update_docs_config_key_mapping(self):
+        """auto_update_docs has correct config key mapping."""
+        settings = Settings()
+        assert settings.get_attribute_for_key("AUTO_UPDATE_DOCS") == "auto_update_docs"
 
 
 class TestConfigFile:

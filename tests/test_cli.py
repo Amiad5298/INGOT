@@ -370,6 +370,64 @@ class TestRetryFlags:
         assert call_kwargs["retry_base_delay"] == 5.0
 
 
+class TestAutoUpdateDocsFlags:
+    """Tests for --auto-update-docs CLI flag."""
+
+    @patch("specflow.cli.show_banner")
+    @patch("specflow.cli.ConfigManager")
+    @patch("specflow.cli._check_prerequisites")
+    @patch("specflow.cli._run_workflow")
+    def test_auto_update_docs_flag_enables(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--auto-update-docs flag enables documentation updates."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--auto-update-docs", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["auto_update_docs"] is True
+
+    @patch("specflow.cli.show_banner")
+    @patch("specflow.cli.ConfigManager")
+    @patch("specflow.cli._check_prerequisites")
+    @patch("specflow.cli._run_workflow")
+    def test_no_auto_update_docs_flag_disables(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--no-auto-update-docs flag disables documentation updates."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["--no-auto-update-docs", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["auto_update_docs"] is False
+
+    @patch("specflow.cli.show_banner")
+    @patch("specflow.cli.ConfigManager")
+    @patch("specflow.cli._check_prerequisites")
+    @patch("specflow.cli._run_workflow")
+    def test_auto_update_docs_none_uses_config(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """No --auto-update-docs flag passes None to workflow (uses config)."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["auto_update_docs"] is None
+
+
 class TestEffectiveValueOverrides:
     """Tests for effective value computation and override semantics in _run_workflow."""
 
@@ -392,6 +450,7 @@ class TestEffectiveValueOverrides:
         mock_config.settings.default_jira_project = ""
         mock_config.settings.skip_clarification = False
         mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
 
         _run_workflow(
             ticket="TEST-123",
@@ -421,6 +480,7 @@ class TestEffectiveValueOverrides:
         mock_config.settings.default_jira_project = ""
         mock_config.settings.skip_clarification = False
         mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
 
         _run_workflow(
             ticket="TEST-123",
@@ -450,6 +510,7 @@ class TestEffectiveValueOverrides:
         mock_config.settings.default_jira_project = ""
         mock_config.settings.skip_clarification = False
         mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
 
         _run_workflow(
             ticket="TEST-123",
@@ -479,6 +540,7 @@ class TestEffectiveValueOverrides:
         mock_config.settings.default_jira_project = ""
         mock_config.settings.skip_clarification = False
         mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
 
         _run_workflow(
             ticket="TEST-123",
@@ -507,6 +569,7 @@ class TestEffectiveValueOverrides:
         mock_config.settings.default_jira_project = ""
         mock_config.settings.skip_clarification = False
         mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
 
         with pytest.raises(click.exceptions.Exit) as exc_info:
             _run_workflow(
@@ -515,4 +578,64 @@ class TestEffectiveValueOverrides:
                 max_parallel=None,  # Uses invalid config
             )
         assert exc_info.value.exit_code == ExitCode.GENERAL_ERROR
+
+    @patch("specflow.workflow.runner.run_spec_driven_workflow")
+    @patch("specflow.integrations.jira.parse_jira_ticket")
+    def test_auto_update_docs_override_cli_beats_config(
+        self, mock_parse, mock_run_workflow
+    ):
+        """CLI --no-auto-update-docs overrides config auto_update_docs=True."""
+        from specflow.cli import _run_workflow
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 3
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True  # Config says True
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            auto_update_docs=False,  # CLI says --no-auto-update-docs
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["auto_update_docs"] is False  # CLI wins
+
+    @patch("specflow.workflow.runner.run_spec_driven_workflow")
+    @patch("specflow.integrations.jira.parse_jira_ticket")
+    def test_auto_update_docs_none_uses_config(
+        self, mock_parse, mock_run_workflow
+    ):
+        """When CLI auto_update_docs is None, uses config.settings.auto_update_docs."""
+        from specflow.cli import _run_workflow
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 3
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = False  # Config says False
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            auto_update_docs=None,  # CLI not provided
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["auto_update_docs"] is False  # Uses config value
 

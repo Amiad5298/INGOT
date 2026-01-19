@@ -38,6 +38,7 @@ from specflow.workflow.state import RateLimitConfig, WorkflowState
 from specflow.workflow.step1_plan import step_1_create_plan
 from specflow.workflow.step2_tasklist import step_2_create_tasklist
 from specflow.workflow.step3_execute import step_3_execute
+from specflow.workflow.step4_update_docs import step_4_update_docs
 
 
 def run_spec_driven_workflow(
@@ -55,13 +56,15 @@ def run_spec_driven_workflow(
     rate_limit_config: RateLimitConfig | None = None,
     enable_phase_review: bool = False,
     dirty_tree_policy: DirtyTreePolicy = DirtyTreePolicy.FAIL_FAST,
+    auto_update_docs: bool = True,
 ) -> bool:
     """Run the complete spec-driven development workflow.
 
-    This orchestrates all three steps:
+    This orchestrates all four steps:
     1. Create implementation plan
     2. Create task list with approval
     3. Execute tasks with clean loop
+    4. Update documentation based on code changes
 
     Args:
         ticket: Jira ticket information
@@ -78,6 +81,7 @@ def run_spec_driven_workflow(
         rate_limit_config: Rate limit retry configuration.
         enable_phase_review: Enable phase reviews after task execution.
         dirty_tree_policy: Policy for handling dirty working tree at Step 3 start.
+        auto_update_docs: Enable automatic documentation updates after Step 3.
 
     Returns:
         True if workflow completed successfully
@@ -107,6 +111,7 @@ def run_spec_driven_workflow(
             "tasklist": config.settings.subagent_tasklist,
             "implementer": config.settings.subagent_implementer,
             "reviewer": config.settings.subagent_reviewer,
+            "doc_updater": config.settings.subagent_doc_updater,
         },
     )
 
@@ -167,6 +172,18 @@ def run_spec_driven_workflow(
             print_info("Starting Step 3: Execute Implementation")
             if not step_3_execute(state, use_tui=use_tui, verbose=verbose):
                 return False
+
+        # Step 4: Update documentation (optional, non-blocking)
+        if auto_update_docs:
+            print_info("Starting Step 4: Update Documentation")
+            # Note: This step is non-blocking - failures don't stop the workflow
+            step4_result = step_4_update_docs(state)
+            if step4_result.non_doc_reverted:
+                log_message(
+                    f"Step 4 enforcement: reverted {len(step4_result.non_doc_reverted)} non-doc file(s)"
+                )
+            if step4_result.error_message:
+                log_message(f"Step 4 warning: {step4_result.error_message}")
 
         # Workflow complete
         _show_completion(state)

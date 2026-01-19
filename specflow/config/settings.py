@@ -9,6 +9,7 @@ from pathlib import Path
 
 # Import subagent constants as single source of truth
 from specflow.integrations.auggie import (
+    SPECFLOW_AGENT_DOC_UPDATER,
     SPECFLOW_AGENT_IMPLEMENTER,
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
@@ -41,6 +42,8 @@ class Settings:
         subagent_tasklist: Agent name for task list generation
         subagent_implementer: Agent name for task execution
         subagent_reviewer: Agent name for task validation
+        subagent_doc_updater: Agent name for documentation update step
+        auto_update_docs: Enable automatic documentation updates after code changes
     """
 
     # Model settings
@@ -72,6 +75,10 @@ class Settings:
     subagent_tasklist: str = SPECFLOW_AGENT_TASKLIST
     subagent_implementer: str = SPECFLOW_AGENT_IMPLEMENTER
     subagent_reviewer: str = SPECFLOW_AGENT_REVIEWER
+    subagent_doc_updater: str = SPECFLOW_AGENT_DOC_UPDATER
+
+    # Documentation update settings
+    auto_update_docs: bool = True  # Enable automatic documentation updates
 
     # Config key to attribute mapping
     _key_mapping: dict[str, str] = field(
@@ -93,6 +100,8 @@ class Settings:
             "SUBAGENT_TASKLIST": "subagent_tasklist",
             "SUBAGENT_IMPLEMENTER": "subagent_implementer",
             "SUBAGENT_REVIEWER": "subagent_reviewer",
+            "SUBAGENT_DOC_UPDATER": "subagent_doc_updater",
+            "AUTO_UPDATE_DOCS": "auto_update_docs",
         },
         repr=False,
     )

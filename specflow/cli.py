@@ -67,6 +67,7 @@ def show_help() -> None:
     print_info("  --max-retries N           Max retries on rate limit (0 to disable)")
     print_info("  --retry-base-delay SECS   Base delay for retry backoff (seconds)")
     print_info("  --enable-review           Enable phase reviews after task execution")
+    print_info("  --auto-update-docs/--no-auto-update-docs  Enable/disable doc updates")
     print_info("  --config                  Show current configuration")
     print_info("  --version, -v             Show version information")
     print_info("  --help, -h                Show this help message")
@@ -187,6 +188,13 @@ def main(
             help="Policy for dirty working tree: 'fail-fast' (default) or 'warn'",
         ),
     ] = None,
+    auto_update_docs: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--auto-update-docs/--no-auto-update-docs",
+            help="Enable automatic documentation updates (default: from config)",
+        ),
+    ] = None,
     show_config: Annotated[
         bool,
         typer.Option(
@@ -253,6 +261,7 @@ def main(
                 retry_base_delay=retry_base_delay,
                 enable_review=enable_review,
                 dirty_tree_policy=dirty_tree_policy,
+                auto_update_docs=auto_update_docs,
             )
         else:
             # Show main menu
@@ -426,6 +435,7 @@ def _run_workflow(
     retry_base_delay: float = 2.0,
     enable_review: bool = False,
     dirty_tree_policy: Optional[str] = None,
+    auto_update_docs: Optional[bool] = None,
 ) -> None:
     """Run the AI-assisted workflow.
 
@@ -446,6 +456,7 @@ def _run_workflow(
         retry_base_delay: Base delay for retry backoff (seconds).
         enable_review: Enable phase reviews after task execution.
         dirty_tree_policy: Policy for dirty working tree: 'fail-fast' or 'warn'.
+        auto_update_docs: Enable documentation updates. None = use config.
     """
     from specflow.integrations.jira import parse_jira_ticket
     from specflow.workflow.runner import run_spec_driven_workflow
@@ -496,6 +507,11 @@ def _run_workflow(
         base_delay_seconds=retry_base_delay,
     )
 
+    # Determine auto_update_docs setting
+    effective_auto_update_docs = (
+        auto_update_docs if auto_update_docs is not None else config.settings.auto_update_docs
+    )
+
     # Run workflow
     run_spec_driven_workflow(
         ticket=jira_ticket,
@@ -512,6 +528,7 @@ def _run_workflow(
         rate_limit_config=rate_limit_config,
         enable_phase_review=enable_review,
         dirty_tree_policy=effective_dirty_tree_policy,
+        auto_update_docs=effective_auto_update_docs,
     )
 
 
