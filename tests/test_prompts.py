@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from spec.ui.prompts import (
+from specflow.ui.prompts import (
     custom_style,
     prompt_confirm,
     prompt_input,
@@ -11,7 +11,7 @@ from spec.ui.prompts import (
     prompt_select,
     prompt_checkbox,
 )
-from spec.utils.errors import UserCancelledError
+from specflow.utils.errors import UserCancelledError
 
 
 class TestCustomStyle:

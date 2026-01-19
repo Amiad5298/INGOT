@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 import subprocess
 
-from spec.workflow.task_memory import (
+from specflow.workflow.task_memory import (
     TaskMemory,
     capture_task_memory,
     find_related_task_memories,
@@ -14,9 +14,9 @@ from spec.workflow.task_memory import (
     _identify_patterns_in_changes,
     _extract_test_commands,
 )
-from spec.workflow.tasks import Task, TaskStatus
-from spec.workflow.state import WorkflowState
-from spec.integrations.jira import JiraTicket
+from specflow.workflow.tasks import Task, TaskStatus
+from specflow.workflow.state import WorkflowState
+from specflow.integrations.jira import JiraTicket
 
 
 class TestTaskMemory:
@@ -257,9 +257,9 @@ class TestExtractTestCommands:
 class TestCaptureTaskMemory:
     """Tests for capture_task_memory function."""
 
-    @patch("spec.workflow.task_memory._get_modified_files")
-    @patch("spec.workflow.task_memory._identify_patterns_in_changes")
-    @patch("spec.workflow.task_memory._extract_test_commands")
+    @patch("specflow.workflow.task_memory._get_modified_files")
+    @patch("specflow.workflow.task_memory._identify_patterns_in_changes")
+    @patch("specflow.workflow.task_memory._extract_test_commands")
     def test_captures_task_memory(
         self, mock_extract, mock_identify, mock_get_files
     ):
@@ -279,9 +279,9 @@ class TestCaptureTaskMemory:
         assert memory.patterns_used == ["Python implementation"]
         assert memory.test_commands == ["pytest tests/test_file.py"]
 
-    @patch("spec.workflow.task_memory._get_modified_files")
-    @patch("spec.workflow.task_memory._identify_patterns_in_changes")
-    @patch("spec.workflow.task_memory._extract_test_commands")
+    @patch("specflow.workflow.task_memory._get_modified_files")
+    @patch("specflow.workflow.task_memory._identify_patterns_in_changes")
+    @patch("specflow.workflow.task_memory._extract_test_commands")
     def test_adds_memory_to_state(
         self, mock_extract, mock_identify, mock_get_files
     ):

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spec.ui.plan_tui import (
+from specflow.ui.plan_tui import (
     DEFAULT_VERBOSE_LINES,
     MAX_LIVENESS_WIDTH,
     PlanGeneratorUI,
@@ -187,7 +187,7 @@ class TestPlanGeneratorUIQuitRequest:
 class TestPlanGeneratorUIContextManager:
     """Tests for context manager protocol."""
 
-    @patch("spec.ui.plan_tui.Live")
+    @patch("specflow.ui.plan_tui.Live")
     @patch.object(PlanGeneratorUI, "_input_loop")
     def test_context_manager_starts_and_stops(self, mock_input_loop, mock_live_class, tmp_path: Path):
         """Context manager starts and stops TUI."""
@@ -204,7 +204,7 @@ class TestPlanGeneratorUIContextManager:
         # Live should have been stopped
         mock_live.stop.assert_called_once()
 
-    @patch("spec.ui.plan_tui.Live")
+    @patch("specflow.ui.plan_tui.Live")
     @patch.object(PlanGeneratorUI, "_input_loop")
     def test_context_manager_closes_log_buffer(self, mock_input_loop, mock_live_class, tmp_path: Path):
         """Context manager closes log buffer on exit."""
@@ -221,7 +221,7 @@ class TestPlanGeneratorUIContextManager:
         # After context, buffer should be closed
         assert ui._log_buffer._file_handle is None
 
-    @patch("spec.ui.plan_tui.Live")
+    @patch("specflow.ui.plan_tui.Live")
     @patch.object(PlanGeneratorUI, "_input_loop")
     def test_context_manager_returns_self(self, mock_input_loop, mock_live_class):
         """Context manager returns self on entry."""
@@ -322,7 +322,7 @@ class TestPlanGeneratorUIKeyboardHandling:
 
     def test_handle_key_v_toggles_verbose(self):
         """Pressing 'v' toggles verbose mode."""
-        from spec.ui.keyboard import Key
+        from specflow.ui.keyboard import Key
 
         ui = PlanGeneratorUI()
         assert ui.verbose_mode is False
@@ -332,7 +332,7 @@ class TestPlanGeneratorUIKeyboardHandling:
 
     def test_handle_key_q_sets_quit(self):
         """Pressing 'q' sets quit_requested."""
-        from spec.ui.keyboard import Key
+        from specflow.ui.keyboard import Key
 
         ui = PlanGeneratorUI()
         assert ui.quit_requested is False
@@ -368,8 +368,8 @@ class TestStep1TUIIntegration:
     @pytest.fixture
     def workflow_state(self, tmp_path: Path):
         """Create a workflow state for testing."""
-        from spec.integrations.jira import JiraTicket
-        from spec.workflow.state import WorkflowState
+        from specflow.integrations.jira import JiraTicket
+        from specflow.workflow.state import WorkflowState
 
         ticket = JiraTicket(
             ticket_id="TEST-456",
@@ -387,8 +387,8 @@ class TestStep1TUIIntegration:
 
         return state
 
-    @patch("spec.ui.plan_tui.PlanGeneratorUI")
-    @patch("spec.workflow.step1_plan.AuggieClient")
+    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.workflow.step1_plan.AuggieClient")
     def test_uses_tui_when_enabled(
         self,
         mock_auggie_class,
@@ -398,9 +398,9 @@ class TestStep1TUIIntegration:
         monkeypatch,
     ):
         """Step 1 uses TUI when _should_use_tui returns True."""
-        from spec.workflow.step1_plan import _generate_plan_with_tui
+        from specflow.workflow.step1_plan import _generate_plan_with_tui
 
-        monkeypatch.setenv("SPEC_LOG_DIR", str(tmp_path))
+        monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
         # Setup
         mock_ui = MagicMock()
@@ -422,8 +422,8 @@ class TestStep1TUIIntegration:
         mock_ui_class.assert_called_once()
         mock_client.run_with_callback.assert_called_once()
 
-    @patch("spec.ui.plan_tui.PlanGeneratorUI")
-    @patch("spec.workflow.step1_plan.AuggieClient")
+    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.workflow.step1_plan.AuggieClient")
     def test_tui_quit_returns_false(
         self,
         mock_auggie_class,
@@ -433,9 +433,9 @@ class TestStep1TUIIntegration:
         monkeypatch,
     ):
         """TUI returns False when user requests quit."""
-        from spec.workflow.step1_plan import _generate_plan_with_tui
+        from specflow.workflow.step1_plan import _generate_plan_with_tui
 
-        monkeypatch.setenv("SPEC_LOG_DIR", str(tmp_path))
+        monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
         # Setup
         mock_ui = MagicMock()
@@ -457,10 +457,10 @@ class TestStep1TUIIntegration:
 
     def test_creates_log_directory(self, tmp_path: Path, monkeypatch):
         """Log directory is created for plan generation."""
-        from spec.workflow.step1_plan import _create_plan_log_dir
+        from specflow.workflow.step1_plan import _create_plan_log_dir
 
         # Set log base dir to tmp_path
-        monkeypatch.setenv("SPEC_LOG_DIR", str(tmp_path))
+        monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
         # Act
         log_dir = _create_plan_log_dir("TEST-789")
@@ -471,21 +471,21 @@ class TestStep1TUIIntegration:
         assert "plan_generation" in str(log_dir)
 
     def test_get_log_base_dir_uses_env_var(self, tmp_path: Path, monkeypatch):
-        """Log base dir uses SPEC_LOG_DIR env var."""
-        from spec.workflow.step1_plan import _get_log_base_dir
+        """Log base dir uses SPECFLOW_LOG_DIR env var."""
+        from specflow.workflow.step1_plan import _get_log_base_dir
 
         custom_dir = tmp_path / "custom_logs"
-        monkeypatch.setenv("SPEC_LOG_DIR", str(custom_dir))
+        monkeypatch.setenv("SPECFLOW_LOG_DIR", str(custom_dir))
 
         result = _get_log_base_dir()
         assert result == custom_dir
 
     def test_get_log_base_dir_default(self, monkeypatch):
-        """Log base dir defaults to .spec/runs."""
-        from spec.workflow.step1_plan import _get_log_base_dir
+        """Log base dir defaults to .specflow/runs."""
+        from specflow.workflow.step1_plan import _get_log_base_dir
 
-        monkeypatch.delenv("SPEC_LOG_DIR", raising=False)
+        monkeypatch.delenv("SPECFLOW_LOG_DIR", raising=False)
 
         result = _get_log_base_dir()
-        assert result == Path(".spec/runs")
+        assert result == Path(".specflow/runs")
 

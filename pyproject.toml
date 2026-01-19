@@ -41,7 +41,7 @@ dev = [
 ]
 
 [project.scripts]
-spec = "spec.cli:app"
+spec = "specflow.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/Amiad5298/Spec"
@@ -49,7 +49,7 @@ Documentation = "https://github.com/Amiad5298/Spec#readme"
 Repository = "https://github.com/Amiad5298/Spec"
 
 [tool.hatch.build.targets.wheel]
-packages = ["spec"]
+packages = ["specflow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -57,14 +57,14 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = [
     "-v",
-    "--cov=spec",
+    "--cov=specflow",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-fail-under=80",
 ]
 
 [tool.coverage.run]
-source = ["spec"]
+source = ["specflow"]
 branch = true
 
 [tool.coverage.report]
@@ -104,5 +104,5 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["spec"]
+known-first-party = ["specflow"]
 

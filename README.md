@@ -63,7 +63,41 @@ Four purpose-built agents work together:
 - **spec-planner**: Analyzes requirements and creates implementation plans
 - **spec-tasklist**: Converts plans into optimized, executable task lists
 - **spec-implementer**: Executes individual tasks with codebase awareness
-- **spec-reviewer**: Validates completed work (optional)
+- **spec-reviewer**: Validates completed work and triggers auto-fix for issues
+
+### 🔍 Automated Code Review
+Optional phase reviews that validate work quality:
+- Runs after Phase 1 (fundamental tasks) and at workflow completion
+- Smart diff handling with baseline-anchored comparisons (uses `--stat` for large changesets >2000 lines or >20 files)
+- **Auto-fix capability**: When reviews return NEEDS_ATTENTION, optionally run the implementer agent to address feedback
+- **Re-review after fix**: Automatically re-run review to verify fixes were successful
+- PASS/NEEDS_ATTENTION output format for clear status
+- Enable with `--enable-review` flag
+
+### 📊 Baseline-Anchored Diffs
+Reviews only inspect changes introduced by the current workflow:
+- Captures baseline commit at Step 3 start before any modifications
+- Dirty tree policy (`--dirty-tree-policy`) prevents pollution from pre-existing uncommitted changes
+- Supports `fail-fast` (abort on dirty tree) or `warn` (continue with warning) modes
+
+### 🎯 Predictive Context (Target Files)
+Reduce AI hallucinations and prevent file conflicts during parallel execution:
+- Explicit file scoping with `<!-- files: ... -->` task annotations
+- Task list agent predicts which files each task will modify
+- File disjointness validation for parallel tasks
+- Path security with directory traversal prevention
+- "Setup Task Pattern": Shared files modified in FUNDAMENTAL tasks before parallel work
+
+Example task list with file annotations:
+```markdown
+<!-- category: fundamental, order: 1 -->
+<!-- files: src/models/user.py, src/db/schema.py -->
+- [ ] Create user model and database schema
+
+<!-- category: independent, group: features -->
+<!-- files: src/api/auth.py, tests/test_auth.py -->
+- [ ] Implement authentication endpoint
+```
 
 [Screenshot placeholder: Terminal showing the TUI with parallel task execution in progress]
 
@@ -243,6 +277,10 @@ Workflow Options:
   --skip-clarification        Skip the clarification step
   --no-squash                 Don't squash checkpoint commits at end
   --force-jira-check          Force fresh Jira integration check
+  --enable-review             Enable automated code review after task execution
+  --dirty-tree-policy POLICY  Handle uncommitted changes: 'fail-fast' (default) or 'warn'
+                              - 'fail-fast': Abort if working tree has uncommitted changes
+                              - 'warn': Continue with warning (diffs may include unrelated changes)
 
 Parallel Execution:
   --parallel/--no-parallel    Enable/disable parallel task execution
@@ -250,8 +288,8 @@ Parallel Execution:
   --fail-fast/--no-fail-fast  Stop on first task failure
 
 Rate Limiting:
-  --max-retries N             Max retries on rate limit (0 to disable)
-  --retry-base-delay SECS     Base delay for retry backoff (seconds)
+  --max-retries N             Max retries on rate limit (0 to disable, default: 5)
+  --retry-base-delay SECS     Base delay for retry backoff (default: 2.0 seconds)
 
 Display Options:
   --tui/--no-tui              Enable/disable TUI mode (default: auto-detect)
@@ -314,7 +352,7 @@ spec PROJ-202 --fail-fast
 
 ### Configuration File
 
-SPEC stores configuration in `~/.spec-config`:
+SPECFLOW stores configuration in `~/.specflow-config`:
 
 ```bash
 # AI Model Configuration
@@ -334,7 +372,7 @@ PARALLEL_EXECUTION_ENABLED="true"
 MAX_PARALLEL_TASKS="3"
 FAIL_FAST="false"
 
-# Custom Subagent Names (advanced)
+# Custom Subagent Names (customize agent identifiers)
 SUBAGENT_PLANNER="spec-planner"
 SUBAGENT_TASKLIST="spec-tasklist"
 SUBAGENT_IMPLEMENTER="spec-implementer"
@@ -354,6 +392,10 @@ SUBAGENT_REVIEWER="spec-reviewer"
 | `PARALLEL_EXECUTION_ENABLED` | bool | true | Enable parallel task execution |
 | `MAX_PARALLEL_TASKS` | int | 3 | Max concurrent tasks (1-5) |
 | `FAIL_FAST` | bool | false | Stop on first task failure |
+| `SUBAGENT_PLANNER` | string | "spec-planner" | Custom planner subagent name |
+| `SUBAGENT_TASKLIST` | string | "spec-tasklist" | Custom tasklist subagent name |
+| `SUBAGENT_IMPLEMENTER` | string | "spec-implementer" | Custom implementer subagent name |
+| `SUBAGENT_REVIEWER` | string | "spec-reviewer" | Custom reviewer subagent name |
 
 ### Interactive Configuration
 
@@ -374,20 +416,20 @@ spec --config
 
 ## Agent Customization
 
-SPEC uses specialized AI agents defined in `.augment/agents/`. These are created automatically on first run.
+SPEC uses specialized AI agents defined in `.augment/agents/`. These are created automatically on first run and updated when SPEC detects newer internal templates.
 
 ### Agent Files
 
 | File | Purpose |
 |------|---------|
-| `.augment/agents/spec-planner.md` | Creates implementation plans |
-| `.augment/agents/spec-tasklist.md` | Generates task lists |
-| `.augment/agents/spec-implementer.md` | Executes individual tasks |
-| `.augment/agents/spec-reviewer.md` | Validates completed tasks |
+| `.augment/agents/spec-planner.md` | Creates implementation plans from Jira tickets |
+| `.augment/agents/spec-tasklist.md` | Generates task lists with FUNDAMENTAL/INDEPENDENT categories |
+| `.augment/agents/spec-implementer.md` | Executes individual tasks with codebase awareness |
+| `.augment/agents/spec-reviewer.md` | Validates completed tasks with PASS/NEEDS_ATTENTION output |
 
-### Customizing Agents
+### Agent File Format
 
-You can modify these files to adjust agent behavior:
+Each agent file uses YAML frontmatter followed by markdown instructions:
 
 ```yaml
 ---
@@ -395,38 +437,66 @@ name: spec-planner
 description: SPEC workflow planner
 model: claude-sonnet-4-5
 color: blue
+spec_version: 2.0.0
+spec_content_hash: abc123def456
 ---
 
 # Your custom instructions here...
 ```
 
-The `model` field in each agent file determines which AI model that agent uses.
+### Frontmatter Fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | Agent identifier (used with `--agent` flag in Auggie) |
+| `description` | Human-readable description shown in agent listings |
+| `model` | AI model for this agent (e.g., `claude-sonnet-4-5`, `claude-opus-4`) |
+| `color` | Terminal color for agent output (blue, green, purple, etc.) |
+| `spec_version` | SPECFLOW version that created/updated this agent |
+| `spec_content_hash` | Hash for detecting template updates (auto-managed) |
+
+### Version Management
+
+SPEC tracks agent file versions:
+- **Automatic updates**: When SPEC's internal templates are newer, you'll be prompted to update
+- **User customizations preserved**: If you've modified the instructions, SPEC won't overwrite without confirmation
+- **Hash-based detection**: The `spec_content_hash` field tracks whether the file matches the expected template
 
 ## Project Structure
 
 ```
-spec/
+specflow/
 ├── __init__.py          # Version and constants
+├── __main__.py          # Module entry point (python -m specflow)
 ├── cli.py               # CLI entry point and command handling
 ├── config/
 │   ├── manager.py       # Configuration loading/saving
 │   └── settings.py      # Settings dataclass
 ├── integrations/
-│   ├── agents.py        # Subagent file management
+│   ├── agents.py        # Subagent file management and versioning
 │   ├── auggie.py        # Auggie CLI wrapper
 │   ├── git.py           # Git operations
 │   └── jira.py          # Jira ticket parsing
 ├── ui/
+│   ├── keyboard.py      # Keyboard handling for TUI
+│   ├── log_buffer.py    # Log buffering for TUI display
 │   ├── menus.py         # Interactive menus
 │   ├── prompts.py       # User prompts
 │   ├── tui.py           # Terminal UI for execution
 │   └── plan_tui.py      # TUI for plan generation
 ├── utils/
 │   ├── console.py       # Rich console output
+│   ├── error_analysis.py # Error pattern analysis
 │   ├── errors.py        # Error handling
 │   ├── logging.py       # Logging utilities
 │   └── retry.py         # Rate limit retry logic
 └── workflow/
+    ├── autofix.py       # Auto-fix after code review failures
+    ├── events.py        # TUI event system for parallel execution
+    ├── git_utils.py     # Baseline-anchored diff utilities
+    ├── log_management.py # Log file management
+    ├── prompts.py       # Task prompt building
+    ├── review.py        # Phase review logic (PASS/NEEDS_ATTENTION)
     ├── runner.py        # Main workflow orchestration
     ├── state.py         # Workflow state management
     ├── step1_plan.py    # Step 1: Plan creation
@@ -565,6 +635,24 @@ If the TUI doesn't render correctly:
 ```bash
 # Force simple output mode
 spec PROJECT-123 --no-tui
+```
+
+#### Dirty Working Tree Error
+
+If you see "Working tree has uncommitted changes":
+
+```bash
+# Option 1: Stash your changes
+git stash push -m "WIP before spec workflow"
+spec PROJECT-123
+git stash pop  # Restore after workflow
+
+# Option 2: Commit your changes
+git add -A && git commit -m "WIP"
+spec PROJECT-123
+
+# Option 3: Continue anyway (not recommended - diffs may be polluted)
+spec PROJECT-123 --dirty-tree-policy warn
 ```
 
 ### Debug Logging

@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from spec.ui.log_buffer import TaskLogBuffer
+from specflow.ui.log_buffer import TaskLogBuffer
 
 
 class TestTaskLogBufferCreation:

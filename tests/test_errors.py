@@ -2,7 +2,7 @@
 
 import pytest
 
-from spec.utils.errors import (
+from specflow.utils.errors import (
     SpecError,
     AuggieNotInstalledError,
     ExitCode,

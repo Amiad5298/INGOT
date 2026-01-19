@@ -3,7 +3,7 @@
 import time
 import pytest
 
-from spec.workflow.events import (
+from specflow.workflow.events import (
     TaskEventType,
     TaskEvent,
     TaskRunStatus,

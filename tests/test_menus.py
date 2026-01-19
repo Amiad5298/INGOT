@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from spec.ui.menus import (
+from specflow.ui.menus import (
     MainMenuChoice,
     TaskReviewChoice,
     show_main_menu,
@@ -12,8 +12,8 @@ from spec.ui.menus import (
     show_model_selection,
     show_task_checkboxes,
 )
-from spec.integrations.git import DirtyStateAction
-from spec.utils.errors import UserCancelledError
+from specflow.integrations.git import DirtyStateAction
+from specflow.utils.errors import UserCancelledError
 
 
 class TestMainMenuChoice:
@@ -51,7 +51,7 @@ class TestTaskReviewChoice:
 class TestShowMainMenu:
     """Tests for show_main_menu function."""
 
-    @patch("spec.ui.menus.print_header")
+    @patch("specflow.ui.menus.print_header")
     @patch("questionary.select")
     def test_returns_selection(self, mock_select, mock_header):
         """Returns selected choice."""
@@ -61,7 +61,7 @@ class TestShowMainMenu:
         
         assert result == MainMenuChoice.START_WORKFLOW
 
-    @patch("spec.ui.menus.print_header")
+    @patch("specflow.ui.menus.print_header")
     @patch("questionary.select")
     def test_raises_on_cancel(self, mock_select, mock_header):
         """Raises UserCancelledError when cancelled."""
@@ -95,8 +95,8 @@ class TestShowTaskReviewMenu:
 class TestShowGitDirtyMenu:
     """Tests for show_git_dirty_menu function."""
 
-    @patch("spec.ui.menus.print_info")
-    @patch("spec.ui.menus.console")
+    @patch("specflow.ui.menus.print_info")
+    @patch("specflow.ui.menus.console")
     @patch("questionary.select")
     def test_returns_stash(self, mock_select, mock_console, mock_info):
         """Returns STASH action."""
@@ -106,8 +106,8 @@ class TestShowGitDirtyMenu:
         
         assert result == DirtyStateAction.STASH
 
-    @patch("spec.ui.menus.print_info")
-    @patch("spec.ui.menus.console")
+    @patch("specflow.ui.menus.print_info")
+    @patch("specflow.ui.menus.console")
     @patch("questionary.select")
     def test_raises_on_cancel(self, mock_select, mock_console, mock_info):
         """Raises UserCancelledError when cancelled."""
@@ -120,12 +120,12 @@ class TestShowGitDirtyMenu:
 class TestShowModelSelection:
     """Tests for show_model_selection function."""
 
-    @patch("spec.ui.menus.print_header")
-    @patch("spec.ui.menus.list_models")
+    @patch("specflow.ui.menus.print_header")
+    @patch("specflow.ui.menus.list_models")
     @patch("questionary.select")
     def test_returns_selected_model(self, mock_select, mock_list, mock_header):
         """Returns selected model ID."""
-        from spec.integrations.auggie import AuggieModel
+        from specflow.integrations.auggie import AuggieModel
         
         mock_list.return_value = [
             AuggieModel(name="Claude 3", id="claude-3"),
@@ -137,10 +137,10 @@ class TestShowModelSelection:
         
         assert result == "claude-3"
 
-    @patch("spec.ui.menus.print_header")
-    @patch("spec.ui.menus.list_models")
-    @patch("spec.ui.menus.print_info")
-    @patch("spec.ui.prompts.prompt_input")
+    @patch("specflow.ui.menus.print_header")
+    @patch("specflow.ui.menus.list_models")
+    @patch("specflow.ui.menus.print_info")
+    @patch("specflow.ui.prompts.prompt_input")
     def test_prompts_manual_input_when_no_models(
         self, mock_input, mock_info, mock_list, mock_header
     ):

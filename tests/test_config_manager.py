@@ -5,8 +5,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from spec.config.manager import ConfigManager
-from spec.config.settings import Settings
+from specflow.config.manager import ConfigManager
+from specflow.config.settings import Settings
 
 
 class TestConfigManagerLoad:
@@ -245,9 +245,9 @@ class TestConfigManagerGet:
 class TestConfigManagerShow:
     """Tests for ConfigManager.show method."""
 
-    @patch("spec.utils.console.print_header")
-    @patch("spec.utils.console.print_info")
-    @patch("spec.utils.console.console")
+    @patch("specflow.utils.console.print_header")
+    @patch("specflow.utils.console.print_info")
+    @patch("specflow.utils.console.console")
     def test_show_missing_file(self, mock_console, mock_info, mock_header, tmp_path):
         """Shows message when config file doesn't exist."""
         config_path = tmp_path / "missing"
@@ -258,9 +258,9 @@ class TestConfigManagerShow:
         mock_header.assert_called_once()
         assert mock_info.call_count >= 1
 
-    @patch("spec.utils.console.print_header")
-    @patch("spec.utils.console.print_info")
-    @patch("spec.utils.console.console")
+    @patch("specflow.utils.console.print_header")
+    @patch("specflow.utils.console.print_info")
+    @patch("specflow.utils.console.console")
     def test_show_displays_settings(self, mock_console, mock_info, mock_header, temp_config_file):
         """Shows all settings from config file."""
         manager = ConfigManager(temp_config_file)

@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from spec.workflow.tasks import (
+from specflow.workflow.tasks import (
     TaskStatus,
     Task,
     parse_task_list,
@@ -389,12 +389,12 @@ class TestTaskCategory:
 
     def test_fundamental_value(self):
         """FUNDAMENTAL has correct string value."""
-        from spec.workflow.tasks import TaskCategory
+        from specflow.workflow.tasks import TaskCategory
         assert TaskCategory.FUNDAMENTAL.value == "fundamental"
 
     def test_independent_value(self):
         """INDEPENDENT has correct string value."""
-        from spec.workflow.tasks import TaskCategory
+        from specflow.workflow.tasks import TaskCategory
         assert TaskCategory.INDEPENDENT.value == "independent"
 
 
@@ -408,7 +408,7 @@ class TestParseTaskMetadata:
 
     def test_parses_fundamental_category(self):
         """Parses 'category: fundamental' correctly."""
-        from spec.workflow.tasks import _parse_task_metadata, TaskCategory
+        from specflow.workflow.tasks import _parse_task_metadata, TaskCategory
 
         lines = [
             "<!-- category: fundamental, order: 1 -->",
@@ -423,7 +423,7 @@ class TestParseTaskMetadata:
 
     def test_parses_independent_category(self):
         """Parses 'category: independent' correctly."""
-        from spec.workflow.tasks import _parse_task_metadata, TaskCategory
+        from specflow.workflow.tasks import _parse_task_metadata, TaskCategory
 
         lines = [
             "<!-- category: independent, group: ui -->",
@@ -437,7 +437,7 @@ class TestParseTaskMetadata:
 
     def test_parses_order_field(self):
         """Parses 'order: N' correctly."""
-        from spec.workflow.tasks import _parse_task_metadata, TaskCategory
+        from specflow.workflow.tasks import _parse_task_metadata, TaskCategory
 
         lines = [
             "<!-- category: fundamental, order: 5 -->",
@@ -449,7 +449,7 @@ class TestParseTaskMetadata:
 
     def test_parses_group_field(self):
         """Parses 'group: name' correctly."""
-        from spec.workflow.tasks import _parse_task_metadata, TaskCategory
+        from specflow.workflow.tasks import _parse_task_metadata, TaskCategory
 
         lines = [
             "<!-- category: independent, group: backend -->",
@@ -461,7 +461,7 @@ class TestParseTaskMetadata:
 
     def test_handles_missing_metadata(self):
         """Returns defaults when no metadata comment."""
-        from spec.workflow.tasks import _parse_task_metadata, TaskCategory
+        from specflow.workflow.tasks import _parse_task_metadata, TaskCategory
 
         lines = [
             "## Tasks",
@@ -476,7 +476,7 @@ class TestParseTaskMetadata:
 
     def test_handles_partial_metadata(self):
         """Handles metadata with only some fields."""
-        from spec.workflow.tasks import _parse_task_metadata, TaskCategory
+        from specflow.workflow.tasks import _parse_task_metadata, TaskCategory
 
         lines = [
             "<!-- category: fundamental -->",
@@ -489,7 +489,7 @@ class TestParseTaskMetadata:
 
     def test_case_insensitive_parsing(self):
         """Parses 'Category: FUNDAMENTAL' correctly."""
-        from spec.workflow.tasks import _parse_task_metadata, TaskCategory
+        from specflow.workflow.tasks import _parse_task_metadata, TaskCategory
 
         lines = [
             "<!-- category: FUNDAMENTAL, order: 2 -->",
@@ -681,7 +681,7 @@ class TestGetFundamentalTasks:
 
     def test_returns_only_fundamental_tasks(self):
         """Filters to fundamental category only."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, TaskStatus, get_fundamental_tasks
         )
 
@@ -698,7 +698,7 @@ class TestGetFundamentalTasks:
 
     def test_returns_empty_when_none_exist(self):
         """Returns empty list when no fundamental tasks."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_fundamental_tasks
         )
 
@@ -713,7 +713,7 @@ class TestGetFundamentalTasks:
 
     def test_preserves_order(self):
         """Tasks returned in dependency_order."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_fundamental_tasks
         )
 
@@ -738,7 +738,7 @@ class TestGetIndependentTasks:
 
     def test_returns_only_independent_tasks(self):
         """Filters to independent category only."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_independent_tasks
         )
 
@@ -755,7 +755,7 @@ class TestGetIndependentTasks:
 
     def test_returns_empty_when_none_exist(self):
         """Returns empty list when no independent tasks."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_independent_tasks
         )
 
@@ -779,7 +779,7 @@ class TestGetPendingFundamentalTasks:
 
     def test_excludes_completed_tasks(self):
         """Only returns non-completed fundamental tasks."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, TaskStatus, get_pending_fundamental_tasks
         )
 
@@ -795,7 +795,7 @@ class TestGetPendingFundamentalTasks:
 
     def test_excludes_independent_tasks(self):
         """Only returns fundamental tasks, not independent."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, TaskStatus, get_pending_fundamental_tasks
         )
 
@@ -820,7 +820,7 @@ class TestGetPendingIndependentTasks:
 
     def test_excludes_completed_tasks(self):
         """Only returns non-completed independent tasks."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, TaskStatus, get_pending_independent_tasks
         )
 
@@ -841,7 +841,7 @@ class TestFundamentalTaskOrdering:
 
     def test_sorts_by_dependency_order_then_line_number(self):
         """Fundamental tasks sort by dependency_order, then line_number."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_fundamental_tasks
         )
 
@@ -862,7 +862,7 @@ class TestFundamentalTaskOrdering:
 
     def test_stable_ordering_with_same_values(self):
         """Tasks with same dependency_order and line_number maintain stable order."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_fundamental_tasks
         )
 
@@ -883,7 +883,7 @@ class TestFundamentalTaskOrdering:
 
     def test_explicit_order_comes_before_order_zero(self):
         """Tasks with explicit order (>0) come before tasks with order=0."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_fundamental_tasks
         )
 
@@ -905,7 +905,7 @@ class TestFundamentalTaskOrdering:
 
     def test_mixed_explicit_and_implicit_ordering(self):
         """Mixed explicit and implicit orders produce correct sequence."""
-        from spec.workflow.tasks import (
+        from specflow.workflow.tasks import (
             Task, TaskCategory, get_fundamental_tasks
         )
 

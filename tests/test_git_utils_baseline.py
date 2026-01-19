@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from spec.workflow.git_utils import (
+from specflow.workflow.git_utils import (
     DirtyTreePolicy,
     DirtyWorkingTreeError,
     capture_baseline,
@@ -378,7 +378,7 @@ class TestUntrackedFiles:
 
     def test_get_untracked_files_returns_list(self, temp_git_repo):
         """Returns list of untracked files."""
-        from spec.workflow.git_utils import get_untracked_files
+        from specflow.workflow.git_utils import get_untracked_files
 
         # Create untracked files
         temp_git_repo.create_file("untracked1.txt", "content1")
@@ -392,7 +392,7 @@ class TestUntrackedFiles:
 
     def test_get_untracked_files_empty_when_all_tracked(self, temp_git_repo):
         """Returns empty list when no untracked files."""
-        from spec.workflow.git_utils import get_untracked_files
+        from specflow.workflow.git_utils import get_untracked_files
 
         # All files are tracked (initial commit has README.md)
         untracked = get_untracked_files()
@@ -400,7 +400,7 @@ class TestUntrackedFiles:
 
     def test_get_untracked_files_excludes_gitignored(self, temp_git_repo):
         """Excludes files matching .gitignore patterns."""
-        from spec.workflow.git_utils import get_untracked_files
+        from specflow.workflow.git_utils import get_untracked_files
 
         # Create .gitignore
         temp_git_repo.create_file(".gitignore", "*.log\n__pycache__/\n")
@@ -418,7 +418,7 @@ class TestUntrackedFiles:
 
     def test_untracked_files_diff_generates_unified_format(self, temp_git_repo):
         """Generates unified diff format for untracked files."""
-        from spec.workflow.git_utils import get_untracked_files_diff
+        from specflow.workflow.git_utils import get_untracked_files_diff
 
         temp_git_repo.create_file("new_file.py", "def hello():\n    pass\n")
 
@@ -431,7 +431,7 @@ class TestUntrackedFiles:
 
     def test_untracked_files_diff_stat_only(self, temp_git_repo):
         """Generates stat-like output for untracked files."""
-        from spec.workflow.git_utils import get_untracked_files_diff
+        from specflow.workflow.git_utils import get_untracked_files_diff
 
         temp_git_repo.create_file("file1.txt", "content")
         temp_git_repo.create_file("file2.txt", "content")
@@ -445,7 +445,7 @@ class TestUntrackedFiles:
 
     def test_untracked_binary_file_marked(self, temp_git_repo):
         """Binary untracked files are marked with placeholder."""
-        from spec.workflow.git_utils import get_untracked_files_diff
+        from specflow.workflow.git_utils import get_untracked_files_diff
 
         # Create a binary file (contains null bytes)
         binary_path = temp_git_repo.path / "image.bin"

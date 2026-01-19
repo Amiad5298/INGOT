@@ -4,14 +4,14 @@ import pytest
 from unittest.mock import MagicMock, patch
 import subprocess
 
-from spec.integrations.auggie import (
+from specflow.integrations.auggie import (
     AuggieModel,
     AuggieClient,
     AuggieRateLimitError,
-    SPEC_AGENT_IMPLEMENTER,
-    SPEC_AGENT_PLANNER,
-    SPEC_AGENT_REVIEWER,
-    SPEC_AGENT_TASKLIST,
+    SPECFLOW_AGENT_IMPLEMENTER,
+    SPECFLOW_AGENT_PLANNER,
+    SPECFLOW_AGENT_REVIEWER,
+    SPECFLOW_AGENT_TASKLIST,
     version_gte,
     extract_model_id,
     get_auggie_version,
@@ -113,10 +113,10 @@ class TestGetNodeVersion:
 class TestCheckAuggieInstalled:
     """Tests for check_auggie_installed function."""
 
-    @patch("spec.integrations.auggie.get_auggie_version")
-    @patch("spec.integrations.auggie.print_step")
-    @patch("spec.integrations.auggie.print_info")
-    @patch("spec.integrations.auggie.print_success")
+    @patch("specflow.integrations.auggie.get_auggie_version")
+    @patch("specflow.integrations.auggie.print_step")
+    @patch("specflow.integrations.auggie.print_info")
+    @patch("specflow.integrations.auggie.print_success")
     def test_returns_true_when_valid(self, mock_success, mock_info, mock_step, mock_version):
         """Returns True when version meets requirements."""
         mock_version.return_value = "0.12.0"
@@ -126,8 +126,8 @@ class TestCheckAuggieInstalled:
         assert is_valid is True
         assert message == ""
 
-    @patch("spec.integrations.auggie.get_auggie_version")
-    @patch("spec.integrations.auggie.print_step")
+    @patch("specflow.integrations.auggie.get_auggie_version")
+    @patch("specflow.integrations.auggie.print_step")
     def test_returns_false_when_not_installed(self, mock_step, mock_version):
         """Returns False when not installed."""
         mock_version.return_value = None
@@ -137,9 +137,9 @@ class TestCheckAuggieInstalled:
         assert is_valid is False
         assert "not installed" in message
 
-    @patch("spec.integrations.auggie.get_auggie_version")
-    @patch("spec.integrations.auggie.print_step")
-    @patch("spec.integrations.auggie.print_info")
+    @patch("specflow.integrations.auggie.get_auggie_version")
+    @patch("specflow.integrations.auggie.print_step")
+    @patch("specflow.integrations.auggie.print_info")
     def test_returns_false_when_old_version(self, mock_info, mock_step, mock_version):
         """Returns False when version is too old."""
         mock_version.return_value = "0.10.0"
@@ -610,17 +610,17 @@ class TestSubagentConstants:
     """Tests for subagent constants."""
 
     def test_planner_constant(self):
-        """SPEC_AGENT_PLANNER has correct value."""
-        assert SPEC_AGENT_PLANNER == "spec-planner"
+        """SPECFLOW_AGENT_PLANNER has correct value."""
+        assert SPECFLOW_AGENT_PLANNER == "spec-planner"
 
     def test_tasklist_constant(self):
-        """SPEC_AGENT_TASKLIST has correct value."""
-        assert SPEC_AGENT_TASKLIST == "spec-tasklist"
+        """SPECFLOW_AGENT_TASKLIST has correct value."""
+        assert SPECFLOW_AGENT_TASKLIST == "spec-tasklist"
 
     def test_implementer_constant(self):
-        """SPEC_AGENT_IMPLEMENTER has correct value."""
-        assert SPEC_AGENT_IMPLEMENTER == "spec-implementer"
+        """SPECFLOW_AGENT_IMPLEMENTER has correct value."""
+        assert SPECFLOW_AGENT_IMPLEMENTER == "spec-implementer"
 
     def test_reviewer_constant(self):
-        """SPEC_AGENT_REVIEWER has correct value."""
-        assert SPEC_AGENT_REVIEWER == "spec-reviewer"
+        """SPECFLOW_AGENT_REVIEWER has correct value."""
+        assert SPECFLOW_AGENT_REVIEWER == "spec-reviewer"

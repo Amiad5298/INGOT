@@ -5,14 +5,14 @@ import pytest
 from io import StringIO
 from rich.console import Console
 
-from spec.ui.tui import (
+from specflow.ui.tui import (
     TaskRunnerUI,
     TaskRunRecord,
     TaskRunStatus,
     render_task_list,
     render_status_bar,
 )
-from spec.workflow.events import (
+from specflow.workflow.events import (
     create_task_started_event,
     create_task_finished_event,
     create_task_output_event,

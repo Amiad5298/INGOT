@@ -10,7 +10,7 @@ Tests cover:
 
 import pytest
 
-from spec.workflow.review import parse_review_status, ReviewStatus
+from specflow.workflow.review import parse_review_status, ReviewStatus
 
 
 class TestParseReviewStatusCanonical:
@@ -293,7 +293,7 @@ class TestBackwardsCompatibility:
 
     def test_underscore_alias_works(self):
         """The _parse_review_status alias works for backwards compat."""
-        from spec.workflow.step3_execute import _parse_review_status
+        from specflow.workflow.step3_execute import _parse_review_status
         assert _parse_review_status("**Status**: PASS\n") == ReviewStatus.PASS
         assert _parse_review_status("Status: NEEDS_ATTENTION") == ReviewStatus.NEEDS_ATTENTION
 

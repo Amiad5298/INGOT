@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 import subprocess
 
-from spec.integrations.git import (
+from specflow.integrations.git import (
     DirtyStateAction,
     is_git_repo,
     is_dirty,
@@ -132,7 +132,7 @@ class TestBranchExists:
 class TestCreateBranch:
     """Tests for create_branch function."""
 
-    @patch("spec.integrations.git.print_success")
+    @patch("specflow.integrations.git.print_success")
     def test_creates_branch_successfully(self, mock_print, mock_subprocess):
         """Creates and checks out new branch."""
         mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
@@ -142,7 +142,7 @@ class TestCreateBranch:
         assert result is True
         mock_print.assert_called_once()
 
-    @patch("spec.integrations.git.print_error")
+    @patch("specflow.integrations.git.print_error")
     def test_returns_false_on_failure(self, mock_print, mock_subprocess):
         """Returns False when branch creation fails."""
         mock_subprocess.side_effect = subprocess.CalledProcessError(
@@ -157,7 +157,7 @@ class TestCreateBranch:
 class TestAddToGitignore:
     """Tests for add_to_gitignore function."""
 
-    @patch("spec.integrations.git.print_success")
+    @patch("specflow.integrations.git.print_success")
     def test_adds_pattern_to_new_file(self, mock_print, tmp_path, monkeypatch):
         """Creates .gitignore and adds pattern."""
         monkeypatch.chdir(tmp_path)
@@ -168,7 +168,7 @@ class TestAddToGitignore:
         assert gitignore.exists()
         assert "*.log" in gitignore.read_text()
 
-    @patch("spec.integrations.git.print_success")
+    @patch("specflow.integrations.git.print_success")
     def test_adds_pattern_to_existing_file(self, mock_print, tmp_path, monkeypatch):
         """Appends pattern to existing .gitignore."""
         monkeypatch.chdir(tmp_path)

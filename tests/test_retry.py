@@ -3,14 +3,14 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from spec.utils.retry import (
+from specflow.utils.retry import (
     RateLimitExceededError,
     calculate_backoff_delay,
     with_rate_limit_retry,
     _is_retryable_error,
 )
-from spec.workflow.state import RateLimitConfig
-from spec.integrations.auggie import AuggieRateLimitError
+from specflow.workflow.state import RateLimitConfig
+from specflow.integrations.auggie import AuggieRateLimitError
 
 
 # =============================================================================
@@ -203,7 +203,7 @@ class TestWithRateLimitRetry:
         result = successful_func()
         assert result == "success"
 
-    @patch("spec.utils.retry.time.sleep")
+    @patch("specflow.utils.retry.time.sleep")
     def test_retries_on_retryable_error(self, mock_sleep, rate_limit_config):
         """Retries when retryable error occurs."""
         call_count = 0
@@ -221,7 +221,7 @@ class TestWithRateLimitRetry:
         assert call_count == 3
         assert mock_sleep.call_count == 2  # 2 retries before success
 
-    @patch("spec.utils.retry.time.sleep")
+    @patch("specflow.utils.retry.time.sleep")
     def test_raises_after_max_retries(self, mock_sleep, rate_limit_config):
         """Raises RateLimitExceededError after max retries."""
         @with_rate_limit_retry(rate_limit_config)
@@ -234,7 +234,7 @@ class TestWithRateLimitRetry:
         assert exc_info.value.attempts == rate_limit_config.max_retries
         assert "Rate limit exceeded" in str(exc_info.value)
 
-    @patch("spec.utils.retry.time.sleep")
+    @patch("specflow.utils.retry.time.sleep")
     def test_calls_on_retry_callback(self, mock_sleep, rate_limit_config):
         """Calls on_retry callback with attempt info."""
         callback = MagicMock()
@@ -258,7 +258,7 @@ class TestWithRateLimitRetry:
         assert isinstance(args[1], float)  # delay
         assert isinstance(args[2], Exception)  # exception
 
-    @patch("spec.utils.retry.time.sleep")
+    @patch("specflow.utils.retry.time.sleep")
     def test_respects_calculated_delay(self, mock_sleep, rate_limit_config):
         """Uses calculated delay between retries."""
         call_count = 0
@@ -299,8 +299,8 @@ class TestWithRateLimitRetry:
 class TestAuggieRateLimitErrorRetry:
     """Tests for retry behavior with AuggieRateLimitError."""
 
-    @patch("spec.utils.retry.random.uniform", return_value=0.5)
-    @patch("spec.utils.retry.time.sleep")
+    @patch("specflow.utils.retry.random.uniform", return_value=0.5)
+    @patch("specflow.utils.retry.time.sleep")
     def test_retry_triggers_on_auggie_rate_limit_error(self, mock_sleep, mock_random):
         """AuggieRateLimitError triggers retry with deterministic behavior.
 
@@ -338,8 +338,8 @@ class TestAuggieRateLimitErrorRetry:
         # Verify jitter was calculated (random.uniform was called)
         assert mock_random.call_count >= 2
 
-    @patch("spec.utils.retry.random.uniform", return_value=0.0)
-    @patch("spec.utils.retry.time.sleep")
+    @patch("specflow.utils.retry.random.uniform", return_value=0.0)
+    @patch("specflow.utils.retry.time.sleep")
     def test_retry_exhaustion_on_persistent_rate_limit(self, mock_sleep, mock_random):
         """Persistent rate limit errors exhaust retries and raise RateLimitExceededError."""
         config = RateLimitConfig(
@@ -363,8 +363,8 @@ class TestAuggieRateLimitErrorRetry:
         # 2 retries means 2 sleep calls
         assert mock_sleep.call_count == 2
 
-    @patch("spec.utils.retry.random.uniform", return_value=0.5)
-    @patch("spec.utils.retry.time.sleep")
+    @patch("specflow.utils.retry.random.uniform", return_value=0.5)
+    @patch("specflow.utils.retry.time.sleep")
     def test_backoff_delay_calculation_deterministic(self, mock_sleep, mock_random):
         """Verify backoff delay calculation is deterministic with mocked random.
 
