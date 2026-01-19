@@ -61,6 +61,26 @@ class DirtyStateAction(Enum):
     ABORT = "abort"
 
 
+def _parse_name_status_line(line: str) -> str:
+    """Parse a git diff --name-status output line and return the filepath.
+
+    Handles regular entries (M/A/D) and rename/copy entries (R/C):
+    - Regular: "M\tpath/to/file"  -> "path/to/file"
+    - Rename:  "R100\told\tnew"   -> "new" (destination path)
+    - Copy:    "C100\tsrc\tcopy"  -> "copy" (destination path)
+
+    Args:
+        line: A single line from git diff --name-status output.
+
+    Returns:
+        The filepath (for renames/copies, returns the new/destination path).
+    """
+    parts = line.split("\t")
+    # For renames/copies, git outputs: status\told_path\tnew_path
+    # We want the last part (new path for R/C, only path for others)
+    return parts[-1] if parts else ""
+
+
 def is_git_repo() -> bool:
     """Check if current directory is a git repository.
 
@@ -569,11 +589,11 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
                 print_warning(f"Failed to get changed files list: {stderr}")
                 # Non-fatal: continue with what we have
             elif name_status_result.stdout.strip():
-                changed_files.extend([
-                    line.split("\t", 1)[-1]
+                changed_files.extend(
+                    _parse_name_status_line(line)
                     for line in name_status_result.stdout.strip().split("\n")
                     if line.strip()
-                ])
+                )
 
         changed_files = list(set(changed_files))  # Deduplicate
 
@@ -804,7 +824,7 @@ def get_changed_files_list(base_commit: str) -> tuple[list[str], str]:
 
     output = result.stdout.strip()
     files = [
-        line.split("\t", 1)[-1]
+        _parse_name_status_line(line)
         for line in output.split("\n")
         if line.strip()
     ]

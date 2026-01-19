@@ -653,3 +653,174 @@ class TestStep4ViolationTracking:
         error_text = " ".join(error_calls)
         assert "GUARDRAIL VIOLATION" in error_text or "VIOLATION" in error_text.upper()
 
+
+
+
+# =============================================================================
+# Tests for is_doc_file .github/ substring false positives (E2)
+# =============================================================================
+
+
+class TestIsDocFileGithubSubstring:
+    """Regression tests for .github/ path substring matching bugs."""
+
+    def test_github_readme_scripts_is_not_doc(self):
+        """Files in .github/readme-scripts/ should NOT be docs (substring regression)."""
+        assert not is_doc_file(".github/readme-scripts/tool.py")
+        assert not is_doc_file(".github/readme-generator/build.js")
+        assert not is_doc_file(".github/contributing-bot/index.ts")
+
+    def test_github_issue_template_is_doc(self):
+        """ISSUE_TEMPLATE files should be docs."""
+        assert is_doc_file(".github/ISSUE_TEMPLATE/bug_report.md")
+        assert is_doc_file(".github/issue_template/feature_request.md")
+
+    def test_github_workflows_md_is_not_doc(self):
+        """Even .md files in .github/workflows/ are NOT docs."""
+        assert not is_doc_file(".github/workflows/ci.md")
+        assert not is_doc_file(".github/workflows/README.md")
+
+    def test_github_readme_direct_is_doc(self):
+        """Direct README files in .github/ are docs."""
+        assert is_doc_file(".github/README.md")
+        assert is_doc_file(".github/CONTRIBUTING.md")
+
+    def test_github_funding_is_doc(self):
+        """FUNDING files in .github/ are docs."""
+        assert is_doc_file(".github/FUNDING.yml")
+
+
+# =============================================================================
+# Tests for NonDocSnapshot guardrail correctness (D1, D2, D3)
+# =============================================================================
+
+
+class TestNonDocSnapshotGuardrailFixes:
+    """Tests for guardrail enforcement correctness (A1, A2, A3 fixes)."""
+
+    def test_new_untracked_non_doc_file_is_deleted(self, tmp_path, monkeypatch):
+        """D1: New untracked non-doc file created by agent is deleted."""
+        monkeypatch.chdir(tmp_path)
+
+        # Create a file (simulating agent creating it)
+        new_file = tmp_path / "new_code.py"
+        new_file.write_text("print('created by agent')")
+
+        # Create snapshot (starts empty - file didn't exist before Step 4)
+        snapshot = NonDocSnapshot()
+
+        # Mock subprocess.run for detect_changes() - reports new untracked file
+        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="?? new_code.py\0"
+            )
+
+            changed = snapshot.detect_changes()
+
+        # Should detect the new file
+        assert "new_code.py" in changed
+
+        # Check snapshot was created with correct flags
+        assert "new_code.py" in snapshot.snapshots
+        file_snap = snapshot.snapshots["new_code.py"]
+        assert file_snap.was_untracked is True
+        assert file_snap.existed is False  # A1 FIX: should be False for new files
+
+        # Revert should delete the file
+        reverted = snapshot.revert_changes(["new_code.py"])
+
+        assert "new_code.py" in reverted
+        assert not new_file.exists()  # File should be deleted
+
+    def test_preexisting_untracked_file_modified_is_restored(self, tmp_path, monkeypatch):
+        """D2: Pre-existing untracked non-doc file modified is detected and restored."""
+        monkeypatch.chdir(tmp_path)
+
+        # Create original file
+        scratch_file = tmp_path / "scratch.py"
+        scratch_file.write_text("ORIGINAL")
+
+        # Mock for capture_non_doc_state - file is untracked
+        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="?? scratch.py\0"
+            )
+            snapshot = NonDocSnapshot.capture_non_doc_state()
+
+        # Verify snapshot captured the content
+        assert "scratch.py" in snapshot.snapshots
+        assert snapshot.snapshots["scratch.py"].content == b"ORIGINAL"
+        assert snapshot.snapshots["scratch.py"].was_untracked is True
+        assert snapshot.snapshots["scratch.py"].existed is True
+
+        # Modify the file (simulating agent modification)
+        scratch_file.write_text("MODIFIED")
+
+        # Mock for detect_changes - file still shows as untracked
+        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="?? scratch.py\0"
+            )
+            changed = snapshot.detect_changes()
+
+        # Should detect the change (A2 fix)
+        assert "scratch.py" in changed
+
+        # Revert should restore original content
+        reverted = snapshot.revert_changes(["scratch.py"])
+
+        assert "scratch.py" in reverted
+        assert scratch_file.exists()  # File should still exist
+        assert scratch_file.read_text() == "ORIGINAL"  # Content restored
+
+    def test_prestep_tracked_deletion_is_enforced(self, tmp_path, monkeypatch):
+        """D3: Pre-step tracked deletion is enforced - recreated file removed, no git restore."""
+        monkeypatch.chdir(tmp_path)
+
+        # Scenario: tracked file was deleted before Step 4
+        # Simulate by creating snapshot where file didn't exist (deleted state)
+
+        # Mock for capture_non_doc_state - file shows as deleted ("D " or " D")
+        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=" D src/foo.py\0"  # Deleted in worktree
+            )
+            snapshot = NonDocSnapshot.capture_non_doc_state()
+
+        # Verify snapshot: file was deleted so existed=False, content=None
+        assert "src/foo.py" in snapshot.snapshots
+        file_snap = snapshot.snapshots["src/foo.py"]
+        assert file_snap.existed is False
+        assert file_snap.content is None
+
+        # Agent recreates the file
+        src_dir = tmp_path / "src"
+        src_dir.mkdir(exist_ok=True)
+        recreated_file = src_dir / "foo.py"
+        recreated_file.write_text("agent recreated this")
+
+        # Mock for detect_changes
+        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=""  # File might show as modified or nothing
+            )
+            changed = snapshot.detect_changes()
+
+        # Should detect the recreated file (A3 fix: existed=False but file exists now)
+        assert "src/foo.py" in changed
+
+        # Mock _git_restore_file and verify it's NOT called
+        with patch("specflow.workflow.step4_update_docs._git_restore_file") as mock_restore:
+            reverted = snapshot.revert_changes(["src/foo.py"])
+
+            # Should NOT call git restore (A3 fix)
+            mock_restore.assert_not_called()
+
+        # File should be deleted (restoring the "deleted" state)
+        assert "src/foo.py" in reverted
+        assert not recreated_file.exists()

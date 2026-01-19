@@ -47,19 +47,28 @@ DOC_PATH_PATTERNS = (
     "wiki/",
 )
 
-# Specific .github/ paths that ARE documentation (not workflows, actions, etc.)
-GITHUB_DOC_PATTERNS = (
-    ".github/readme",
-    ".github/contributing",
-    ".github/code_of_conduct",
-    ".github/security",
-    ".github/support",
-    ".github/funding",
-    ".github/issue_template",
-    ".github/pull_request_template",
-)
+# Specific .github/ directory/file names that ARE documentation (case-insensitive)
+# These are checked as exact path segments after .github/
+GITHUB_DOC_NAMES = frozenset({
+    "readme",
+    "contributing",
+    "code_of_conduct",
+    "security",
+    "support",
+    "funding",
+    "issue_template",
+    "pull_request_template",
+})
 
-# .github/ paths that are NOT documentation (code/config)
+# .github/ subdirectories that are NOT documentation (code/config)
+# These are checked as directory names that must NOT be in the path
+GITHUB_NON_DOC_DIRS = frozenset({
+    "workflows",
+    "actions",
+    "scripts",
+})
+
+# Legacy patterns for backward compatibility (used for substring checks)
 GITHUB_NON_DOC_PATTERNS = (
     ".github/workflows/",
     ".github/actions/",
@@ -78,6 +87,43 @@ DOC_FILE_NAMES = frozenset({
     "RELEASE",
     "CHANGES",
 })
+
+
+def _is_github_doc_path(filepath_lower: str) -> bool:
+    """Check if a .github/ path is a documentation path using segment-aware matching.
+
+    This prevents false positives like .github/readme-scripts/tool.py being
+    classified as documentation due to substring matching on "readme".
+
+    Args:
+        filepath_lower: Lowercase path with forward slashes.
+
+    Returns:
+        True if the path is a .github/ documentation path.
+    """
+    # Split path into segments
+    parts = filepath_lower.split("/")
+
+    # Find .github in the path
+    try:
+        github_idx = parts.index(".github")
+    except ValueError:
+        return False
+
+    # Check if any segment after .github is a non-doc directory
+    for part in parts[github_idx + 1:]:
+        if part in GITHUB_NON_DOC_DIRS:
+            return False
+
+    # Check if the first segment after .github is a doc name
+    if github_idx + 1 < len(parts):
+        next_segment = parts[github_idx + 1]
+        # Remove extension if present for comparison
+        segment_stem = next_segment.rsplit(".", 1)[0] if "." in next_segment else next_segment
+        if segment_stem in GITHUB_DOC_NAMES:
+            return True
+
+    return False
 
 
 def is_doc_file(filepath: str) -> bool:
@@ -105,18 +151,9 @@ def is_doc_file(filepath: str) -> bool:
         if pattern in filepath_lower:
             return True
 
-    # Special handling for .github/ - only allow specific doc patterns
+    # Special handling for .github/ - use segment-aware matching
     if ".github/" in filepath_lower:
-        # Check if it's explicitly a non-doc path
-        for non_doc_pattern in GITHUB_NON_DOC_PATTERNS:
-            if non_doc_pattern in filepath_lower:
-                return False
-        # Check if it matches a known doc pattern
-        for doc_pattern in GITHUB_DOC_PATTERNS:
-            if doc_pattern in filepath_lower:
-                return True
-        # Default: files directly in .github/ with doc names might be docs
-        # but don't treat arbitrary .github files as docs
+        return _is_github_doc_path(filepath_lower)
 
     # Check by filename (without extension)
     stem = path.stem.upper()
@@ -296,21 +333,37 @@ class NonDocSnapshot:
         """Detect which non-doc files have changed since snapshot.
 
         This detects:
-        1. Pre-dirty files that were modified further.
-        2. Previously clean tracked files that are now dirty.
-        3. New untracked files created by the agent.
+        1. Pre-existing files (dirty or untracked) that were modified.
+        2. Pre-existing files that were deleted by agent.
+        3. Previously non-existent files that now exist (agent recreated them).
+        4. Previously clean tracked files that are now dirty.
+        5. New untracked files created by the agent.
 
         Returns:
             List of file paths that were modified.
         """
         changed = []
 
-        # Check existing pre-dirty snapshots for further modifications
+        # Check ALL existing snapshots for changes (not just was_dirty)
         for filepath, old_snapshot in self.snapshots.items():
-            if old_snapshot.was_dirty and old_snapshot.content is not None:
-                # Compare content to detect changes to pre-dirty files
-                path = Path(filepath)
-                if path.exists() and path.is_file():
+            path = Path(filepath)
+            file_exists_now = path.exists() and path.is_file()
+
+            # Case 1: File didn't exist pre-Step4 but exists now (agent created it)
+            # This handles tracked files that were deleted before Step 4 and recreated
+            if not old_snapshot.existed and file_exists_now:
+                changed.append(filepath)
+                continue
+
+            # Case 2: File existed pre-Step4 but is missing now (agent deleted it)
+            if old_snapshot.existed and not file_exists_now:
+                changed.append(filepath)
+                continue
+
+            # Case 3: File has captured content - compare to current content
+            # This works for both pre-dirty tracked files AND pre-existing untracked files
+            if old_snapshot.content is not None:
+                if file_exists_now:
                     try:
                         current_content = path.read_bytes()
                         if current_content != old_snapshot.content:
@@ -318,11 +371,9 @@ class NonDocSnapshot:
                     except (OSError, IOError):
                         # Can't read file - assume changed
                         changed.append(filepath)
-                else:
-                    # File was deleted
-                    changed.append(filepath)
+                # Note: file missing case already handled above
 
-        # Get current git status to detect new changes
+        # Get current git status to detect NEW changes (files not in original snapshot)
         result = subprocess.run(
             ["git", "status", "--porcelain", "-z", "-uall"],
             capture_output=True,
@@ -339,10 +390,13 @@ class NonDocSnapshot:
                     # File not in our snapshot - agent created/modified it
                     is_untracked = status_code == "??"
                     # Record it for revert handling
+                    # IMPORTANT: existed=False because this file was NOT in our snapshot
+                    # (meaning it didn't exist or wasn't dirty/untracked before Step 4)
                     self.snapshots[filepath] = FileSnapshot(
                         path=filepath,
                         was_untracked=is_untracked,
                         was_dirty=False,  # It wasn't dirty before agent ran
+                        existed=False,  # A1 FIX: Mark as non-existent pre-Step4
                         content=None,
                     )
                     changed.append(filepath)
@@ -355,8 +409,8 @@ class NonDocSnapshot:
         Revert strategy:
         - Pre-dirty files with content: Restore saved content.
         - Pre-untracked files with content: Restore saved content.
-        - Pre-untracked files without content (new files created by agent): Delete them.
-        - Previously clean tracked files: Use git restore.
+        - Files that didn't exist pre-Step4 (new or recreated): Delete them.
+        - Previously clean tracked files that existed: Use git restore.
         - Deleted files with saved content: Restore the content.
 
         Args:
@@ -392,17 +446,22 @@ class NonDocSnapshot:
                     reverted.append(filepath)
                 except (OSError, IOError):
                     pass
-            elif snapshot.was_untracked and not snapshot.existed:
-                # File was untracked and didn't exist pre-agent (agent created it) - delete
+            elif not snapshot.existed:
+                # A1/A3 FIX: File did NOT exist pre-Step4 (either new untracked or
+                # previously-deleted tracked file that agent recreated) - delete it
+                # DO NOT call git restore here - that would resurrect the file from HEAD!
                 try:
                     path = Path(filepath)
                     if path.exists():
                         path.unlink()
                         reverted.append(filepath)
+                    else:
+                        # File already doesn't exist - consider it reverted
+                        reverted.append(filepath)
                 except (OSError, IOError):
                     pass
             elif not snapshot.was_untracked:
-                # File was tracked and clean pre-agent - use git restore
+                # File was tracked, existed pre-Step4, and was clean - use git restore
                 if _git_restore_file(filepath):
                     reverted.append(filepath)
             # else: untracked file existed but we failed to capture content - can't restore

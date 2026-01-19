@@ -33,17 +33,17 @@ class TestIsGitRepo:
     def test_returns_true_in_git_repo(self, mock_subprocess):
         """Returns True when in a git repository."""
         mock_subprocess.return_value = MagicMock(returncode=0)
-        
+
         result = is_git_repo()
-        
+
         assert result is True
 
     def test_returns_false_outside_git_repo(self, mock_subprocess):
         """Returns False when not in a git repository."""
         mock_subprocess.side_effect = subprocess.CalledProcessError(128, "git")
-        
+
         result = is_git_repo()
-        
+
         assert result is False
 
 
@@ -53,9 +53,9 @@ class TestIsDirty:
     def test_returns_false_when_clean(self, mock_subprocess):
         """Returns False when no uncommitted changes."""
         mock_subprocess.return_value = MagicMock(returncode=0)
-        
+
         result = is_dirty()
-        
+
         assert result is False
 
     def test_returns_true_with_unstaged_changes(self, mock_subprocess):
@@ -65,9 +65,9 @@ class TestIsDirty:
             MagicMock(returncode=1),
             MagicMock(returncode=0),
         ]
-        
+
         result = is_dirty()
-        
+
         assert result is True
 
     def test_returns_true_with_staged_changes(self, mock_subprocess):
@@ -181,9 +181,9 @@ class TestGetCurrentBranch:
             returncode=0,
             stdout="main\n",
         )
-        
+
         result = get_current_branch()
-        
+
         assert result == "main"
 
 
@@ -196,9 +196,9 @@ class TestGetCurrentCommit:
             returncode=0,
             stdout="abc123def456\n",
         )
-        
+
         result = get_current_commit()
-        
+
         assert result == "abc123def456"
 
 
@@ -208,17 +208,17 @@ class TestBranchExists:
     def test_returns_true_when_exists(self, mock_subprocess):
         """Returns True when branch exists."""
         mock_subprocess.return_value = MagicMock(returncode=0)
-        
+
         result = branch_exists("feature-branch")
-        
+
         assert result is True
 
     def test_returns_false_when_not_exists(self, mock_subprocess):
         """Returns False when branch doesn't exist."""
         mock_subprocess.return_value = MagicMock(returncode=1)
-        
+
         result = branch_exists("nonexistent-branch")
-        
+
         assert result is False
 
 
@@ -229,9 +229,9 @@ class TestCreateBranch:
     def test_creates_branch_successfully(self, mock_print, mock_subprocess):
         """Creates and checks out new branch."""
         mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
-        
+
         result = create_branch("new-feature")
-        
+
         assert result is True
         mock_print.assert_called_once()
 
@@ -241,9 +241,9 @@ class TestCreateBranch:
         mock_subprocess.side_effect = subprocess.CalledProcessError(
             128, "git", stderr="branch already exists"
         )
-        
+
         result = create_branch("existing-branch")
-        
+
         assert result is False
 
 
@@ -254,9 +254,9 @@ class TestAddToGitignore:
     def test_adds_pattern_to_new_file(self, mock_print, tmp_path, monkeypatch):
         """Creates .gitignore and adds pattern."""
         monkeypatch.chdir(tmp_path)
-        
+
         add_to_gitignore("*.log")
-        
+
         gitignore = tmp_path / ".gitignore"
         assert gitignore.exists()
         assert "*.log" in gitignore.read_text()
@@ -267,9 +267,9 @@ class TestAddToGitignore:
         monkeypatch.chdir(tmp_path)
         gitignore = tmp_path / ".gitignore"
         gitignore.write_text("*.pyc\n")
-        
+
         add_to_gitignore("*.log")
-        
+
         content = gitignore.read_text()
         assert "*.pyc" in content
         assert "*.log" in content
@@ -502,3 +502,93 @@ class TestGetDiffFromBaseline:
         assert "7 insertions" in result.diffstat
         assert "3 deletions" in result.diffstat
 
+
+
+
+# =============================================================================
+# Tests for _parse_name_status_line helper (E1)
+# =============================================================================
+
+
+class TestParseNameStatusLine:
+    """Tests for _parse_name_status_line helper function (rename/copy handling)."""
+
+    def test_parses_regular_modified_file(self):
+        """Parses regular modified file line."""
+        from specflow.integrations.git import _parse_name_status_line
+
+        assert _parse_name_status_line("M\tpath/to/file.py") == "path/to/file.py"
+
+    def test_parses_added_file(self):
+        """Parses added file line."""
+        from specflow.integrations.git import _parse_name_status_line
+
+        assert _parse_name_status_line("A\tnewfile.py") == "newfile.py"
+
+    def test_parses_deleted_file(self):
+        """Parses deleted file line."""
+        from specflow.integrations.git import _parse_name_status_line
+
+        assert _parse_name_status_line("D\tremoved.py") == "removed.py"
+
+    def test_parses_rename_returns_new_path(self):
+        """Parses rename line - returns destination/new path."""
+        from specflow.integrations.git import _parse_name_status_line
+
+        # Rename format: R100\told.py\tnew.py (100% similarity)
+        assert _parse_name_status_line("R100\told.py\tnew.py") == "new.py"
+        # Partial similarity
+        assert _parse_name_status_line("R075\told_name.py\tnew_name.py") == "new_name.py"
+
+    def test_parses_copy_returns_new_path(self):
+        """Parses copy line - returns destination/copy path."""
+        from specflow.integrations.git import _parse_name_status_line
+
+        # Copy format: C100\tsrc.py\tcopy.py
+        assert _parse_name_status_line("C100\tsrc.py\tcopy.py") == "copy.py"
+        assert _parse_name_status_line("C050\toriginal.py\tdup.py") == "dup.py"
+
+    def test_handles_paths_with_spaces(self):
+        """Handles file paths with spaces."""
+        from specflow.integrations.git import _parse_name_status_line
+
+        assert _parse_name_status_line("M\tpath/to/my file.py") == "path/to/my file.py"
+        assert _parse_name_status_line("R100\told file.py\tnew file.py") == "new file.py"
+
+    def test_handles_empty_line(self):
+        """Returns empty string for empty input."""
+        from specflow.integrations.git import _parse_name_status_line
+
+        assert _parse_name_status_line("") == ""
+
+
+class TestGetDiffFromBaselineRenameHandling:
+    """Tests for rename/copy handling in get_diff_from_baseline."""
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_changed_files_contains_only_new_path_for_renames(self, mock_run):
+        """For renames, changed_files contains only the destination path."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="", stderr=""),  # committed diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged diff
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged files
+            # Committed files with rename
+            MagicMock(returncode=0, stdout="R100\told_name.py\tnew_name.py\nM\tother.py", stderr=""),
+            MagicMock(returncode=0, stdout="", stderr=""),  # staged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # committed stat
+            MagicMock(returncode=0, stdout="", stderr=""),  # untracked
+        ]
+
+        result = get_diff_from_baseline("abc123")
+
+        assert result.is_success
+        # Should have only the NEW path, not "old_name.py\tnew_name.py"
+        assert "new_name.py" in result.changed_files
+        assert "other.py" in result.changed_files
+        # Old path should NOT be in the list
+        assert "old_name.py" not in result.changed_files
+        # The buggy substring should NOT appear
+        assert "old_name.py\tnew_name.py" not in result.changed_files
