@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 from specflow.workflow.step4_update_docs import (
     step_4_update_docs,
     _build_doc_update_prompt,
-    DOC_FILE_PATTERNS,
     MAX_DIFF_SIZE,
 )
 from specflow.workflow.state import WorkflowState
@@ -30,27 +29,6 @@ def workflow_state(ticket):
     state = WorkflowState(ticket=ticket)
     state.base_commit = "abc123"
     return state
-
-
-# =============================================================================
-# Tests for DOC_FILE_PATTERNS constant
-# =============================================================================
-
-
-class TestDocFilePatterns:
-    """Tests for DOC_FILE_PATTERNS constant."""
-
-    def test_includes_readme_md(self):
-        """DOC_FILE_PATTERNS includes README.md."""
-        assert "README.md" in DOC_FILE_PATTERNS
-
-    def test_includes_changelog_md(self):
-        """DOC_FILE_PATTERNS includes CHANGELOG.md."""
-        assert "CHANGELOG.md" in DOC_FILE_PATTERNS
-
-    def test_includes_docs_glob(self):
-        """DOC_FILE_PATTERNS includes docs/**/*.md glob."""
-        assert "docs/**/*.md" in DOC_FILE_PATTERNS
 
 
 # =============================================================================
@@ -155,11 +133,11 @@ class TestStep4AgentFailure:
     @patch("specflow.workflow.step4_update_docs.AuggieClient")
     @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
     @patch("specflow.workflow.step4_update_docs.is_dirty")
-    def test_returns_false_when_agent_returns_failure(
+    def test_returns_true_when_agent_returns_failure_non_blocking(
         self, mock_is_dirty, mock_get_diff, mock_auggie_class, mock_print_warning,
         mock_print_info, mock_print_header, workflow_state
     ):
-        """Returns False when agent returns failure status."""
+        """Returns True (non-blocking) even when agent returns failure status."""
         mock_is_dirty.return_value = True
         mock_get_diff.return_value = "diff content"
         mock_auggie = MagicMock()
@@ -168,7 +146,8 @@ class TestStep4AgentFailure:
 
         result = step_4_update_docs(workflow_state)
 
-        assert result is False
+        # Step 4 is non-blocking - always returns True to not fail workflow
+        assert result is True
         mock_print_warning.assert_called()
 
     @patch("specflow.workflow.step4_update_docs.print_header")

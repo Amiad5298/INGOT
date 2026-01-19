@@ -197,9 +197,11 @@ class TestAddToGitignore:
 class TestGetDiffFromBaseline:
     """Tests for get_diff_from_baseline function."""
 
+    @patch("specflow.integrations.git.is_dirty")
     @patch("specflow.integrations.git.subprocess.run")
-    def test_returns_diff_content(self, mock_run):
+    def test_returns_diff_content(self, mock_run, mock_is_dirty):
         """Returns diff content from baseline commit."""
+        mock_is_dirty.return_value = False
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="diff --git a/file.py b/file.py\n+new line",
@@ -214,9 +216,11 @@ class TestGetDiffFromBaseline:
         call_args = diff_calls[0][0][0]
         assert "abc123" in call_args
 
+    @patch("specflow.integrations.git.is_dirty")
     @patch("specflow.integrations.git.subprocess.run")
-    def test_returns_empty_string_on_empty_diff(self, mock_run):
+    def test_returns_empty_string_on_empty_diff(self, mock_run, mock_is_dirty):
         """Returns empty string when no changes."""
+        mock_is_dirty.return_value = False
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="",
@@ -242,4 +246,24 @@ class TestGetDiffFromBaseline:
 
         assert result == ""
         mock_run.assert_not_called()
+
+    @patch("specflow.integrations.git.is_dirty")
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_includes_staged_changes_when_dirty(self, mock_run, mock_is_dirty):
+        """Includes staged changes when working tree is dirty."""
+        mock_is_dirty.return_value = True
+        # Return different output for each call
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="committed changes"),  # git diff base HEAD
+            MagicMock(returncode=0, stdout="staged changes"),     # git diff --cached
+            MagicMock(returncode=0, stdout="unstaged changes"),   # git diff
+        ]
+
+        result = get_diff_from_baseline("abc123")
+
+        assert "committed changes" in result
+        assert "staged changes" in result
+        assert "unstaged changes" in result
+        # Should have 3 subprocess calls
+        assert mock_run.call_count == 3
 

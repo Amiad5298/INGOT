@@ -13,18 +13,6 @@ from specflow.utils.console import print_header, print_info, print_success, prin
 from specflow.workflow.state import WorkflowState
 
 
-# Documentation files to consider for updates
-DOC_FILE_PATTERNS = [
-    "README.md",
-    "README.rst",
-    "CHANGELOG.md",
-    "CHANGES.md",
-    "docs/**/*.md",
-    "doc/**/*.md",
-    "API.md",
-    "USAGE.md",
-]
-
 # Maximum diff size to avoid context overflow
 MAX_DIFF_SIZE = 8000
 
@@ -75,9 +63,11 @@ def step_4_update_docs(state: WorkflowState) -> bool:
         if success:
             print_success("Documentation update completed")
         else:
-            print_warning("Documentation update reported issues")
+            print_warning("Documentation update reported issues (non-blocking)")
 
-        return success
+        # Always return True - this step is non-blocking per spec
+        # Doc update failures should not fail the overall workflow
+        return True
 
     except Exception as e:
         print_warning(f"Documentation update failed: {e}")

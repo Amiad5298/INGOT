@@ -369,7 +369,8 @@ def commit_changes(message: str) -> str:
 def get_diff_from_baseline(base_commit: str) -> str:
     """Get the git diff from a baseline commit to the current state.
 
-    This includes both committed and uncommitted changes since the baseline.
+    This includes committed changes, staged changes, and unstaged changes
+    since the baseline.
 
     Args:
         base_commit: The baseline commit hash to diff from
@@ -381,7 +382,7 @@ def get_diff_from_baseline(base_commit: str) -> str:
         return ""
 
     try:
-        # Get diff from base commit to current working state (including uncommitted)
+        # Get diff from base commit to HEAD (committed changes)
         result = subprocess.run(
             ["git", "diff", base_commit, "HEAD"],
             capture_output=True,
@@ -391,22 +392,33 @@ def get_diff_from_baseline(base_commit: str) -> str:
 
         diff_output = result.stdout
 
-        # Also include any uncommitted changes
+        # Also include any uncommitted changes (staged + unstaged)
         if is_dirty():
-            uncommitted_result = subprocess.run(
-                ["git", "diff", "HEAD"],
+            # Get staged changes (git diff --cached)
+            staged_result = subprocess.run(
+                ["git", "diff", "--cached"],
                 capture_output=True,
                 text=True,
             )
-            if uncommitted_result.stdout:
-                diff_output += "\n" + uncommitted_result.stdout
+            if staged_result.stdout:
+                diff_output += "\n" + staged_result.stdout
+
+            # Get unstaged changes (git diff without args)
+            unstaged_result = subprocess.run(
+                ["git", "diff"],
+                capture_output=True,
+                text=True,
+            )
+            if unstaged_result.stdout:
+                diff_output += "\n" + unstaged_result.stdout
 
         return diff_output.strip()
 
     except subprocess.CalledProcessError as e:
         log_command(f"git diff {base_commit}", e.returncode)
         return ""
-    except Exception:
+    except Exception as e:
+        print_warning(f"Failed to get diff from baseline: {e}")
         return ""
 
 
