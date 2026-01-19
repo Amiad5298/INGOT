@@ -83,7 +83,7 @@ def is_dirty() -> bool:
     """Check if working directory has uncommitted changes.
 
     Returns:
-        True if there are uncommitted changes
+        True if there are uncommitted changes (staged or unstaged)
     """
     try:
         # Check unstaged changes
@@ -99,6 +99,35 @@ def is_dirty() -> bool:
         return result1.returncode != 0 or result2.returncode != 0
     except subprocess.CalledProcessError:
         return False
+
+
+def has_untracked_files() -> bool:
+    """Check if there are any untracked files (excluding ignored).
+
+    Returns:
+        True if there are untracked files
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            capture_output=True,
+            text=True,
+        )
+        log_command("git ls-files --others --exclude-standard", result.returncode)
+        return result.returncode == 0 and bool(result.stdout.strip())
+    except Exception:
+        return False
+
+
+def has_any_changes() -> bool:
+    """Check if working directory has any changes (staged, unstaged, or untracked).
+
+    This is a comprehensive check that combines is_dirty() and has_untracked_files().
+
+    Returns:
+        True if there are any changes (staged, unstaged, or untracked files)
+    """
+    return is_dirty() or has_untracked_files()
 
 
 def get_current_branch() -> str:
@@ -405,7 +434,7 @@ def commit_changes(message: str) -> str:
         return ""
 
 
-def get_diff_from_baseline(base_commit: str) -> DiffResult:
+def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
     """Get the git diff from a baseline commit to the current state.
 
     This includes committed changes, staged changes, unstaged changes,
@@ -413,15 +442,18 @@ def get_diff_from_baseline(base_commit: str) -> DiffResult:
 
     Uses --no-color and --no-ext-diff for clean, parseable output.
 
+    If base_commit is empty/None but repo is dirty, falls back to
+    collecting staged + unstaged + untracked changes (no commit-to-commit diff).
+
     Args:
-        base_commit: The baseline commit hash to diff from
+        base_commit: The baseline commit hash to diff from (can be empty/None)
 
     Returns:
         DiffResult with diff content, changed files list, diffstat, and error status.
         On error, has_error is True and error_message contains details.
     """
-    if not base_commit:
-        return DiffResult(has_error=True, error_message="No base commit provided")
+    # Handle missing base_commit - fall back to staged + unstaged + untracked
+    no_base_commit = not base_commit or not base_commit.strip()
 
     diff_sections: list[str] = []
     changed_files: list[str] = []
@@ -432,24 +464,25 @@ def get_diff_from_baseline(base_commit: str) -> DiffResult:
         # Base git diff flags for clean output
         base_flags = ["--no-color", "--no-ext-diff"]
 
-        # 1. Get committed changes: git diff <base>..HEAD
-        committed_result = subprocess.run(
-            ["git", "diff", *base_flags, f"{base_commit}..HEAD"],
-            capture_output=True,
-            text=True,
-        )
-        log_command(f"git diff {base_commit}..HEAD", committed_result.returncode)
-
-        if committed_result.returncode != 0:
-            stderr = committed_result.stderr.strip() if committed_result.stderr else "unknown error"
-            print_warning(f"Failed to compute committed diff: {stderr}")
-            return DiffResult(
-                has_error=True,
-                error_message=f"git diff {base_commit}..HEAD failed: {stderr}",
+        # 1. Get committed changes: git diff <base>..HEAD (only if we have a base commit)
+        if not no_base_commit:
+            committed_result = subprocess.run(
+                ["git", "diff", *base_flags, f"{base_commit}..HEAD"],
+                capture_output=True,
+                text=True,
             )
+            log_command(f"git diff {base_commit}..HEAD", committed_result.returncode)
 
-        if committed_result.stdout.strip():
-            diff_sections.append("=== Committed Changes ===\n" + committed_result.stdout)
+            if committed_result.returncode != 0:
+                stderr = committed_result.stderr.strip() if committed_result.stderr else "unknown error"
+                print_warning(f"Failed to compute committed diff: {stderr}")
+                return DiffResult(
+                    has_error=True,
+                    error_message=f"git diff {base_commit}..HEAD failed: {stderr}",
+                )
+
+            if committed_result.stdout.strip():
+                diff_sections.append("=== Committed Changes ===\n" + committed_result.stdout)
 
         # 2. Get staged changes: git diff --cached
         staged_result = subprocess.run(
@@ -489,27 +522,89 @@ def get_diff_from_baseline(base_commit: str) -> DiffResult:
         if unstaged_result.stdout.strip():
             diff_sections.append("=== Unstaged Changes ===\n" + unstaged_result.stdout)
 
-        # 4. Get changed files list: git diff --name-status <base>..HEAD
-        name_status_result = subprocess.run(
-            ["git", "diff", "--name-status", f"{base_commit}..HEAD"],
-            capture_output=True,
-            text=True,
-        )
-        if name_status_result.returncode == 0 and name_status_result.stdout.strip():
-            changed_files = [
-                line.split("\t", 1)[-1]
-                for line in name_status_result.stdout.strip().split("\n")
-                if line.strip()
-            ]
+        # 4. Get changed files list (only if we have a base commit)
+        if not no_base_commit:
+            name_status_result = subprocess.run(
+                ["git", "diff", "--name-status", f"{base_commit}..HEAD"],
+                capture_output=True,
+                text=True,
+            )
+            log_command(f"git diff --name-status {base_commit}..HEAD", name_status_result.returncode)
 
-        # 5. Get diffstat summary
-        stat_result = subprocess.run(
-            ["git", "diff", "--stat", f"{base_commit}..HEAD"],
-            capture_output=True,
-            text=True,
-        )
-        if stat_result.returncode == 0 and stat_result.stdout.strip():
-            diffstat = stat_result.stdout.strip()
+            if name_status_result.returncode != 0:
+                stderr = name_status_result.stderr.strip() if name_status_result.stderr else "unknown error"
+                print_warning(f"Failed to get changed files list: {stderr}")
+                # Non-fatal: continue with empty changed_files
+            elif name_status_result.stdout.strip():
+                changed_files = [
+                    line.split("\t", 1)[-1]
+                    for line in name_status_result.stdout.strip().split("\n")
+                    if line.strip()
+                ]
+        else:
+            # Fallback: collect changed files from staged + unstaged
+            staged_files_result = subprocess.run(
+                ["git", "diff", "--name-only", "--cached"],
+                capture_output=True,
+                text=True,
+            )
+            log_command("git diff --name-only --cached", staged_files_result.returncode)
+
+            unstaged_files_result = subprocess.run(
+                ["git", "diff", "--name-only"],
+                capture_output=True,
+                text=True,
+            )
+            log_command("git diff --name-only", unstaged_files_result.returncode)
+
+            if staged_files_result.returncode == 0:
+                changed_files.extend([
+                    f for f in staged_files_result.stdout.strip().split("\n") if f.strip()
+                ])
+            else:
+                stderr = staged_files_result.stderr.strip() if staged_files_result.stderr else "unknown error"
+                print_warning(f"Failed to list staged files: {stderr}")
+
+            if unstaged_files_result.returncode == 0:
+                changed_files.extend([
+                    f for f in unstaged_files_result.stdout.strip().split("\n") if f.strip()
+                ])
+            else:
+                stderr = unstaged_files_result.stderr.strip() if unstaged_files_result.stderr else "unknown error"
+                print_warning(f"Failed to list unstaged files: {stderr}")
+
+            changed_files = list(set(changed_files))  # Deduplicate
+
+        # 5. Get diffstat summary (only if we have a base commit)
+        if not no_base_commit:
+            stat_result = subprocess.run(
+                ["git", "diff", "--stat", f"{base_commit}..HEAD"],
+                capture_output=True,
+                text=True,
+            )
+            log_command(f"git diff --stat {base_commit}..HEAD", stat_result.returncode)
+
+            if stat_result.returncode != 0:
+                stderr = stat_result.stderr.strip() if stat_result.stderr else "unknown error"
+                print_warning(f"Failed to get diffstat: {stderr}")
+                # Non-fatal: continue with empty diffstat
+            elif stat_result.stdout.strip():
+                diffstat = stat_result.stdout.strip()
+        else:
+            # Fallback: generate diffstat from staged + unstaged
+            combined_stat_result = subprocess.run(
+                ["git", "diff", "--stat", "HEAD"],
+                capture_output=True,
+                text=True,
+            )
+            log_command("git diff --stat HEAD", combined_stat_result.returncode)
+
+            if combined_stat_result.returncode != 0:
+                stderr = combined_stat_result.stderr.strip() if combined_stat_result.stderr else "unknown error"
+                print_warning(f"Failed to get diffstat (fallback): {stderr}")
+                # Non-fatal: continue with empty diffstat
+            elif combined_stat_result.stdout.strip():
+                diffstat = combined_stat_result.stdout.strip()
 
         # 6. Get untracked files: git ls-files --others --exclude-standard
         untracked_result = subprocess.run(
@@ -517,7 +612,13 @@ def get_diff_from_baseline(base_commit: str) -> DiffResult:
             capture_output=True,
             text=True,
         )
-        if untracked_result.returncode == 0 and untracked_result.stdout.strip():
+        log_command("git ls-files --others --exclude-standard", untracked_result.returncode)
+
+        if untracked_result.returncode != 0:
+            stderr = untracked_result.stderr.strip() if untracked_result.stderr else "unknown error"
+            print_warning(f"Failed to list untracked files: {stderr}")
+            # Non-fatal: continue with empty untracked_files
+        elif untracked_result.stdout.strip():
             untracked_files = [
                 f for f in untracked_result.stdout.strip().split("\n") if f.strip()
             ]
@@ -672,6 +773,8 @@ __all__ = [
     "DirtyStateAction",
     "is_git_repo",
     "is_dirty",
+    "has_untracked_files",
+    "has_any_changes",
     "get_current_branch",
     "get_current_commit",
     "get_status_short",

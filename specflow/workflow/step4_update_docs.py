@@ -23,9 +23,9 @@ from specflow.integrations.git import (
     get_diff_from_baseline,
     get_changed_files_list,
     get_untracked_files_list,
-    is_dirty,
+    has_any_changes,
 )
-from specflow.utils.console import print_header, print_info, print_success, print_warning
+from specflow.utils.console import print_error, print_header, print_info, print_success, print_warning
 from specflow.workflow.state import WorkflowState
 
 
@@ -258,6 +258,8 @@ class Step4Result:
         docs_updated: True if documentation was updated
         agent_ran: True if the doc-updater agent was invoked
         non_doc_reverted: List of non-doc files that were reverted
+        non_doc_revert_failed: List of non-doc files that failed to revert
+        had_violations: True if agent violated doc-only constraint
         error_message: Error description if success is False
     """
 
@@ -265,6 +267,8 @@ class Step4Result:
     docs_updated: bool = False
     agent_ran: bool = False
     non_doc_reverted: list[str] = field(default_factory=list)
+    non_doc_revert_failed: list[str] = field(default_factory=list)
+    had_violations: bool = False
     error_message: str = ""
 
 
@@ -308,12 +312,14 @@ def step_4_update_docs(
     print_header("Step 4: Update Documentation")
     result = Step4Result()
 
-    # Check if there are any changes to analyze
-    if not is_dirty() and not state.base_commit:
+    # Check if there are any changes to analyze (including untracked files)
+    if not has_any_changes() and not state.base_commit:
         print_info("No changes detected. Skipping documentation update.")
         return result
 
     # Get diff from baseline (now returns DiffResult)
+    # Note: get_diff_from_baseline handles missing base_commit gracefully
+    # by falling back to staged + unstaged + untracked changes
     diff_result = get_diff_from_baseline(state.base_commit)
 
     if diff_result.has_error:
@@ -348,32 +354,50 @@ def step_4_update_docs(
         # Enforce doc-only changes: detect and revert non-doc modifications
         non_doc_changes = non_doc_snapshot.detect_changes()
         if non_doc_changes:
-            print_warning(
-                f"⚠️  ENFORCEMENT: Agent modified {len(non_doc_changes)} non-documentation file(s). "
-                "Reverting these changes:"
-            )
-            for filepath in non_doc_changes:
-                print_warning(f"  - {filepath}")
+            result.had_violations = True
 
+            # Make violations highly visible with prominent banner
+            print_error("=" * 60)
+            print_error("⛔ GUARDRAIL VIOLATION: NON-DOCUMENTATION FILES MODIFIED ⛔")
+            print_error("=" * 60)
+            print_warning(
+                f"The doc-updater agent modified {len(non_doc_changes)} non-documentation file(s)."
+            )
+            print_warning("These changes violate the doc-only constraint and will be reverted:")
+            for filepath in non_doc_changes:
+                print_warning(f"  • {filepath}")
+
+            # Attempt to revert all non-doc changes
             reverted = non_doc_snapshot.revert_changes(non_doc_changes)
             result.non_doc_reverted = reverted
 
-            if len(reverted) < len(non_doc_changes):
-                failed = set(non_doc_changes) - set(reverted)
-                print_warning(f"  Failed to revert: {', '.join(failed)}")
+            if len(reverted) == len(non_doc_changes):
+                print_info(f"✓ Successfully reverted all {len(reverted)} non-doc file(s)")
+            else:
+                failed = list(set(non_doc_changes) - set(reverted))
+                result.non_doc_revert_failed = failed
+                print_error(f"⚠️  CRITICAL: Failed to revert {len(failed)} file(s):")
+                for filepath in failed:
+                    print_error(f"    ✗ {filepath}")
+                print_error("Manual review required for these files!")
+
+            print_error("=" * 60)
 
         if success:
             result.docs_updated = True
-            print_success("Documentation update completed")
+            if result.had_violations:
+                print_warning("Documentation update completed with violations (see above)")
+            else:
+                print_success("Documentation update completed successfully")
         else:
             print_warning("Documentation update reported issues (non-blocking)")
 
         return result
 
     except Exception as e:
-        print_warning(f"Documentation update failed: {e}")
+        print_error(f"Documentation update failed with exception: {e}")
         result.error_message = str(e)
-        # Non-blocking - still return success
+        # Non-blocking - still return success for workflow
         return result
 
 

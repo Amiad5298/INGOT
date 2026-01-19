@@ -10,6 +10,8 @@ from specflow.integrations.git import (
     DirtyStateAction,
     is_git_repo,
     is_dirty,
+    has_untracked_files,
+    has_any_changes,
     get_current_branch,
     get_current_commit,
     get_status_short,
@@ -75,10 +77,99 @@ class TestIsDirty:
             MagicMock(returncode=0),
             MagicMock(returncode=1),
         ]
-        
+
         result = is_dirty()
-        
+
         assert result is True
+
+
+class TestHasUntrackedFiles:
+    """Tests for has_untracked_files function."""
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_returns_true_when_untracked_files_exist(self, mock_run):
+        """Returns True when there are untracked files."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="new_file.txt\nanother.py")
+
+        result = has_untracked_files()
+
+        assert result is True
+        mock_run.assert_called_once()
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_returns_false_when_no_untracked_files(self, mock_run):
+        """Returns False when there are no untracked files."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="")
+
+        result = has_untracked_files()
+
+        assert result is False
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_returns_false_on_git_error(self, mock_run):
+        """Returns False when git command fails."""
+        mock_run.return_value = MagicMock(returncode=128, stdout="")
+
+        result = has_untracked_files()
+
+        assert result is False
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_returns_false_on_exception(self, mock_run):
+        """Returns False when exception occurs."""
+        mock_run.side_effect = Exception("Git not found")
+
+        result = has_untracked_files()
+
+        assert result is False
+
+
+class TestHasAnyChanges:
+    """Tests for has_any_changes function."""
+
+    @patch("specflow.integrations.git.has_untracked_files")
+    @patch("specflow.integrations.git.is_dirty")
+    def test_returns_true_when_dirty(self, mock_dirty, mock_untracked):
+        """Returns True when repo is dirty (staged/unstaged changes)."""
+        mock_dirty.return_value = True
+        mock_untracked.return_value = False
+
+        result = has_any_changes()
+
+        assert result is True
+
+    @patch("specflow.integrations.git.has_untracked_files")
+    @patch("specflow.integrations.git.is_dirty")
+    def test_returns_true_when_untracked_only(self, mock_dirty, mock_untracked):
+        """Returns True when only untracked files exist (critical test case)."""
+        mock_dirty.return_value = False
+        mock_untracked.return_value = True
+
+        result = has_any_changes()
+
+        assert result is True
+
+    @patch("specflow.integrations.git.has_untracked_files")
+    @patch("specflow.integrations.git.is_dirty")
+    def test_returns_true_when_both_dirty_and_untracked(self, mock_dirty, mock_untracked):
+        """Returns True when both dirty and untracked files exist."""
+        mock_dirty.return_value = True
+        mock_untracked.return_value = True
+
+        result = has_any_changes()
+
+        assert result is True
+
+    @patch("specflow.integrations.git.has_untracked_files")
+    @patch("specflow.integrations.git.is_dirty")
+    def test_returns_false_when_clean(self, mock_dirty, mock_untracked):
+        """Returns False when repo is clean with no untracked files."""
+        mock_dirty.return_value = False
+        mock_untracked.return_value = False
+
+        result = has_any_changes()
+
+        assert result is False
 
 
 class TestGetCurrentBranch:
@@ -259,12 +350,53 @@ class TestGetDiffFromBaseline:
         assert "failed" in result.error_message.lower()
         mock_warning.assert_called()
 
-    def test_returns_error_for_empty_commit(self):
-        """Returns DiffResult with has_error=True when base_commit is empty."""
-        result = get_diff_from_baseline("")
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_empty_commit_falls_back_to_staged_unstaged_untracked(self, mock_run):
+        """Falls back to staged+unstaged+untracked when base_commit is empty."""
+        mock_run.side_effect = [
+            # Skip committed (no base commit)
+            # 1. git diff --cached (staged)
+            MagicMock(returncode=0, stdout="staged diff content", stderr=""),
+            # 2. git diff (unstaged)
+            MagicMock(returncode=0, stdout="unstaged diff content", stderr=""),
+            # 3. git diff --name-only --cached (fallback changed files)
+            MagicMock(returncode=0, stdout="staged_file.py", stderr=""),
+            # 4. git diff --name-only (fallback changed files)
+            MagicMock(returncode=0, stdout="unstaged_file.py", stderr=""),
+            # 5. git diff --stat HEAD (fallback diffstat)
+            MagicMock(returncode=0, stdout=" 2 files changed", stderr=""),
+            # 6. git ls-files --others --exclude-standard
+            MagicMock(returncode=0, stdout="new_file.txt", stderr=""),
+        ]
 
-        assert result.has_error
-        assert "No base commit provided" in result.error_message
+        with patch("specflow.integrations.git._generate_untracked_file_diff") as mock_gen:
+            mock_gen.return_value = "diff --git a/new_file.txt\n+content"
+
+            result = get_diff_from_baseline("")
+
+            assert result.is_success
+            assert not result.has_error
+            assert result.has_changes
+            assert "Staged Changes" in result.diff
+            assert "Unstaged Changes" in result.diff
+            assert "new_file.txt" in result.untracked_files
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_empty_commit_none_value_also_falls_back(self, mock_run):
+        """None base_commit also falls back to staged+unstaged+untracked."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="staged content", stderr=""),  # staged
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged
+            MagicMock(returncode=0, stdout="file.py", stderr=""),  # staged files
+            MagicMock(returncode=0, stdout="", stderr=""),  # unstaged files
+            MagicMock(returncode=0, stdout="1 file changed", stderr=""),  # diffstat
+            MagicMock(returncode=0, stdout="", stderr=""),  # untracked
+        ]
+
+        result = get_diff_from_baseline(None)
+
+        assert result.is_success
+        assert "file.py" in result.changed_files
 
     @patch("specflow.integrations.git.subprocess.run")
     def test_includes_all_change_types(self, mock_run):
