@@ -297,3 +297,440 @@ class TestBackwardsCompatibility:
         assert _parse_review_status("**Status**: PASS\n") == ReviewStatus.PASS
         assert _parse_review_status("Status: NEEDS_ATTENTION") == ReviewStatus.NEEDS_ATTENTION
 
+
+class TestBuildReviewPrompt:
+    """Tests for build_review_prompt function."""
+
+    def test_builds_prompt_with_phase_and_diff(self):
+        """Builds a prompt with the phase and diff output."""
+        from unittest.mock import MagicMock
+        from specflow.workflow.review import build_review_prompt
+
+        state = MagicMock()
+        state.get_plan_path.return_value = "specs/TEST-123-plan.md"
+
+        result = build_review_prompt(
+            state=state,
+            phase="fundamental",
+            diff_output="diff --git a/file.py b/file.py\n+new line",
+            is_truncated=False,
+        )
+
+        assert "fundamental" in result
+        assert "specs/TEST-123-plan.md" in result
+        assert "diff --git a/file.py b/file.py" in result
+        assert "**Status**: PASS" in result
+        assert "Large Changeset" not in result
+
+    def test_includes_large_changeset_instructions_when_truncated(self):
+        """Includes large changeset instructions when diff is truncated."""
+        from unittest.mock import MagicMock
+        from specflow.workflow.review import build_review_prompt
+
+        state = MagicMock()
+        state.get_plan_path.return_value = "specs/PROJ-456-plan.md"
+
+        result = build_review_prompt(
+            state=state,
+            phase="final",
+            diff_output="file1.py | 10 ++++\nfile2.py | 5 ++",
+            is_truncated=True,
+        )
+
+        assert "final" in result
+        assert "Large Changeset" in result
+        assert "git diff -- <file_path>" in result
+
+    def test_includes_review_instructions(self):
+        """Includes review instructions in the prompt."""
+        from unittest.mock import MagicMock
+        from specflow.workflow.review import build_review_prompt
+
+        state = MagicMock()
+        state.get_plan_path.return_value = "plan.md"
+
+        result = build_review_prompt(
+            state=state,
+            phase="fundamental",
+            diff_output="some diff",
+            is_truncated=False,
+        )
+
+        assert "Review Instructions" in result
+        assert "align with the implementation plan" in result
+        assert "NEEDS_ATTENTION" in result
+
+
+class TestGetDiffForReview:
+    """Tests for _get_diff_for_review function."""
+
+    def test_uses_baseline_when_available(self):
+        """Uses baseline-anchored diff when diff_baseline_ref is set."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _get_diff_for_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = "abc123"
+
+        with patch("specflow.workflow.review.get_smart_diff_from_baseline") as mock_baseline:
+            mock_baseline.return_value = ("diff output", False, False)
+            result = _get_diff_for_review(state)
+
+            mock_baseline.assert_called_once_with("abc123", include_working_tree=True)
+            assert result == ("diff output", False, False)
+
+    def test_falls_back_to_smart_diff_when_no_baseline(self):
+        """Falls back to legacy get_smart_diff when no baseline."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _get_diff_for_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_smart:
+            mock_smart.return_value = ("legacy diff", True, False)
+            result = _get_diff_for_review(state)
+
+            mock_smart.assert_called_once()
+            assert result == ("legacy diff", True, False)
+
+
+class TestRunPhaseReview:
+    """Tests for run_phase_review function."""
+
+    def test_returns_true_when_no_changes(self):
+        """Returns True when there are no changes to review."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("", False, False)  # Empty diff
+            with patch("specflow.workflow.review.print_info"):
+                result = run_phase_review(state, MagicMock(), "fundamental")
+
+        assert result is True
+
+    def test_returns_true_when_review_passes(self):
+        """Returns True when review status is PASS."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("diff content", False, False)
+            with patch("specflow.workflow.review.AuggieClient") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.run_print_with_output.return_value = (True, "**Status**: PASS")
+                mock_client_class.return_value = mock_client
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_success"):
+                        result = run_phase_review(state, MagicMock(), "fundamental")
+
+        assert result is True
+
+    def test_prompts_for_git_error(self):
+        """Prompts user when git diff fails."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("", False, True)  # git_error=True
+            with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+                mock_confirm.return_value = True  # User continues
+                with patch("specflow.workflow.review.print_warning"):
+                    with patch("specflow.workflow.review.print_info"):
+                        with patch("specflow.workflow.review.print_step"):
+                            result = run_phase_review(state, MagicMock(), "final")
+
+        assert result is True
+        mock_confirm.assert_called_once()
+
+    def test_returns_false_when_user_stops_after_git_error(self):
+        """Returns False when user chooses to stop after git error."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("", False, True)  # git_error=True
+            with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+                mock_confirm.return_value = False  # User stops
+                with patch("specflow.workflow.review.print_warning"):
+                    with patch("specflow.workflow.review.print_info"):
+                        with patch("specflow.workflow.review.print_step"):
+                            result = run_phase_review(state, MagicMock(), "final")
+
+        assert result is False
+
+    def test_offers_autofix_on_needs_attention(self):
+        """Offers auto-fix when review returns NEEDS_ATTENTION."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("diff content", False, False)
+            with patch("specflow.workflow.review.AuggieClient") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.run_print_with_output.return_value = (
+                    True,
+                    "**Status**: NEEDS_ATTENTION\n**Issues**: 1. Bug",
+                )
+                mock_client_class.return_value = mock_client
+                with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+                    # First confirm = auto-fix (No), second = continue (Yes)
+                    mock_confirm.side_effect = [False, True]
+                    with patch("specflow.workflow.review.print_step"):
+                        with patch("specflow.workflow.review.print_warning"):
+                            result = run_phase_review(state, MagicMock(), "fundamental")
+
+        assert result is True
+        # Should be called twice: auto-fix prompt and continue prompt
+        assert mock_confirm.call_count == 2
+
+    def test_runs_autofix_when_user_accepts(self):
+        """Runs auto-fix when user accepts."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("diff content", False, False)
+            with patch("specflow.workflow.review.AuggieClient") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.run_print_with_output.return_value = (
+                    True,
+                    "**Status**: NEEDS_ATTENTION",
+                )
+                mock_client_class.return_value = mock_client
+                with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+                    # auto-fix (Yes), re-review (No), continue (Yes)
+                    mock_confirm.side_effect = [True, False, True]
+                    # Patch autofix in its source module since it's imported inside the function
+                    with patch("specflow.workflow.autofix.run_auto_fix") as mock_autofix:
+                        mock_autofix.return_value = True
+                        with patch("specflow.workflow.review.print_step"):
+                            with patch("specflow.workflow.review.print_warning"):
+                                result = run_phase_review(state, MagicMock(), "fundamental")
+
+        mock_autofix.assert_called_once()
+        assert result is True
+
+    def test_handles_review_execution_exception(self):
+        """Handles exception during review execution gracefully."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("diff content", False, False)
+            with patch("specflow.workflow.review.AuggieClient") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.run_print_with_output.side_effect = Exception("Network error")
+                mock_client_class.return_value = mock_client
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_warning"):
+                        with patch("specflow.workflow.review.print_info"):
+                            result = run_phase_review(state, MagicMock(), "fundamental")
+
+        # Should continue workflow on review crash (advisory behavior)
+        assert result is True
+
+    def test_prompts_user_on_execution_failure(self):
+        """Prompts user when review execution returns failure."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import run_phase_review
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+
+        with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+            mock_diff.return_value = ("diff content", False, False)
+            with patch("specflow.workflow.review.AuggieClient") as mock_client_class:
+                mock_client = MagicMock()
+                mock_client.run_print_with_output.return_value = (False, "Error output")
+                mock_client_class.return_value = mock_client
+                with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+                    mock_confirm.return_value = True
+                    with patch("specflow.workflow.review.print_step"):
+                        with patch("specflow.workflow.review.print_warning"):
+                            with patch("specflow.workflow.review.print_info"):
+                                result = run_phase_review(state, MagicMock(), "final")
+
+        assert result is True
+        mock_confirm.assert_called_once()
+
+
+class TestRunRereviewAfterFix:
+    """Tests for _run_rereview_after_fix function."""
+
+    def test_returns_none_when_user_skips(self):
+        """Returns None when user skips re-review."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _run_rereview_after_fix
+
+        state = MagicMock()
+        auggie_client = MagicMock()
+
+        with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+            mock_confirm.return_value = False
+            result = _run_rereview_after_fix(state, MagicMock(), "fundamental", auggie_client)
+
+        assert result is None
+
+    def test_returns_true_when_no_changes_after_fix(self):
+        """Returns True when no changes remain after fix."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _run_rereview_after_fix
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        auggie_client = MagicMock()
+
+        with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+            mock_confirm.return_value = True
+            with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+                mock_diff.return_value = ("", False, False)  # No changes
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_info"):
+                        result = _run_rereview_after_fix(
+                            state, MagicMock(), "fundamental", auggie_client
+                        )
+
+        assert result is True
+
+    def test_returns_true_when_rereview_passes(self):
+        """Returns True when re-review passes."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _run_rereview_after_fix
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+        auggie_client = MagicMock()
+        auggie_client.run_print_with_output.return_value = (True, "**Status**: PASS")
+
+        with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+            mock_confirm.return_value = True
+            with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+                mock_diff.return_value = ("diff content", False, False)
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_success"):
+                        result = _run_rereview_after_fix(
+                            state, MagicMock(), "fundamental", auggie_client
+                        )
+
+        assert result is True
+
+    def test_returns_none_when_rereview_fails(self):
+        """Returns None when re-review still shows issues."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _run_rereview_after_fix
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+        auggie_client = MagicMock()
+        auggie_client.run_print_with_output.return_value = (True, "**Status**: NEEDS_ATTENTION")
+
+        with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+            mock_confirm.return_value = True
+            with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+                mock_diff.return_value = ("diff content", False, False)
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_warning"):
+                        with patch("specflow.workflow.review.print_info"):
+                            result = _run_rereview_after_fix(
+                                state, MagicMock(), "fundamental", auggie_client
+                            )
+
+        assert result is None
+
+    def test_returns_none_on_git_error(self):
+        """Returns None when git diff fails during re-review."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _run_rereview_after_fix
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        auggie_client = MagicMock()
+
+        with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+            mock_confirm.return_value = True
+            with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+                mock_diff.return_value = ("", False, True)  # git_error=True
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_warning"):
+                        result = _run_rereview_after_fix(
+                            state, MagicMock(), "fundamental", auggie_client
+                        )
+
+        assert result is None
+
+    def test_returns_none_on_execution_failure(self):
+        """Returns None when auggie execution fails."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _run_rereview_after_fix
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+        auggie_client = MagicMock()
+        auggie_client.run_print_with_output.return_value = (False, "error")
+
+        with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+            mock_confirm.return_value = True
+            with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+                mock_diff.return_value = ("diff content", False, False)
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_warning"):
+                        result = _run_rereview_after_fix(
+                            state, MagicMock(), "fundamental", auggie_client
+                        )
+
+        assert result is None
+
+    def test_returns_none_on_exception(self):
+        """Returns None when exception occurs during re-review."""
+        from unittest.mock import MagicMock, patch
+        from specflow.workflow.review import _run_rereview_after_fix
+
+        state = MagicMock()
+        state.diff_baseline_ref = None
+        state.subagent_names = {"reviewer": "spec-reviewer"}
+        auggie_client = MagicMock()
+        auggie_client.run_print_with_output.side_effect = Exception("Network error")
+
+        with patch("specflow.workflow.review.prompt_confirm") as mock_confirm:
+            mock_confirm.return_value = True
+            with patch("specflow.workflow.review.get_smart_diff") as mock_diff:
+                mock_diff.return_value = ("diff content", False, False)
+                with patch("specflow.workflow.review.print_step"):
+                    with patch("specflow.workflow.review.print_warning"):
+                        result = _run_rereview_after_fix(
+                            state, MagicMock(), "fundamental", auggie_client
+                        )
+
+        assert result is None
+

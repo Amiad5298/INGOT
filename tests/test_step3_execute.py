@@ -1807,3 +1807,75 @@ class TestExecuteTaskWithCallbackRateLimit:
         )
 
         assert result is False
+
+
+class TestCaptureBaselineForDiffs:
+    """Tests for _capture_baseline_for_diffs function."""
+
+    @patch("specflow.workflow.step3_execute.capture_baseline")
+    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
+    @patch("specflow.workflow.step3_execute.print_info")
+    def test_captures_baseline_successfully(
+        self, mock_print, mock_check_dirty, mock_capture, workflow_state
+    ):
+        """Captures baseline and returns True on success."""
+        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+
+        mock_check_dirty.return_value = True
+        mock_capture.return_value = "abc123def456"
+
+        result = _capture_baseline_for_diffs(workflow_state)
+
+        assert result is True
+        assert workflow_state.diff_baseline_ref == "abc123def456"
+
+    @patch("specflow.workflow.step3_execute.capture_baseline")
+    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
+    @patch("specflow.workflow.step3_execute.print_warning")
+    @patch("specflow.workflow.step3_execute.print_info")
+    def test_continues_with_dirty_tree_on_warn_policy(
+        self, mock_info, mock_warning, mock_check_dirty, mock_capture, workflow_state
+    ):
+        """Continues with dirty tree when policy allows."""
+        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+
+        mock_check_dirty.return_value = False  # Dirty but not raising
+        mock_capture.return_value = "abc123"
+
+        result = _capture_baseline_for_diffs(workflow_state)
+
+        assert result is True
+        mock_warning.assert_called_once()
+
+    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
+    @patch("specflow.workflow.step3_execute.print_error")
+    def test_returns_false_on_dirty_tree_fail_fast(
+        self, mock_error, mock_check_dirty, workflow_state
+    ):
+        """Returns False when dirty tree check raises DirtyWorkingTreeError."""
+        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+        from specflow.workflow.git_utils import DirtyWorkingTreeError
+
+        mock_check_dirty.side_effect = DirtyWorkingTreeError("Dirty tree")
+
+        result = _capture_baseline_for_diffs(workflow_state)
+
+        assert result is False
+        mock_error.assert_called_once()
+
+    @patch("specflow.workflow.step3_execute.capture_baseline")
+    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
+    @patch("specflow.workflow.step3_execute.print_error")
+    def test_returns_false_on_capture_failure(
+        self, mock_error, mock_check_dirty, mock_capture, workflow_state
+    ):
+        """Returns False when baseline capture fails."""
+        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+
+        mock_check_dirty.return_value = True
+        mock_capture.side_effect = Exception("Git error")
+
+        result = _capture_baseline_for_diffs(workflow_state)
+
+        assert result is False
+        mock_error.assert_called_once()

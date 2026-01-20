@@ -635,3 +635,123 @@ class TestGetDiffFromBaselineRenameHandling:
         assert "old_name.py" not in result.changed_files
         # The buggy substring should NOT appear
         assert "old_name.py\tnew_name.py" not in result.changed_files
+
+
+class TestGetStatusShort:
+    """Tests for get_status_short function."""
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_returns_status_output(self, mock_run):
+        """Returns git status --short output."""
+        mock_run.return_value = MagicMock(returncode=0, stdout=" M file.py\n?? new.txt\n")
+
+        result = get_status_short()
+
+        assert " M file.py" in result
+        assert "?? new.txt" in result
+
+
+class TestCheckoutBranch:
+    """Tests for checkout_branch function."""
+
+    @patch("specflow.integrations.git.print_success")
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_checkout_branch_successfully(self, mock_run, mock_print):
+        """Checks out existing branch successfully."""
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+        result = checkout_branch("feature-branch")
+
+        assert result is True
+        mock_print.assert_called_once()
+
+    @patch("specflow.integrations.git.print_error")
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_checkout_branch_failure(self, mock_run, mock_print):
+        """Returns False when checkout fails."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "git", stderr="error: pathspec 'nonexistent' did not match"
+        )
+
+        result = checkout_branch("nonexistent")
+
+        assert result is False
+        mock_print.assert_called_once()
+
+
+class TestSquashCommits:
+    """Tests for squash_commits function."""
+
+    @patch("specflow.integrations.git.print_success")
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_squash_single_task(self, mock_run, mock_print):
+        """Squashes commits for single task."""
+        mock_run.return_value = MagicMock(returncode=0)
+
+        squash_commits("abc123", "TEST-123", ["Implement feature"])
+
+        # Should call reset and commit
+        assert mock_run.call_count == 2
+        mock_print.assert_called_once()
+
+    @patch("specflow.integrations.git.print_success")
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_squash_multiple_tasks(self, mock_run, mock_print):
+        """Squashes commits for multiple tasks."""
+        mock_run.return_value = MagicMock(returncode=0)
+
+        squash_commits("abc123", "TEST-123", ["Task 1", "Task 2", "Task 3"])
+
+        # Should call reset and commit
+        assert mock_run.call_count == 2
+        # Verify commit message includes task list
+        commit_call = mock_run.call_args_list[1]
+        commit_msg = commit_call[0][0][3]  # git commit -m <message>
+        assert "3 tasks" in commit_msg
+        assert "Task 1" in commit_msg
+
+
+class TestCreateCheckpointCommit:
+    """Tests for create_checkpoint_commit function."""
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_creates_checkpoint_commit(self, mock_run):
+        """Creates checkpoint commit and returns short hash."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0),  # git add
+            MagicMock(returncode=0),  # git commit
+            MagicMock(returncode=0, stdout="abc123def456\n"),  # git rev-parse
+        ]
+
+        result = create_checkpoint_commit("TEST-123", "Implement feature")
+
+        assert result == "abc123de"
+        assert mock_run.call_count == 3
+
+
+class TestRevertChanges:
+    """Tests for revert_changes function."""
+
+    @patch("specflow.integrations.git.subprocess.run")
+    def test_reverts_all_changes(self, mock_run):
+        """Reverts all uncommitted changes."""
+        mock_run.return_value = MagicMock(returncode=0)
+
+        revert_changes()
+
+        # Should call checkout and clean
+        assert mock_run.call_count == 2
+
+
+class TestHasChanges:
+    """Tests for has_changes function."""
+
+    @patch("specflow.integrations.git.is_dirty")
+    def test_returns_is_dirty_result(self, mock_dirty):
+        """Returns result of is_dirty check."""
+        mock_dirty.return_value = True
+
+        result = has_changes()
+
+        assert result is True
+        mock_dirty.assert_called_once()

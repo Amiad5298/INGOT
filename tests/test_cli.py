@@ -428,6 +428,178 @@ class TestAutoUpdateDocsFlags:
         assert call_kwargs["auto_update_docs"] is None
 
 
+class TestShowHelp:
+    """Tests for show_help function."""
+
+    def test_show_help_displays_usage(self, capsys):
+        """show_help displays usage information."""
+        from specflow.cli import show_help
+
+        show_help()
+
+        captured = capsys.readouterr()
+        assert "SPEC Help" in captured.out or "Usage:" in captured.out
+
+
+class TestExceptionHandlers:
+    """Tests for exception handling in main command."""
+
+    @patch("specflow.cli.show_banner")
+    @patch("specflow.cli.ConfigManager")
+    @patch("specflow.cli._check_prerequisites")
+    @patch("specflow.cli._run_workflow")
+    def test_user_cancelled_error_handled(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """UserCancelledError is handled gracefully."""
+        from specflow.utils.errors import UserCancelledError
+
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+        mock_run.side_effect = UserCancelledError("User cancelled")
+
+        result = runner.invoke(app, ["TEST-123"])
+
+        assert result.exit_code == ExitCode.USER_CANCELLED
+
+    @patch("specflow.cli.show_banner")
+    @patch("specflow.cli.ConfigManager")
+    @patch("specflow.cli._check_prerequisites")
+    @patch("specflow.cli._run_workflow")
+    def test_spec_error_handled(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """SpecError is handled gracefully."""
+        from specflow.utils.errors import SpecError
+
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config.settings.default_jira_project = ""
+        mock_config_class.return_value = mock_config
+        mock_run.side_effect = SpecError("Something went wrong", ExitCode.GENERAL_ERROR)
+
+        result = runner.invoke(app, ["TEST-123"])
+
+        assert result.exit_code == ExitCode.GENERAL_ERROR
+
+
+class TestDirtyTreePolicy:
+    """Tests for dirty tree policy parsing."""
+
+    @patch("specflow.workflow.runner.run_spec_driven_workflow")
+    @patch("specflow.integrations.jira.parse_jira_ticket")
+    def test_dirty_tree_policy_fail_fast(self, mock_parse, mock_run_workflow):
+        """--dirty-tree-policy fail-fast sets FAIL_FAST policy."""
+        from specflow.cli import _run_workflow
+        from specflow.workflow.state import DirtyTreePolicy
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 3
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            dirty_tree_policy="fail-fast",
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["dirty_tree_policy"] == DirtyTreePolicy.FAIL_FAST
+
+    @patch("specflow.workflow.runner.run_spec_driven_workflow")
+    @patch("specflow.integrations.jira.parse_jira_ticket")
+    def test_dirty_tree_policy_warn(self, mock_parse, mock_run_workflow):
+        """--dirty-tree-policy warn sets WARN_AND_CONTINUE policy."""
+        from specflow.cli import _run_workflow
+        from specflow.workflow.state import DirtyTreePolicy
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 3
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
+
+        _run_workflow(
+            ticket="TEST-123",
+            config=mock_config,
+            dirty_tree_policy="warn",
+        )
+
+        call_kwargs = mock_run_workflow.call_args[1]
+        assert call_kwargs["dirty_tree_policy"] == DirtyTreePolicy.WARN_AND_CONTINUE
+
+    @patch("specflow.integrations.jira.parse_jira_ticket")
+    def test_dirty_tree_policy_invalid_rejected(self, mock_parse):
+        """Invalid --dirty-tree-policy value is rejected."""
+        import click
+        from specflow.cli import _run_workflow
+
+        mock_parse.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.settings.max_parallel_tasks = 3
+        mock_config.settings.parallel_execution_enabled = True
+        mock_config.settings.fail_fast = False
+        mock_config.settings.default_model = "test-model"
+        mock_config.settings.planning_model = ""
+        mock_config.settings.implementation_model = ""
+        mock_config.settings.default_jira_project = ""
+        mock_config.settings.skip_clarification = False
+        mock_config.settings.squash_at_end = True
+        mock_config.settings.auto_update_docs = True
+
+        with pytest.raises(click.exceptions.Exit) as exc_info:
+            _run_workflow(
+                ticket="TEST-123",
+                config=mock_config,
+                dirty_tree_policy="invalid-policy",
+            )
+        assert exc_info.value.exit_code == ExitCode.GENERAL_ERROR
+
+
+class TestAuggieInstallFlow:
+    """Tests for Auggie installation flow."""
+
+    @patch("specflow.cli.show_banner")
+    @patch("specflow.cli.ConfigManager")
+    @patch("specflow.cli.is_git_repo")
+    @patch("specflow.cli.check_auggie_installed")
+    @patch("specflow.ui.prompts.prompt_confirm")
+    @patch("specflow.cli.install_auggie")
+    def test_installs_auggie_when_user_accepts(
+        self, mock_install, mock_confirm, mock_check, mock_git, mock_config_class, mock_banner
+    ):
+        """Installs Auggie when user accepts."""
+        mock_git.return_value = True
+        mock_check.return_value = (False, "Auggie not installed")
+        mock_confirm.return_value = True
+        mock_install.return_value = False  # Installation fails
+        mock_config = MagicMock()
+        mock_config_class.return_value = mock_config
+
+        result = runner.invoke(app, ["TEST-123"])
+
+        mock_install.assert_called_once()
+        assert result.exit_code == ExitCode.GENERAL_ERROR
+
+
 class TestEffectiveValueOverrides:
     """Tests for effective value computation and override semantics in _run_workflow."""
 

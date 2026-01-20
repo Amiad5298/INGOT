@@ -3,6 +3,7 @@
 import threading
 import pytest
 from io import StringIO
+from unittest.mock import patch, MagicMock
 from rich.console import Console
 
 from specflow.ui.tui import (
@@ -12,6 +13,7 @@ from specflow.ui.tui import (
     render_task_list,
     render_status_bar,
 )
+from specflow.ui.keyboard import Key, KeyboardReader, _CHAR_MAPPINGS, _ESCAPE_SEQUENCES
 from specflow.workflow.events import (
     create_task_started_event,
     create_task_finished_event,
@@ -552,3 +554,250 @@ class TestAutoSwitchOnTaskFinish:
 
         # Selection stays unchanged (sequential mode doesn't use auto-switch)
         assert tui.selected_index == 0
+
+
+# =============================================================================
+# Tests for Keyboard Module
+# =============================================================================
+
+
+class TestKeyEnum:
+    """Tests for Key enum."""
+
+    def test_key_values(self):
+        """Key enum has expected values."""
+        assert Key.UP.value == "up"
+        assert Key.DOWN.value == "down"
+        assert Key.ENTER.value == "enter"
+        assert Key.ESCAPE.value == "escape"
+        assert Key.Q.value == "q"
+        assert Key.F.value == "f"
+        assert Key.V.value == "v"
+        assert Key.J.value == "j"
+        assert Key.K.value == "k"
+        assert Key.L.value == "l"
+        assert Key.UNKNOWN.value == "unknown"
+
+
+class TestCharMappings:
+    """Tests for character mappings."""
+
+    def test_enter_mappings(self):
+        """Enter key is mapped correctly."""
+        assert _CHAR_MAPPINGS["\r"] == Key.ENTER
+        assert _CHAR_MAPPINGS["\n"] == Key.ENTER
+
+    def test_escape_mapping(self):
+        """Escape key is mapped correctly."""
+        assert _CHAR_MAPPINGS["\x1b"] == Key.ESCAPE
+
+    def test_letter_mappings_case_insensitive(self):
+        """Letter keys are mapped case-insensitively."""
+        assert _CHAR_MAPPINGS["q"] == Key.Q
+        assert _CHAR_MAPPINGS["Q"] == Key.Q
+        assert _CHAR_MAPPINGS["f"] == Key.F
+        assert _CHAR_MAPPINGS["F"] == Key.F
+        assert _CHAR_MAPPINGS["v"] == Key.V
+        assert _CHAR_MAPPINGS["V"] == Key.V
+        assert _CHAR_MAPPINGS["j"] == Key.J
+        assert _CHAR_MAPPINGS["J"] == Key.J
+        assert _CHAR_MAPPINGS["k"] == Key.K
+        assert _CHAR_MAPPINGS["K"] == Key.K
+        assert _CHAR_MAPPINGS["l"] == Key.L
+        assert _CHAR_MAPPINGS["L"] == Key.L
+
+
+class TestEscapeSequences:
+    """Tests for escape sequence mappings."""
+
+    def test_arrow_up_sequences(self):
+        """Arrow up sequences are mapped correctly."""
+        assert _ESCAPE_SEQUENCES["[A"] == Key.UP
+        assert _ESCAPE_SEQUENCES["OA"] == Key.UP
+
+    def test_arrow_down_sequences(self):
+        """Arrow down sequences are mapped correctly."""
+        assert _ESCAPE_SEQUENCES["[B"] == Key.DOWN
+        assert _ESCAPE_SEQUENCES["OB"] == Key.DOWN
+
+
+class TestKeyboardReader:
+    """Tests for KeyboardReader class."""
+
+    def test_init_state(self):
+        """KeyboardReader initializes with correct state."""
+        reader = KeyboardReader()
+        assert reader._old_settings is None
+        assert reader._is_started is False
+
+    def test_context_manager_protocol(self):
+        """KeyboardReader supports context manager protocol."""
+        reader = KeyboardReader()
+        with patch.object(reader, "start") as mock_start:
+            with patch.object(reader, "stop") as mock_stop:
+                with reader as r:
+                    mock_start.assert_called_once()
+                    assert r is reader
+                mock_stop.assert_called_once()
+
+    def test_start_on_non_unix_does_nothing(self):
+        """start() does nothing on non-Unix systems."""
+        reader = KeyboardReader()
+        with patch("specflow.ui.keyboard._IS_UNIX", False):
+            reader.start()
+            assert reader._is_started is False
+
+    def test_stop_on_non_unix_does_nothing(self):
+        """stop() does nothing on non-Unix systems."""
+        reader = KeyboardReader()
+        with patch("specflow.ui.keyboard._IS_UNIX", False):
+            reader.stop()
+            assert reader._is_started is False
+
+    def test_read_key_returns_none_when_not_started(self):
+        """read_key() returns None when reader is not started."""
+        reader = KeyboardReader()
+        assert reader.read_key() is None
+
+    def test_read_key_returns_none_on_non_unix(self):
+        """read_key() returns None on non-Unix systems."""
+        reader = KeyboardReader()
+        reader._is_started = True
+        with patch("specflow.ui.keyboard._IS_UNIX", False):
+            assert reader.read_key() is None
+
+    def test_start_already_started_does_nothing(self):
+        """start() does nothing if already started."""
+        reader = KeyboardReader()
+        reader._is_started = True
+        with patch("specflow.ui.keyboard._IS_UNIX", True):
+            reader.start()  # Should not raise or change state
+            assert reader._is_started is True
+
+    def test_stop_clears_state(self):
+        """stop() clears the started state."""
+        reader = KeyboardReader()
+        reader._is_started = True
+        reader._old_settings = None
+        with patch("specflow.ui.keyboard._IS_UNIX", True):
+            reader.stop()
+            assert reader._is_started is False
+
+    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    @patch("specflow.ui.keyboard.select")
+    @patch("specflow.ui.keyboard.sys")
+    def test_read_key_returns_mapped_key(self, mock_sys, mock_select):
+        """read_key() returns mapped key for known characters."""
+        reader = KeyboardReader()
+        reader._is_started = True
+
+        # Mock select to indicate input is ready
+        mock_select.select.return_value = ([mock_sys.stdin], [], [])
+        # Mock stdin.read to return 'q'
+        mock_sys.stdin.read.return_value = "q"
+
+        result = reader.read_key()
+
+        assert result == Key.Q
+
+    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    @patch("specflow.ui.keyboard.select")
+    @patch("specflow.ui.keyboard.sys")
+    def test_read_key_returns_unknown_for_unmapped(self, mock_sys, mock_select):
+        """read_key() returns UNKNOWN for unmapped characters."""
+        reader = KeyboardReader()
+        reader._is_started = True
+
+        mock_select.select.return_value = ([mock_sys.stdin], [], [])
+        mock_sys.stdin.read.return_value = "x"  # Not in mappings
+
+        result = reader.read_key()
+
+        assert result == Key.UNKNOWN
+
+    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    @patch("specflow.ui.keyboard.select")
+    @patch("specflow.ui.keyboard.sys")
+    def test_read_key_returns_none_when_no_input(self, mock_sys, mock_select):
+        """read_key() returns None when no input available."""
+        reader = KeyboardReader()
+        reader._is_started = True
+
+        # Mock select to indicate no input ready
+        mock_select.select.return_value = ([], [], [])
+
+        result = reader.read_key()
+
+        assert result is None
+
+    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    @patch("specflow.ui.keyboard.select")
+    @patch("specflow.ui.keyboard.sys")
+    def test_read_key_returns_none_on_empty_read(self, mock_sys, mock_select):
+        """read_key() returns None when read returns empty string."""
+        reader = KeyboardReader()
+        reader._is_started = True
+
+        mock_select.select.return_value = ([mock_sys.stdin], [], [])
+        mock_sys.stdin.read.return_value = ""
+
+        result = reader.read_key()
+
+        assert result is None
+
+    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    @patch("specflow.ui.keyboard.select")
+    @patch("specflow.ui.keyboard.sys")
+    def test_read_key_handles_escape_sequence(self, mock_sys, mock_select):
+        """read_key() handles escape sequences for arrow keys."""
+        reader = KeyboardReader()
+        reader._is_started = True
+
+        # First call returns escape char, subsequent calls return sequence
+        mock_select.select.side_effect = [
+            ([mock_sys.stdin], [], []),  # Initial select
+            ([mock_sys.stdin], [], []),  # Escape sequence check
+            ([mock_sys.stdin], [], []),  # Read sequence char 1
+            ([mock_sys.stdin], [], []),  # Read sequence char 2
+            ([], [], []),  # No more chars
+        ]
+        mock_sys.stdin.read.side_effect = ["\x1b", "[", "A"]  # Escape + [A = UP
+
+        result = reader.read_key()
+
+        assert result == Key.UP
+
+    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    @patch("specflow.ui.keyboard.select")
+    @patch("specflow.ui.keyboard.sys")
+    def test_read_key_returns_escape_when_alone(self, mock_sys, mock_select):
+        """read_key() returns ESCAPE when escape key pressed alone."""
+        reader = KeyboardReader()
+        reader._is_started = True
+
+        mock_select.select.side_effect = [
+            ([mock_sys.stdin], [], []),  # Initial select
+            ([], [], []),  # No more chars after escape
+        ]
+        mock_sys.stdin.read.return_value = "\x1b"
+
+        result = reader.read_key()
+
+        assert result == Key.ESCAPE
+
+    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    def test_read_key_handles_os_error(self):
+        """read_key() returns None on OSError."""
+        import select as real_select
+
+        reader = KeyboardReader()
+        reader._is_started = True
+
+        with patch("specflow.ui.keyboard.select") as mock_select:
+            # Keep the real error class
+            mock_select.error = real_select.error
+            mock_select.select.side_effect = OSError("Terminal error")
+
+            result = reader.read_key()
+
+            assert result is None
