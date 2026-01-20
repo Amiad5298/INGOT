@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import subprocess
 
 from specflow.integrations.auggie import (
+    AgentDefinition,
     AuggieModel,
     AuggieClient,
     AuggieRateLimitError,
@@ -326,28 +327,49 @@ class TestBuildCommand:
         assert "--dont-save-session" in cmd
         assert cmd[-1] == "test prompt"
 
-    def test_with_agent(self):
-        """Includes --agent flag when agent is provided."""
+    @patch("specflow.integrations.auggie._parse_agent_definition")
+    def test_with_agent(self, mock_parse_agent):
+        """Uses model from agent definition when agent is provided."""
+        mock_parse_agent.return_value = AgentDefinition(
+            name="spec-planner",
+            model="claude-sonnet-4-5",
+            prompt="You are a planner agent.",
+        )
         client = AuggieClient()
         cmd = client._build_command("test prompt", agent="spec-planner")
 
-        assert "--agent" in cmd
-        assert "spec-planner" in cmd
-        assert cmd == ["auggie", "--agent", "spec-planner", "test prompt"]
+        # Should use --model from agent definition, not --agent flag
+        assert "--model" in cmd
+        assert "claude-sonnet-4-5" in cmd
+        # Agent prompt should be prepended to user prompt
+        assert "## Agent Instructions" in cmd[-1]
+        assert "You are a planner agent." in cmd[-1]
+        assert "test prompt" in cmd[-1]
 
-    def test_agent_overrides_model(self):
-        """Agent takes precedence over model - model is not included when agent is set."""
+    @patch("specflow.integrations.auggie._parse_agent_definition")
+    def test_agent_overrides_model(self, mock_parse_agent):
+        """Agent's model takes precedence over client model."""
+        mock_parse_agent.return_value = AgentDefinition(
+            name="spec-implementer",
+            model="agent-model",
+            prompt="Agent instructions.",
+        )
         client = AuggieClient(model="claude-3")
         cmd = client._build_command("test prompt", agent="spec-implementer")
 
-        assert "--agent" in cmd
-        assert "spec-implementer" in cmd
-        # Model should NOT be in command when agent is set
-        assert "--model" not in cmd
+        # Should use agent's model, not client's model
+        assert "--model" in cmd
+        assert "agent-model" in cmd
         assert "claude-3" not in cmd
 
-    def test_agent_with_all_flags(self):
+    @patch("specflow.integrations.auggie._parse_agent_definition")
+    def test_agent_with_all_flags(self, mock_parse_agent):
         """Agent works with all other flags."""
+        mock_parse_agent.return_value = AgentDefinition(
+            name="spec-reviewer",
+            model="reviewer-model",
+            prompt="Review instructions.",
+        )
         client = AuggieClient()
         cmd = client._build_command(
             "test prompt",
@@ -357,12 +379,24 @@ class TestBuildCommand:
             dont_save_session=True,
         )
 
-        assert "--agent" in cmd
-        assert "spec-reviewer" in cmd
+        assert "--model" in cmd
+        assert "reviewer-model" in cmd
         assert "--print" in cmd
         assert "--quiet" in cmd
         assert "--dont-save-session" in cmd
-        assert cmd[-1] == "test prompt"
+        # Prompt should contain agent instructions
+        assert "## Agent Instructions" in cmd[-1]
+
+    @patch("specflow.integrations.auggie._parse_agent_definition")
+    def test_agent_not_found_falls_back_to_default_model(self, mock_parse_agent):
+        """Falls back to default model when agent definition not found."""
+        mock_parse_agent.return_value = None
+        client = AuggieClient(model="fallback-model")
+        cmd = client._build_command("test prompt", agent="nonexistent-agent")
+
+        # Should fall back to client's model
+        assert "--model" in cmd
+        assert "fallback-model" in cmd
 
 
 class TestRunWithCallback:
@@ -469,9 +503,15 @@ class TestRunWithCallback:
         assert "--model" in cmd
         assert "claude-3" in cmd
 
+    @patch("specflow.integrations.auggie._parse_agent_definition")
     @patch("subprocess.Popen")
-    def test_passes_agent_to_command(self, mock_popen):
-        """Agent is included in command when provided."""
+    def test_passes_agent_to_command(self, mock_popen, mock_parse_agent):
+        """Agent model and prompt are included in command when provided."""
+        mock_parse_agent.return_value = AgentDefinition(
+            name="spec-planner",
+            model="claude-sonnet-4-5",
+            prompt="You are a planner agent.",
+        )
         mock_process = MagicMock()
         mock_process.stdout = iter([])
         mock_process.returncode = 0
@@ -487,8 +527,11 @@ class TestRunWithCallback:
         )
 
         cmd = mock_popen.call_args[0][0]
-        assert "--agent" in cmd
-        assert "spec-planner" in cmd
+        # Should use --model from agent definition
+        assert "--model" in cmd
+        assert "claude-sonnet-4-5" in cmd
+        # Prompt should contain agent instructions
+        assert "## Agent Instructions" in cmd[-1]
 
     @patch("subprocess.Popen")
     def test_strips_newlines_from_callback(self, mock_popen):

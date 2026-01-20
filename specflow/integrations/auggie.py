@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional
 
 from packaging import version
@@ -29,6 +30,110 @@ SPECFLOW_AGENT_TASKLIST = "spec-tasklist"
 SPECFLOW_AGENT_IMPLEMENTER = "spec-implementer"
 SPECFLOW_AGENT_REVIEWER = "spec-reviewer"
 SPECFLOW_AGENT_DOC_UPDATER = "spec-doc-updater"
+
+
+@dataclass
+class AgentDefinition:
+    """Parsed agent definition from a markdown file."""
+
+    name: str
+    model: str
+    prompt: str
+    description: str = ""
+    color: str = ""
+
+
+def _find_agent_file(agent_name: str) -> Optional[Path]:
+    """Find the agent definition file for a given agent name.
+
+    Searches in workspace (.augment/agents/) and user (~/.augment/agents/) locations.
+
+    Args:
+        agent_name: Name of the agent to find
+
+    Returns:
+        Path to the agent file if found, None otherwise
+    """
+    # Check workspace first
+    workspace_path = Path(".augment/agents") / f"{agent_name}.md"
+    if workspace_path.exists():
+        return workspace_path
+
+    # Check user directory
+    user_path = Path.home() / ".augment/agents" / f"{agent_name}.md"
+    if user_path.exists():
+        return user_path
+
+    return None
+
+
+def _parse_simple_yaml_frontmatter(frontmatter_str: str) -> dict[str, str]:
+    """Parse simple YAML frontmatter (key: value pairs only).
+
+    This is a lightweight parser that handles the simple key: value format
+    used in agent definition files without requiring the yaml library.
+
+    Args:
+        frontmatter_str: The YAML frontmatter string (without --- markers)
+
+    Returns:
+        Dictionary of key-value pairs
+    """
+    result: dict[str, str] = {}
+    for line in frontmatter_str.split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            key, _, value = line.partition(":")
+            result[key.strip()] = value.strip()
+    return result
+
+
+def _parse_agent_definition(agent_name: str) -> Optional[AgentDefinition]:
+    """Parse an agent definition file.
+
+    Reads the markdown file with YAML frontmatter and extracts
+    the model, prompt, and other configuration.
+
+    Args:
+        agent_name: Name of the agent to parse
+
+    Returns:
+        AgentDefinition if found and parsed, None otherwise
+    """
+    agent_file = _find_agent_file(agent_name)
+    if not agent_file:
+        return None
+
+    try:
+        content = agent_file.read_text()
+
+        # Parse YAML frontmatter (between --- markers)
+        if not content.startswith("---"):
+            return None
+
+        # Find the end of frontmatter
+        end_marker = content.find("---", 3)
+        if end_marker == -1:
+            return None
+
+        frontmatter_str = content[3:end_marker].strip()
+        prompt = content[end_marker + 3 :].strip()
+
+        frontmatter = _parse_simple_yaml_frontmatter(frontmatter_str)
+        if not frontmatter:
+            return None
+
+        return AgentDefinition(
+            name=frontmatter.get("name", agent_name),
+            model=frontmatter.get("model", ""),
+            description=frontmatter.get("description", ""),
+            color=frontmatter.get("color", ""),
+            prompt=prompt,
+        )
+    except OSError:
+        return None
 
 
 class AuggieRateLimitError(Exception):
@@ -299,9 +404,16 @@ class AuggieClient:
 
         This internal helper consolidates command construction logic.
 
+        When an agent is specified, the agent definition file is parsed to extract
+        the model and system prompt. The agent's prompt is prepended to the user's
+        prompt, and the model from the agent definition is used.
+
+        Note: The auggie CLI does not have an --agent flag. Subagents are invoked
+        by embedding their instructions in the prompt and using their model.
+
         Args:
             prompt: The prompt to send to Auggie
-            agent: Agent to use (model comes from agent definition file)
+            agent: Agent name to use (reads model and prompt from agent definition file)
             model: Override model for this command (ignored when agent is set)
             print_mode: Use --print flag
             quiet: Use --quiet flag
@@ -311,10 +423,26 @@ class AuggieClient:
             List of command arguments for subprocess
         """
         cmd = ["auggie"]
+        effective_prompt = prompt
 
-        # Agent takes precedence - model comes from agent definition file
+        # Agent takes precedence - parse agent definition for model and prompt
         if agent:
-            cmd.extend(["--agent", agent])
+            agent_def = _parse_agent_definition(agent)
+            if agent_def:
+                # Use model from agent definition
+                if agent_def.model:
+                    cmd.extend(["--model", agent_def.model])
+                # Prepend agent's system prompt to user's prompt
+                if agent_def.prompt:
+                    effective_prompt = (
+                        f"## Agent Instructions\n\n{agent_def.prompt}\n\n"
+                        f"## Task\n\n{prompt}"
+                    )
+            else:
+                # Agent not found, fall back to default model
+                effective_model = model or self.model
+                if effective_model:
+                    cmd.extend(["--model", effective_model])
         else:
             effective_model = model or self.model
             if effective_model:
@@ -329,7 +457,7 @@ class AuggieClient:
         if quiet:
             cmd.append("--quiet")
 
-        cmd.append(prompt)
+        cmd.append(effective_prompt)
         return cmd
 
     def run(
