@@ -34,7 +34,7 @@ class SpecError(Exception):
         message: The error message
     """
 
-    exit_code: ClassVar[ExitCode] = ExitCode.GENERAL_ERROR
+    _default_exit_code: ClassVar[ExitCode] = ExitCode.GENERAL_ERROR
 
     def __init__(self, message: str, exit_code: ExitCode | None = None) -> None:
         """Initialize the exception.
@@ -44,8 +44,18 @@ class SpecError(Exception):
             exit_code: Optional override for the default exit code
         """
         super().__init__(message)
-        if exit_code is not None:
-            self.exit_code = exit_code
+        self._exit_code = exit_code
+
+    @property
+    def exit_code(self) -> ExitCode:
+        """Get the exit code for this exception.
+
+        Returns:
+            The instance exit code if set, otherwise the class default exit code.
+        """
+        if self._exit_code is not None:
+            return self._exit_code
+        return self.__class__._default_exit_code
 
 
 class AuggieNotInstalledError(SpecError):
@@ -57,7 +67,7 @@ class AuggieNotInstalledError(SpecError):
     - Auggie installation fails
     """
 
-    exit_code: ClassVar[ExitCode] = ExitCode.AUGGIE_NOT_INSTALLED
+    _default_exit_code: ClassVar[ExitCode] = ExitCode.AUGGIE_NOT_INSTALLED
 
 
 class JiraNotConfiguredError(SpecError):
@@ -69,7 +79,7 @@ class JiraNotConfiguredError(SpecError):
     - Jira integration check fails
     """
 
-    exit_code: ClassVar[ExitCode] = ExitCode.JIRA_NOT_CONFIGURED
+    _default_exit_code: ClassVar[ExitCode] = ExitCode.JIRA_NOT_CONFIGURED
 
 
 class UserCancelledError(SpecError):
@@ -81,7 +91,7 @@ class UserCancelledError(SpecError):
     - User answers 'no' to a required confirmation
     """
 
-    exit_code: ClassVar[ExitCode] = ExitCode.USER_CANCELLED
+    _default_exit_code: ClassVar[ExitCode] = ExitCode.USER_CANCELLED
 
 
 class GitOperationError(SpecError):
@@ -95,7 +105,7 @@ class GitOperationError(SpecError):
     - Any other git command fails
     """
 
-    exit_code: ClassVar[ExitCode] = ExitCode.GIT_ERROR
+    _default_exit_code: ClassVar[ExitCode] = ExitCode.GIT_ERROR
 
 
 __all__ = [

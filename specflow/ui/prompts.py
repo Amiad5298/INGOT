@@ -4,6 +4,7 @@ This module provides Questionary-based user input prompts with
 consistent styling and error handling.
 """
 
+from collections.abc import Callable
 
 import questionary
 from questionary import Style
@@ -64,7 +65,7 @@ def prompt_confirm(
             raise UserCancelledError("User cancelled confirmation prompt")
 
         log_message(f"User response: {result}")
-        return result
+        return bool(result)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
@@ -74,7 +75,7 @@ def prompt_input(
     message: str,
     default: str = "",
     *,
-    validate: callable | None = None,
+    validate: Callable[[str], bool] | None = None,
     multiline: bool = False,
 ) -> str:
     """Prompt for text input.
@@ -106,7 +107,7 @@ def prompt_input(
             raise UserCancelledError("User cancelled input prompt")
 
         log_message(f"User input: {result[:50]}...")
-        return result
+        return str(result)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
@@ -164,7 +165,7 @@ def prompt_select(
             raise UserCancelledError("User cancelled selection prompt")
 
         log_message(f"User selected: {result}")
-        return result
+        return str(result)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
@@ -190,11 +191,17 @@ def prompt_checkbox(
     """
     log_message(f"Prompt checkbox: {message}")
 
+    # Convert choices to Choice objects with pre-selected defaults
+    default_set = set(default) if default else set()
+    choice_objects = [
+        questionary.Choice(choice, checked=(choice in default_set))
+        for choice in choices
+    ]
+
     try:
         result = questionary.checkbox(
             message,
-            choices=choices,
-            default=default,
+            choices=choice_objects,
             style=custom_style,
         ).ask()
 
@@ -202,7 +209,7 @@ def prompt_checkbox(
             raise UserCancelledError("User cancelled checkbox prompt")
 
         log_message(f"User selected: {result}")
-        return result
+        return list(result)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e

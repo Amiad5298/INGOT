@@ -11,7 +11,7 @@ import random
 import time
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from specflow.workflow.state import RateLimitConfig
@@ -65,7 +65,7 @@ def calculate_backoff_delay(
     jitter = random.uniform(0, config.jitter_factor * exponential_delay)
 
     # Apply delay with jitter, capped at max
-    delay = min(exponential_delay + jitter, config.max_delay_seconds)
+    delay: float = min(exponential_delay + jitter, config.max_delay_seconds)
 
     return delay
 
@@ -100,7 +100,7 @@ def with_rate_limit_retry(
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
-        def wrapper(*args, **kwargs) -> T:
+        def wrapper(*args: Any, **kwargs: Any) -> T:
             total_wait_time = 0.0
             last_exception: Exception | None = None
 

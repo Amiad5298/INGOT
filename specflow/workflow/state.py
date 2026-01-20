@@ -46,7 +46,7 @@ class RateLimitConfig:
     # HTTP status codes that trigger retry
     retryable_status_codes: tuple[int, ...] = (429, 502, 503, 504)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.max_retries < 0:
             raise ValueError("max_retries must be >= 0")
         if self.max_retries > 0 and self.base_delay_seconds <= 0:

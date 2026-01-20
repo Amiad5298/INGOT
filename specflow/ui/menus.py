@@ -56,7 +56,8 @@ def show_main_menu() -> MainMenuChoice:
             raise UserCancelledError("User cancelled main menu")
 
         log_message(f"Main menu selection: {result.value}")
-        return result
+        # Cast to expected type since questionary returns Any
+        return MainMenuChoice(result.value)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
@@ -98,7 +99,8 @@ def show_task_review_menu() -> TaskReviewChoice:
             raise UserCancelledError("User cancelled task review")
 
         log_message(f"Task review selection: {result.value}")
-        return result
+        # Cast to expected type since questionary returns Any
+        return TaskReviewChoice(result.value)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
@@ -138,7 +140,8 @@ def show_git_dirty_menu(context: str) -> DirtyStateAction:
             raise UserCancelledError("User cancelled dirty state menu")
 
         log_message(f"Dirty state selection: {result.value}")
-        return result
+        # Cast to expected type since questionary returns Any
+        return DirtyStateAction(result.value)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
@@ -190,7 +193,7 @@ def show_model_selection(
             return current_model or None
 
         log_message(f"Model selection for {purpose}: {result}")
-        return result
+        return str(result)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
@@ -236,7 +239,7 @@ def show_task_checkboxes(
             raise UserCancelledError("User cancelled task selection")
 
         log_message(f"Tasks selected: {result}")
-        return result
+        return list(result)
 
     except KeyboardInterrupt as e:
         raise UserCancelledError("User cancelled with Ctrl+C") from e

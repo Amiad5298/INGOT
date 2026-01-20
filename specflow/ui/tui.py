@@ -118,6 +118,7 @@ def render_task_list(
         color = record.get_status_color()
 
         # Use spinner for running tasks
+        status_cell: Spinner | Text
         if record.status == TaskRunStatus.RUNNING:
             status_cell = Spinner("dots", style=color)
         else:
@@ -523,7 +524,12 @@ class TaskRunnerUI:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         """Context manager exit."""
         self.stop()
 

@@ -178,7 +178,12 @@ class StreamingOperationUI:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         """Context manager exit - stops the TUI display.
 
         Ensures cleanup even if an exception occurs during execution.
@@ -223,7 +228,7 @@ class StreamingOperationUI:
         Returns:
             Rich Group containing all panels and status bar.
         """
-        elements = []
+        elements: list[Panel | Text] = []
 
         # Build spinner line with elapsed time
         elapsed = self._format_elapsed_time()

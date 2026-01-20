@@ -10,6 +10,7 @@ Supports versioned agent files with automatic update detection:
 """
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
 
 from specflow import __version__
@@ -524,7 +525,7 @@ def get_all_agent_names() -> list[str]:
 class _AgentDefinitionsProxy:
     """Proxy that generates versioned agent content on access."""
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(AGENT_METADATA.keys())
 
     def __getitem__(self, key: str) -> str:
@@ -533,10 +534,10 @@ class _AgentDefinitionsProxy:
     def __contains__(self, key: str) -> bool:
         return key in AGENT_METADATA
 
-    def keys(self):
-        return AGENT_METADATA.keys()
+    def keys(self) -> Iterator[str]:
+        return iter(AGENT_METADATA.keys())
 
-    def items(self):
+    def items(self) -> Iterator[tuple[str, str]]:
         for key in AGENT_METADATA:
             yield key, generate_agent_content(key)
 

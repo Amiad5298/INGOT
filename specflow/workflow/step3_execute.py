@@ -34,7 +34,7 @@ from concurrent.futures import (
     wait,
 )
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from specflow.integrations.auggie import (
     AuggieClient,
@@ -97,6 +97,9 @@ from specflow.workflow.tasks import (
 
 if TYPE_CHECKING:
     pass
+
+# Type alias for task status
+TaskStatus = Literal["success", "failed", "skipped"]
 
 # Log directory names for workflow steps
 LOG_DIR_TEST_EXECUTION = "test_execution"
@@ -391,11 +394,14 @@ def _execute_with_tui(
             tui.handle_event(start_event)
 
             # Execute task with retry wrapper (sequential mode, not parallel)
+            def make_callback(idx: int, name: str) -> Callable[[str], None]:
+                def cb(line: str) -> None:
+                    tui.handle_event(create_task_output_event(idx, name, line))
+                return cb
+
             success = _execute_task_with_retry(
                 state, task, plan_path,
-                callback=lambda line, idx=i, name=task.name: tui.handle_event(
-                    create_task_output_event(idx, name, line)
-                ),
+                callback=make_callback(i, task.name),
                 is_parallel=False,
             )
 
@@ -407,7 +413,7 @@ def _execute_with_tui(
                     user_quit = True
                     # Emit task finished event first
                     duration = record.elapsed_time
-                    status = "success" if success else "failed"
+                    status: TaskStatus = "success" if success else "failed"
                     finish_event = create_task_finished_event(
                         i, task.name, status, duration,
                         error=None if success else "Task returned failure",
@@ -426,9 +432,9 @@ def _execute_with_tui(
 
             # Emit task finished event
             duration = record.elapsed_time
-            status = "success" if success else "failed"
+            task_status: TaskStatus = "success" if success else "failed"
             finish_event = create_task_finished_event(
-                i, task.name, status, duration,
+                i, task.name, task_status, duration,
                 error=None if success else "Task returned failure",
             )
             tui.handle_event(finish_event)
@@ -686,13 +692,16 @@ def _execute_parallel_with_tui(
 
         try:
             # Execute with streaming callback via post_event (thread-safe)
+            def make_parallel_callback(i: int, n: str) -> Callable[[str], None]:
+                def cb(line: str) -> None:
+                    tui.post_event(create_task_output_event(i, n, line))
+                return cb
+
             success = _execute_task_with_retry(
                 state,
                 task,
                 plan_path,
-                callback=lambda line, i=idx, n=task.name: tui.post_event(
-                    create_task_output_event(i, n, line)
-                ),
+                callback=make_parallel_callback(idx, task.name),
                 is_parallel=True,
             )
             return idx, task, success
@@ -724,6 +733,8 @@ def _execute_parallel_with_tui(
                     record = tui.get_record(idx)
                     duration = record.elapsed_time if record else 0.0
 
+                    status: TaskStatus
+                    error: str | None
                     try:
                         result_idx, result_task, success = future.result()
 
