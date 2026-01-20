@@ -10,7 +10,6 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from packaging import version
 
@@ -470,7 +469,7 @@ class AuggieClient:
         print_mode: bool = False,
         quiet: bool = False,
         dont_save_session: bool = False,
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[str]:
         """Run an Auggie command.
 
         Args:
@@ -504,30 +503,61 @@ class AuggieClient:
 
         return result
 
-    def run_print(self, prompt: str, **kwargs: Any) -> bool:
+    def run_print(
+        self,
+        prompt: str,
+        *,
+        agent: str | None = None,
+        model: str | None = None,
+        dont_save_session: bool = False,
+    ) -> bool:
         """Run with --print flag, return success status.
 
         Args:
             prompt: The prompt to send
-            **kwargs: Additional arguments for run()
+            agent: Agent to use (model comes from agent definition file)
+            model: Override model for this command (ignored when agent is set)
+            dont_save_session: Use --dont-save-session flag
 
         Returns:
             True if command succeeded
         """
-        result = self.run(prompt, print_mode=True, **kwargs)
+        result = self.run(
+            prompt,
+            print_mode=True,
+            agent=agent,
+            model=model,
+            dont_save_session=dont_save_session,
+        )
         return result.returncode == 0
 
-    def run_print_quiet(self, prompt: str, **kwargs: Any) -> str:
+    def run_print_quiet(
+        self,
+        prompt: str,
+        *,
+        agent: str | None = None,
+        model: str | None = None,
+        dont_save_session: bool = False,
+    ) -> str:
         """Run with --print --quiet, return output.
 
         Args:
             prompt: The prompt to send
-            **kwargs: Additional arguments for run()
+            agent: Agent to use (model comes from agent definition file)
+            model: Override model for this command (ignored when agent is set)
+            dont_save_session: Use --dont-save-session flag
 
         Returns:
             Command stdout
         """
-        result = self.run(prompt, print_mode=True, quiet=True, **kwargs)
+        result = self.run(
+            prompt,
+            print_mode=True,
+            quiet=True,
+            agent=agent,
+            model=model,
+            dont_save_session=dont_save_session,
+        )
         return str(result.stdout) if result.stdout else ""
 
     def run_print_with_output(

@@ -75,7 +75,7 @@ def prompt_input(
     message: str,
     default: str = "",
     *,
-    validate: Callable | None = None,
+    validate: Callable[[str], bool] | None = None,
     multiline: bool = False,
 ) -> str:
     """Prompt for text input.
