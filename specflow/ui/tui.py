@@ -18,6 +18,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
@@ -277,10 +278,15 @@ class TaskRunnerUI:
     _keyboard_reader: KeyboardReader = field(default_factory=KeyboardReader, init=False, repr=False)
     _input_thread: Optional[threading.Thread] = field(default=None, init=False, repr=False)
     _stop_input_thread: bool = field(default=False, init=False, repr=False)
+    # Background refresh thread for parallel mode spinner animation
+    _refresh_thread: Optional[threading.Thread] = field(default=None, init=False, repr=False)
+    _stop_refresh_thread: bool = field(default=False, init=False, repr=False)
     # Quit signal for execution loop
     quit_requested: bool = field(default=False, init=False, repr=False)
     # Thread-safe event queue for parallel execution
     _event_queue: queue.Queue = field(default_factory=queue.Queue, init=False, repr=False)
+    # Lock for thread-safe refresh operations
+    _refresh_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def initialize_records(self, task_names: list[str]) -> None:
         """Initialize task run records from task names.
@@ -330,6 +336,11 @@ class TaskRunnerUI:
         """
         # Prefer selected task, fall back to running task
         index = self.selected_index if self.selected_index >= 0 else self._current_task_index
+
+        # In parallel mode, if no selection, pick first running task
+        if index < 0 and self.parallel_mode and self._running_task_indices:
+            index = min(self._running_task_indices)
+
         record = self.get_record(index)
         return record.log_buffer if record else None
 
@@ -340,6 +351,11 @@ class TaskRunnerUI:
             Task name or empty string.
         """
         index = self.selected_index if self.selected_index >= 0 else self._current_task_index
+
+        # In parallel mode, if no selection, pick first running task
+        if index < 0 and self.parallel_mode and self._running_task_indices:
+            index = min(self._running_task_indices)
+
         record = self.get_record(index)
         return record.task_name if record else ""
 
@@ -400,8 +416,23 @@ class TaskRunnerUI:
         )
         self._live.start()
 
+        # Start background refresh thread for parallel mode
+        # This ensures smooth spinner animation by refreshing at ~10 Hz
+        if self.parallel_mode:
+            self._stop_refresh_thread = False
+            self._refresh_thread = threading.Thread(
+                target=self._background_refresh_loop, daemon=True
+            )
+            self._refresh_thread.start()
+
     def stop(self) -> None:
         """Stop the Live display and keyboard input handling."""
+        # Stop background refresh thread
+        self._stop_refresh_thread = True
+        if self._refresh_thread is not None:
+            self._refresh_thread.join(timeout=0.5)
+            self._refresh_thread = None
+
         # Stop input thread
         self._stop_input_thread = True
         if self._input_thread is not None:
@@ -416,15 +447,28 @@ class TaskRunnerUI:
             self._live.stop()
             self._live = None
 
+    def _background_refresh_loop(self) -> None:
+        """Background thread loop for refreshing the display in parallel mode.
+
+        Runs at ~10 Hz to ensure smooth spinner animation and responsive
+        log updates while the main thread is blocked on wait().
+        """
+        refresh_interval = 0.1  # 10 Hz refresh rate
+        while not self._stop_refresh_thread:
+            time.sleep(refresh_interval)
+            if not self._stop_refresh_thread:
+                self.refresh()
+
     def refresh(self) -> None:
         """Refresh the display with current state.
 
         Drains the event queue first (for thread-safe parallel mode),
-        then updates the Live display.
+        then updates the Live display. Thread-safe via _refresh_lock.
         """
-        self._drain_event_queue()
-        if self._live is not None:
-            self._live.update(self._render_layout())
+        with self._refresh_lock:
+            self._drain_event_queue()
+            if self._live is not None:
+                self._live.update(self._render_layout())
 
     def post_event(self, event: TaskEvent) -> None:
         """Thread-safe: push event to queue (called from worker threads).
@@ -489,8 +533,11 @@ class TaskRunnerUI:
         if len(self.records) == 0:
             return
         if self.selected_index < 0:
-            # Start from current running task or last task
-            self.selected_index = max(0, self._current_task_index)
+            # In parallel mode, start from first running task or first task
+            if self.parallel_mode and self._running_task_indices:
+                self.selected_index = min(self._running_task_indices)
+            else:
+                self.selected_index = max(0, self._current_task_index)
         elif self.selected_index > 0:
             self.selected_index -= 1
         self.refresh()
@@ -500,8 +547,11 @@ class TaskRunnerUI:
         if len(self.records) == 0:
             return
         if self.selected_index < 0:
-            # Start from current running task or first task
-            self.selected_index = max(0, self._current_task_index)
+            # In parallel mode, start from first running task or first task
+            if self.parallel_mode and self._running_task_indices:
+                self.selected_index = min(self._running_task_indices)
+            else:
+                self.selected_index = max(0, self._current_task_index)
         elif self.selected_index < len(self.records) - 1:
             self.selected_index += 1
         self.refresh()
@@ -609,6 +659,9 @@ class TaskRunnerUI:
 
             if self.parallel_mode:
                 self._running_task_indices.add(event.task_index)
+                # Auto-select first task if nothing selected yet
+                if self.selected_index < 0:
+                    self.selected_index = event.task_index
             else:
                 self._current_task_index = event.task_index
 
