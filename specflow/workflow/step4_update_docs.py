@@ -29,6 +29,9 @@ from specflow.workflow.state import WorkflowState
 # Maximum diff size to avoid context overflow
 MAX_DIFF_SIZE = 8000
 
+# Log directory names for workflow steps
+LOG_DIR_DOC_UPDATE = "doc_update"
+
 # Documentation file patterns (extensions)
 # Note: .txt is intentionally excluded to avoid modifying config files like
 # requirements.txt, constraints.txt, etc.
@@ -523,7 +526,6 @@ def step_4_update_docs(
     state: WorkflowState,
     *,
     auggie_client: Optional[AuggieClientProtocol] = None,
-    use_tui: bool = True,
 ) -> Step4Result:
     """Execute Step 4: Update documentation based on code changes.
 
@@ -543,7 +545,6 @@ def step_4_update_docs(
     Args:
         state: Current workflow state
         auggie_client: Optional client for dependency injection in tests
-        use_tui: Whether to use the TUI (default True, set False for testing)
 
     Returns:
         Step4Result with details of what happened (always succeeds for workflow)
@@ -585,42 +586,34 @@ def step_4_update_docs(
     client = auggie_client or AuggieClient()
 
     # Create log directory for documentation update
-    log_dir = get_log_base_dir() / state.ticket.ticket_id / "doc_update"
+    log_dir = get_log_base_dir() / state.ticket.ticket_id / LOG_DIR_DOC_UPDATE
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{format_run_directory()}.log"
+
+    # Create UI with collapsible panel and verbose toggle
+    ui = StreamingOperationUI(
+        status_message="Updating documentation...",
+        ticket_id=state.ticket.ticket_id,
+    )
+    ui.set_log_path(log_path)
 
     try:
         result.agent_ran = True
 
-        if use_tui:
-            # Create UI with collapsible panel and verbose toggle
-            ui = StreamingOperationUI(
-                status_message="Updating documentation...",
-                ticket_id=state.ticket.ticket_id,
-            )
-            ui.set_log_path(log_path)
-
-            with ui:
-                success, output = client.run_with_callback(
-                    prompt,
-                    agent=state.subagent_names.get("doc_updater", "spec-doc-updater"),
-                    output_callback=ui.handle_output_line,
-                    dont_save_session=True,
-                )
-
-                # Check if user requested quit
-                if ui.quit_requested:
-                    print_warning("Documentation update cancelled by user.")
-                    return result
-
-            ui.print_summary(success)
-        else:
-            # Non-TUI mode for testing
-            success, output = client.run_print_with_output(
+        with ui:
+            success, output = client.run_with_callback(
                 prompt,
                 agent=state.subagent_names.get("doc_updater", "spec-doc-updater"),
+                output_callback=ui.handle_output_line,
                 dont_save_session=True,
             )
+
+            # Check if user requested quit
+            if ui.quit_requested:
+                print_warning("Documentation update cancelled by user.")
+                return result
+
+        ui.print_summary(success)
 
         # Enforce doc-only changes: detect and revert non-doc modifications
         non_doc_changes = non_doc_snapshot.detect_changes()
@@ -761,5 +754,6 @@ __all__ = [
     "is_doc_file",
     "DOC_FILE_EXTENSIONS",
     "DOC_PATH_PATTERNS",
+    "LOG_DIR_DOC_UPDATE",
 ]
 

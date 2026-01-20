@@ -87,6 +87,9 @@ from specflow.workflow.tasks import (
 if TYPE_CHECKING:
     from specflow.ui.tui import TaskRunnerUI
 
+# Log directory names for workflow steps
+LOG_DIR_TEST_EXECUTION = "test_execution"
+
 
 # =============================================================================
 # Backwards-compatible re-exports from extracted modules
@@ -995,7 +998,7 @@ def _run_post_implementation_tests(state: WorkflowState) -> None:
     print_step("Running Tests for Changed Code via AI")
 
     # Create log directory for test execution
-    log_dir = _get_log_base_dir() / state.ticket.ticket_id / "test_execution"
+    log_dir = _get_log_base_dir() / state.ticket.ticket_id / LOG_DIR_TEST_EXECUTION
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{format_run_directory()}.log"
 
@@ -1066,5 +1069,6 @@ def _offer_commit_instructions(state: WorkflowState) -> None:
 
 __all__ = [
     "step_3_execute",
+    "LOG_DIR_TEST_EXECUTION",
 ]
 
