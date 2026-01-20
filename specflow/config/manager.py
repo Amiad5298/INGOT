@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Literal
 
 from specflow.config.settings import CONFIG_FILE, Settings
+from specflow.integrations.git import find_repo_root
 from specflow.utils.logging import log_message
 
 # Keys containing these substrings are considered sensitive and should not be logged
@@ -132,28 +133,6 @@ class ConfigManager:
             # Stop at repository root
             if (current / ".git").exists():
                 break
-
-            parent = current.parent
-            if parent == current:  # Reached filesystem root
-                break
-            current = parent
-
-        return None
-
-    def _find_repo_root(self) -> Path | None:
-        """Find the repository root by looking for .git directory.
-
-        Traverses from current working directory upward until:
-        - A .git directory is found (returns that directory)
-        - The filesystem root is reached (returns None)
-
-        Returns:
-            Path to repository root, or None if not in a repository
-        """
-        current = Path.cwd()
-        while True:
-            if (current / ".git").exists():
-                return current
 
             parent = current.parent
             if parent == current:  # Reached filesystem root
@@ -295,7 +274,7 @@ class ConfigManager:
         if scope == "local":
             if self.local_config_path is None:
                 # Try to find repo root first, fall back to cwd
-                repo_root = self._find_repo_root()
+                repo_root = find_repo_root()
                 if repo_root:
                     self.local_config_path = repo_root / self.LOCAL_CONFIG_NAME
                 else:
@@ -545,20 +524,6 @@ class ConfigManager:
             Configuration value or default
         """
         return self._raw_values.get(key, default)
-
-    def get_config_source(self, key: str) -> str:
-        """Return the source of a configuration value (for debugging).
-
-        Args:
-            key: Configuration key
-
-        Returns:
-            Source identifier: "environment", "local (/path)", "global (/path)",
-            or "default" if the value comes from built-in defaults.
-        """
-        if key in self._config_sources:
-            return self._config_sources[key]
-        return "default"
 
     def show(self) -> None:
         """Display current configuration using Rich formatting."""

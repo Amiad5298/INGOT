@@ -8,7 +8,6 @@ Tests cover:
 - Cascading hierarchy: environment > local > global > defaults
 - Local config discovery (_find_local_config)
 - Environment variable loading (_load_environment)
-- Config source tracking (get_config_source)
 """
 
 from unittest.mock import patch
@@ -464,17 +463,6 @@ class TestLoadEnvironment:
         assert manager._raw_values.get("DEFAULT_MODEL") == "env-model"
         assert "UNKNOWN_RANDOM_VAR" not in manager._raw_values
 
-    def test_environment_sets_config_source(self, tmp_path, monkeypatch):
-        """Environment variables are tracked as 'environment' source."""
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        monkeypatch.setenv("PLANNING_MODEL", "env-planning")
-
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        assert manager.get_config_source("PLANNING_MODEL") == "environment"
-
     def test_empty_env_values_are_loaded(self, tmp_path, monkeypatch):
         """Empty environment values are still loaded."""
         config_path = tmp_path / "config"
@@ -485,60 +473,6 @@ class TestLoadEnvironment:
         manager.load()
 
         assert manager._raw_values.get("DEFAULT_MODEL") == ""
-
-
-class TestGetConfigSource:
-    """Tests for get_config_source method."""
-
-    def test_returns_global_for_global_config(self, tmp_path):
-        """Returns 'global' for values from global config."""
-        config_path = tmp_path / "config"
-        config_path.write_text('DEFAULT_MODEL="value"\n')
-
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        source = manager.get_config_source("DEFAULT_MODEL")
-        assert "global" in source
-
-    def test_returns_local_for_local_config(self, tmp_path, monkeypatch):
-        """Returns 'local (path)' for values from local config."""
-        project_dir = tmp_path / "project"
-        project_dir.mkdir()
-        local_config = project_dir / ".specflow"
-        local_config.write_text('DEFAULT_MODEL="local-value"\n')
-        (project_dir / ".git").mkdir()
-        monkeypatch.chdir(project_dir)
-
-        manager = ConfigManager(tmp_path / "nonexistent")
-        manager.load()
-
-        source = manager.get_config_source("DEFAULT_MODEL")
-        assert "local" in source
-        assert str(local_config) in source
-
-    def test_returns_environment_for_env_vars(self, tmp_path, monkeypatch):
-        """Returns 'environment' for env var values."""
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        monkeypatch.setenv("DEFAULT_MODEL", "env-value")
-
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        source = manager.get_config_source("DEFAULT_MODEL")
-        assert source == "environment"
-
-    def test_returns_default_for_unknown_key(self, tmp_path):
-        """Returns 'default' for keys not in any config source."""
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        source = manager.get_config_source("UNKNOWN_KEY")
-        assert source == "default"
 
 
 class TestConfigManagerPathAccessors:
@@ -759,7 +693,6 @@ class TestConfigManagerSavePrecedence:
 
         # Verify initial state
         assert manager.settings.default_model == "local-model"
-        assert "local" in manager.get_config_source("DEFAULT_MODEL")
 
         # Act: save a new value to global
         warning = manager.save("DEFAULT_MODEL", "new-global", scope="global")
@@ -774,7 +707,6 @@ class TestConfigManagerSavePrecedence:
 
         # Assert: in-memory state still reflects local (higher priority)
         assert manager.settings.default_model == "local-model"
-        assert "local" in manager.get_config_source("DEFAULT_MODEL")
         assert manager.get("DEFAULT_MODEL") == "local-model"
 
     def test_global_save_when_env_overrides(self, tmp_path, monkeypatch):
@@ -793,7 +725,6 @@ class TestConfigManagerSavePrecedence:
 
         # Verify initial state
         assert manager.settings.default_model == "env-model"
-        assert manager.get_config_source("DEFAULT_MODEL") == "environment"
 
         # Act: save a new value to global
         warning = manager.save("DEFAULT_MODEL", "new-global", scope="global")
@@ -808,7 +739,6 @@ class TestConfigManagerSavePrecedence:
 
         # Assert: in-memory state still reflects env (highest priority)
         assert manager.settings.default_model == "env-model"
-        assert manager.get_config_source("DEFAULT_MODEL") == "environment"
         assert manager.get("DEFAULT_MODEL") == "env-model"
 
     def test_local_save_when_env_overrides(self, tmp_path, monkeypatch):
@@ -832,7 +762,6 @@ class TestConfigManagerSavePrecedence:
 
         # Verify initial state
         assert manager.settings.default_model == "env-model"
-        assert manager.get_config_source("DEFAULT_MODEL") == "environment"
 
         # Act: save a new value to local
         warning = manager.save("DEFAULT_MODEL", "new-local", scope="local")
@@ -849,7 +778,6 @@ class TestConfigManagerSavePrecedence:
 
         # Assert: in-memory state still reflects env (highest priority)
         assert manager.settings.default_model == "env-model"
-        assert manager.get_config_source("DEFAULT_MODEL") == "environment"
         assert manager.get("DEFAULT_MODEL") == "env-model"
 
     def test_global_save_without_override_updates_memory(self, tmp_path):
@@ -876,7 +804,6 @@ class TestConfigManagerSavePrecedence:
 
         # Assert: in-memory state is updated
         assert manager.settings.default_model == "new-global"
-        assert manager.get_config_source("DEFAULT_MODEL") == "global"
         assert manager.get("DEFAULT_MODEL") == "new-global"
 
     def test_local_save_without_env_updates_memory(self, tmp_path, monkeypatch):
@@ -912,7 +839,6 @@ class TestConfigManagerSavePrecedence:
 
         # Assert: in-memory state is updated (local > global)
         assert manager.settings.default_model == "new-local"
-        assert "local" in manager.get_config_source("DEFAULT_MODEL")
         assert manager.get("DEFAULT_MODEL") == "new-local"
 
     def test_local_config_path_correct_after_save(self, tmp_path, monkeypatch):
@@ -1172,37 +1098,3 @@ class TestConfigManagerRepoRootDetection:
         expected_path = project / ".specflow"
         assert expected_path.exists()
         assert manager.local_config_path == expected_path
-
-    def test_find_repo_root_returns_correct_path(self, tmp_path, monkeypatch):
-        """_find_repo_root correctly identifies repository root."""
-        repo_root = tmp_path / "repo"
-        repo_root.mkdir()
-        (repo_root / ".git").mkdir()
-        nested = repo_root / "a" / "b" / "c"
-        nested.mkdir(parents=True)
-
-        monkeypatch.chdir(nested)
-
-        global_config = tmp_path / ".specflow-config"
-        manager = ConfigManager(global_config)
-
-        # Act
-        result = manager._find_repo_root()
-
-        # Assert
-        assert result == repo_root
-
-    def test_find_repo_root_returns_none_without_git(self, tmp_path, monkeypatch):
-        """_find_repo_root returns None when no .git directory exists."""
-        project = tmp_path / "no-git"
-        project.mkdir()
-        monkeypatch.chdir(project)
-
-        global_config = tmp_path / ".specflow-config"
-        manager = ConfigManager(global_config)
-
-        # Act
-        result = manager._find_repo_root()
-
-        # Assert
-        assert result is None

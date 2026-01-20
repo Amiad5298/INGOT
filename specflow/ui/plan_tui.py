@@ -25,7 +25,6 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from rich.console import Group
 from rich.live import Live
@@ -36,10 +35,6 @@ from rich.text import Text
 from specflow.ui.keyboard import Key, KeyboardReader
 from specflow.ui.log_buffer import TaskLogBuffer
 from specflow.utils.console import console
-
-if TYPE_CHECKING:
-    pass
-
 
 # =============================================================================
 # Configuration

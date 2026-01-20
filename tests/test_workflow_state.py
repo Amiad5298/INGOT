@@ -74,28 +74,6 @@ class TestWorkflowState:
         state.mark_task_complete("Task 1")
         assert state.completed_tasks.count("Task 1") == 1
 
-    def test_add_checkpoint(self, state):
-        """add_checkpoint adds commit hash."""
-        state.add_checkpoint("abc123")
-        assert "abc123" in state.checkpoint_commits
-
-    def test_reset_retries(self, state):
-        """reset_retries sets count to zero."""
-        state.retry_count = 5
-        state.reset_retries()
-        assert state.retry_count == 0
-
-    def test_increment_retries_returns_true(self, state):
-        """increment_retries returns True when retries available."""
-        assert state.increment_retries() is True
-        assert state.retry_count == 1
-
-    def test_increment_retries_returns_false_at_max(self, state):
-        """increment_retries returns False at max."""
-        state.retry_count = 2
-        assert state.increment_retries() is False
-        assert state.retry_count == 3
-
     def test_user_context_default_empty(self, state):
         """user_context defaults to empty string."""
         assert state.user_context == ""
@@ -264,16 +242,6 @@ class TestWorkflowStateParallelFields:
     def test_parallel_execution_enabled_default(self, state):
         """parallel_execution_enabled defaults to True."""
         assert state.parallel_execution_enabled is True
-
-    def test_parallel_tasks_completed_default(self, state):
-        """parallel_tasks_completed defaults to empty list."""
-        assert state.parallel_tasks_completed == []
-        assert isinstance(state.parallel_tasks_completed, list)
-
-    def test_parallel_tasks_failed_default(self, state):
-        """parallel_tasks_failed defaults to empty list."""
-        assert state.parallel_tasks_failed == []
-        assert isinstance(state.parallel_tasks_failed, list)
 
     def test_fail_fast_default(self, state):
         """fail_fast defaults to False."""

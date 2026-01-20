@@ -442,11 +442,6 @@ class TestGitCommandFailures:
         mock_workflow_state.base_commit = "abc123"
         assert mock_workflow_state.base_commit == "abc123"
 
-    def test_add_checkpoint_with_invalid_hash(self, mock_workflow_state):
-        """add_checkpoint handles any string as commit hash."""
-        mock_workflow_state.add_checkpoint("invalid-hash")
-        assert "invalid-hash" in mock_workflow_state.checkpoint_commits
-
 
 class TestFileSystemErrors:
     """Tests for handling file system errors."""
@@ -535,13 +530,6 @@ class TestWorkflowResumption:
 
         assert resumable_state.checkpoint_commits == ["abc123", "def456"]
 
-    def test_reset_retries_on_resume(self, resumable_state):
-        """Retry count can be reset when resuming."""
-        resumable_state.retry_count = 2
-        resumable_state.reset_retries()
-
-        assert resumable_state.retry_count == 0
-
 
 class TestEndToEndWorkflowScenarios:
     """End-to-end workflow scenario tests."""
@@ -610,8 +598,8 @@ class TestEndToEndWorkflowScenarios:
 
     def test_workflow_tracks_checkpoints(self, complete_state):
         """Workflow tracks checkpoint commits correctly."""
-        complete_state.add_checkpoint("commit1")
-        complete_state.add_checkpoint("commit2")
+        complete_state.checkpoint_commits.append("commit1")
+        complete_state.checkpoint_commits.append("commit2")
 
         assert len(complete_state.checkpoint_commits) == 2
         assert "commit1" in complete_state.checkpoint_commits

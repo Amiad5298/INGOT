@@ -14,11 +14,9 @@ from specflow.integrations.git import (
     get_diff_from_baseline,
     get_status_short,
     has_any_changes,
-    has_changes,
     has_untracked_files,
     is_dirty,
     is_git_repo,
-    revert_changes,
     squash_commits,
 )
 
@@ -723,31 +721,3 @@ class TestCreateCheckpointCommit:
 
         assert result == "abc123de"
         assert mock_run.call_count == 3
-
-
-class TestRevertChanges:
-    """Tests for revert_changes function."""
-
-    @patch("specflow.integrations.git.subprocess.run")
-    def test_reverts_all_changes(self, mock_run):
-        """Reverts all uncommitted changes."""
-        mock_run.return_value = MagicMock(returncode=0)
-
-        revert_changes()
-
-        # Should call checkout and clean
-        assert mock_run.call_count == 2
-
-
-class TestHasChanges:
-    """Tests for has_changes function."""
-
-    @patch("specflow.integrations.git.is_dirty")
-    def test_returns_is_dirty_result(self, mock_dirty):
-        """Returns result of is_dirty check."""
-        mock_dirty.return_value = True
-
-        result = has_changes()
-
-        assert result is True
-        mock_dirty.assert_called_once()

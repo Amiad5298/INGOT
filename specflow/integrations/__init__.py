@@ -39,7 +39,6 @@ from specflow.integrations.jira import (
     check_jira_integration,
     fetch_ticket_info,
     parse_jira_ticket,
-    show_jira_setup_instructions,
 )
 
 __all__ = [
@@ -62,7 +61,6 @@ __all__ = [
     "parse_jira_ticket",
     "check_jira_integration",
     "fetch_ticket_info",
-    "show_jira_setup_instructions",
     # Auggie
     "AuggieModel",
     "AuggieClient",

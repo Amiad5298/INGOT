@@ -21,32 +21,9 @@ from specflow.integrations.auggie import (
     SPECFLOW_AGENT_TASKLIST,
     version_gte,
 )
+from specflow.integrations.git import find_repo_root
 from specflow.utils.console import print_info, print_step, print_success, print_warning
 from specflow.utils.logging import log_message
-
-
-def _find_repo_root() -> Path | None:
-    """Find the git repository root by looking for .git directory.
-
-    Traverses from current working directory upward until:
-    - A .git directory is found (returns that directory)
-    - The filesystem root is reached (returns None)
-
-    Returns:
-        Path to repository root, or None if not in a repository
-    """
-    current = Path.cwd()
-    while True:
-        if (current / ".git").exists():
-            return current
-
-        parent = current.parent
-        if parent == current:  # Reached filesystem root
-            break
-        current = parent
-
-    return None
-
 
 # --- Frontmatter and Hash Utilities ---
 
@@ -690,7 +667,7 @@ def ensure_gitignore_configured(quiet: bool = False) -> bool:
         True if .gitignore is properly configured (or was updated successfully)
     """
     # Find the git repository root to ensure we update the correct .gitignore
-    repo_root = _find_repo_root()
+    repo_root = find_repo_root()
     if repo_root is None:
         # Not in a git repository - fall back to current directory
         gitignore_path = Path(".gitignore")

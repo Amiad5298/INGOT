@@ -10,8 +10,6 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from specflow.utils.console import (
-    console,
-    print_header,
     print_info,
     print_step,
     print_success,
@@ -238,26 +236,11 @@ DESCRIPTION: <description>"""
     return ticket
 
 
-def show_jira_setup_instructions() -> None:
-    """Display Jira setup instructions."""
-    print_header("Jira Integration Setup")
-    print_info("To use Jira-dependent features, configure Jira integration in Auggie.")
-    console.print()
-    print_step("Setup Instructions:")
-    console.print("  1. Ensure you have Jira MCP server configured")
-    console.print("  2. Check your Auggie configuration for Jira settings")
-    console.print("  3. Verify your Jira API token is set correctly")
-    console.print("  4. Test: auggie --print 'List my Jira issues'")
-    console.print()
-    print_info("For more information, visit: https://docs.augmentcode.com/")
-
-
 __all__ = [
     "JiraTicket",
     "JIRA_CACHE_DURATION",
     "parse_jira_ticket",
     "check_jira_integration",
     "fetch_ticket_info",
-    "show_jira_setup_instructions",
 ]
 

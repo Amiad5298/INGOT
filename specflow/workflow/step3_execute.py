@@ -34,7 +34,7 @@ from concurrent.futures import (
     wait,
 )
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from specflow.integrations.auggie import (
     AuggieClient,
@@ -94,9 +94,6 @@ from specflow.workflow.tasks import (
     mark_task_complete,
     parse_task_list,
 )
-
-if TYPE_CHECKING:
-    pass
 
 # Type alias for task status
 TaskStatus = Literal["success", "failed", "skipped"]

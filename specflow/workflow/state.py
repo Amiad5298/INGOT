@@ -133,10 +133,6 @@ class WorkflowState:
     # Dirty tree policy for baseline diff operations
     dirty_tree_policy: DirtyTreePolicy = DirtyTreePolicy.FAIL_FAST
 
-    # Parallel execution tracking
-    parallel_tasks_completed: list[str] = field(default_factory=list)
-    parallel_tasks_failed: list[str] = field(default_factory=list)
-
     # Subagent configuration (names loaded from settings)
     # Defaults from auggie.py constants - the single source of truth
     subagent_names: dict[str, str] = field(default_factory=lambda: {
@@ -202,27 +198,6 @@ class WorkflowState:
         """
         if task_name not in self.completed_tasks:
             self.completed_tasks.append(task_name)
-
-    def add_checkpoint(self, commit_hash: str) -> None:
-        """Add a checkpoint commit.
-
-        Args:
-            commit_hash: Short commit hash
-        """
-        self.checkpoint_commits.append(commit_hash)
-
-    def reset_retries(self) -> None:
-        """Reset retry counter."""
-        self.retry_count = 0
-
-    def increment_retries(self) -> bool:
-        """Increment retry counter.
-
-        Returns:
-            True if more retries available, False if max reached
-        """
-        self.retry_count += 1
-        return self.retry_count < self.max_retries
 
 
 __all__ = [
