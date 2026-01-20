@@ -472,7 +472,7 @@ spec PROJ-123 --no-auto-update-docs
 
 ## Dependencies
 
-- Requires Auggie CLI version >= 0.12.0 (for subagent support)
+- Requires Auggie CLI version >= 0.13.0 (for subagent support)
 - Uses existing `get_diff_from_baseline()` from `specflow.integrations.git`
 - Uses existing `AuggieClient` for agent invocation
 

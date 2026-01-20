@@ -43,7 +43,7 @@ set -o pipefail  # Exit on pipe failure
 ################################################################################
 SCRIPT_VERSION="2.0.0"
 SCRIPT_NAME="SPEC"
-REQUIRED_AUGGIE_VERSION="0.12.0"
+REQUIRED_AUGGIE_VERSION="0.13.0"
 REQUIRED_NODE_VERSION="22"
 
 # Logging configuration

@@ -99,7 +99,7 @@ Support environment variables for CI/automation:
 ### 5.1 Update Auggie Version Check
 
 ```bash
-REQUIRED_AUGGIE_VERSION="0.12.0"  # Subagents require 0.12.0+
+REQUIRED_AUGGIE_VERSION="0.13.0"  # Subagents require 0.13.0+
 ```
 
 ### 5.2 Add Version Check for Subagent Features
@@ -107,12 +107,12 @@ REQUIRED_AUGGIE_VERSION="0.12.0"  # Subagents require 0.12.0+
 ```python
 def check_subagent_support() -> bool:
     """Check if installed Auggie version supports subagents.
-    
+
     Returns:
-        True if subagents are supported (version >= 0.12.0)
+        True if subagents are supported (version >= 0.13.0)
     """
     version = get_auggie_version()
-    return version_gte(version, "0.12.0")
+    return version_gte(version, "0.13.0")
 ```
 
 ---
@@ -175,7 +175,7 @@ Update `--help` output to mention subagent options.
 - [ ] Config file parser handles new settings
 - [ ] CLI has `--no-subagents` flag
 - [ ] Environment variables work correctly
-- [ ] Auggie version check updated to 0.12.0
+- [ ] Auggie version check updated to 0.13.0
 - [ ] Default agent files can be installed
 - [ ] Documentation updated
 

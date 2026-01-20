@@ -198,7 +198,7 @@ Run logs are stored in `.spec/runs/{ticket}/` for debugging and audit purposes.
 - **Python 3.11+**
 - **Node.js 22+** (for Auggie CLI)
 - **Git** (must be run from a git repository)
-- **Auggie CLI 0.12.0+** (installed automatically if missing)
+- **Auggie CLI 0.13.0+** (installed automatically if missing)
 
 ### Install from PyPI
 

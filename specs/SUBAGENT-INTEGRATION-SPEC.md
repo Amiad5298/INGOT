@@ -66,7 +66,7 @@ This spec is divided into the following sub-specifications:
 
 ## Dependencies
 
-- Auggie CLI version >= 0.12.0 (for subagent support)
+- Auggie CLI version >= 0.13.0 (for subagent support)
 - Update `REQUIRED_AUGGIE_VERSION` in `spec.sh` if needed
 
 ## File Structure After Implementation
