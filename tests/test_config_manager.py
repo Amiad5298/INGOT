@@ -434,6 +434,21 @@ class TestFindLocalConfig:
 
         assert found is None
 
+    def test_ignores_specflow_directory(self, tmp_path, monkeypatch):
+        """Ignores .specflow if it is a directory, not a file."""
+        project = tmp_path / "project"
+        project.mkdir()
+        # Create .specflow as a directory instead of a file
+        specflow_dir = project / ".specflow"
+        specflow_dir.mkdir()
+        (project / ".git").mkdir()
+        monkeypatch.chdir(project)
+
+        manager = ConfigManager()
+        found = manager._find_local_config()
+
+        assert found is None
+
 
 class TestLoadEnvironment:
     """Tests for _load_environment method."""

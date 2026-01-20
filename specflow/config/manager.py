@@ -127,7 +127,7 @@ class ConfigManager:
         current = Path.cwd()
         while True:
             config_path = current / self.LOCAL_CONFIG_NAME
-            if config_path.exists():
+            if config_path.exists() and config_path.is_file():
                 return config_path
 
             # Stop at repository root
