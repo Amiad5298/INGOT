@@ -1,8 +1,13 @@
-"""TUI for single long-running operations like plan generation.
+"""TUI for single long-running streaming operations.
 
 This module provides a simplified TUI component for displaying progress
-during plan generation in Step 1. Unlike the multi-task TUI in step 3,
+during long-running AI operations. Unlike the multi-task TUI in step 3,
 this shows a single spinner with status and liveness indicator.
+
+Used for:
+- Step 1: Plan generation
+- Post-implementation test execution
+- Step 4: Documentation updates
 
 Features:
 - Spinner with status message and elapsed time
@@ -51,17 +56,18 @@ MAX_LIVENESS_WIDTH = 70
 
 
 # =============================================================================
-# PlanGeneratorUI Class
+# StreamingOperationUI Class
 # =============================================================================
 
 
 @dataclass
-class PlanGeneratorUI:
-    """TUI for single long-running operations like plan generation.
+class StreamingOperationUI:
+    """TUI for single long-running streaming operations.
 
-    Supports context manager protocol for use with `with` statement:
+    A generic UI component for displaying progress during any AI operation
+    that produces streaming output. Supports context manager protocol:
 
-        with PlanGeneratorUI(status_message="Generating...") as ui:
+        with StreamingOperationUI(status_message="Running...") as ui:
             success, output = auggie.run_with_callback(
                 prompt, output_callback=ui.handle_output_line
             )
@@ -163,7 +169,7 @@ class PlanGeneratorUI:
         if self._log_buffer is not None:
             self._log_buffer.close()
 
-    def __enter__(self) -> "PlanGeneratorUI":
+    def __enter__(self) -> "StreamingOperationUI":
         """Context manager entry - starts the TUI display.
 
         Returns:
@@ -280,8 +286,8 @@ class PlanGeneratorUI:
 
         content = Group(*content_lines)
 
-        # Build header
-        header = f"⟳ {self.ticket_id}" if self.ticket_id else "⟳ Plan Generation"
+        # Build header - use ticket_id if provided, otherwise use status message
+        header = f"⟳ {self.ticket_id}" if self.ticket_id else "⟳ Operation"
 
         return Panel(
             content,
@@ -321,8 +327,8 @@ class PlanGeneratorUI:
 
         content = Group(*content_lines)
 
-        # Build header
-        header = f"⟳ {self.ticket_id}" if self.ticket_id else "⟳ Plan Generation"
+        # Build header - use ticket_id if provided, otherwise use status message
+        header = f"⟳ {self.ticket_id}" if self.ticket_id else "⟳ Operation"
 
         return Panel(
             content,
@@ -424,7 +430,7 @@ class PlanGeneratorUI:
 # =============================================================================
 
 __all__ = [
-    "PlanGeneratorUI",
+    "StreamingOperationUI",
     "REFRESH_RATE",
     "DEFAULT_VERBOSE_LINES",
 ]

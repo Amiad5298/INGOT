@@ -4,7 +4,7 @@ This package contains:
 - prompts: Questionary-based user input prompts
 - menus: Interactive menu functions
 - log_buffer: Memory-efficient log buffer with file backing
-- plan_tui: TUI for plan generation (Step 1)
+- plan_tui: StreamingOperationUI for single long-running operations
 """
 
 from specflow.ui.log_buffer import TaskLogBuffer
@@ -17,7 +17,7 @@ from specflow.ui.menus import (
     show_task_checkboxes,
     show_task_review_menu,
 )
-from specflow.ui.plan_tui import PlanGeneratorUI
+from specflow.ui.plan_tui import StreamingOperationUI
 from specflow.ui.prompts import (
     custom_style,
     prompt_checkbox,
@@ -30,8 +30,8 @@ from specflow.ui.prompts import (
 __all__ = [
     # Log Buffer
     "TaskLogBuffer",
-    # Plan TUI
-    "PlanGeneratorUI",
+    # Streaming Operation TUI
+    "StreamingOperationUI",
     # Prompts
     "custom_style",
     "prompt_checkbox",

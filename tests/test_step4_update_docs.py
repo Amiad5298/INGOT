@@ -228,6 +228,7 @@ class TestStep4NoChanges:
 class TestStep4WithChanges:
     """Tests for step_4_update_docs when there are changes."""
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -236,7 +237,7 @@ class TestStep4WithChanges:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_calls_auggie_with_diff(
         self, mock_has_any_changes, mock_get_diff, mock_print_success,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         workflow_state, mock_auggie_client
     ):
         """Calls AuggieClient with diff content when changes exist."""
@@ -249,13 +250,23 @@ class TestStep4WithChanges:
         mock_snapshot.detect_changes.return_value = []
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
 
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+
         result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
 
         assert isinstance(result, Step4Result)
         assert result.success
         assert result.agent_ran
-        mock_auggie_client.run_print_with_output.assert_called_once()
-        call_kwargs = mock_auggie_client.run_print_with_output.call_args[1]
+        mock_auggie_client.run_with_callback.assert_called_once()
+        call_kwargs = mock_auggie_client.run_with_callback.call_args[1]
         assert call_kwargs["agent"] == "spec-doc-updater"
         assert call_kwargs["dont_save_session"] is True
 
@@ -268,6 +279,7 @@ class TestStep4WithChanges:
 class TestStep4AgentFailure:
     """Tests for step_4_update_docs when agent fails."""
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -276,7 +288,7 @@ class TestStep4AgentFailure:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_returns_success_when_agent_returns_failure_non_blocking(
         self, mock_has_any_changes, mock_get_diff, mock_print_warning,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         workflow_state
     ):
         """Returns success (non-blocking) even when agent returns failure status."""
@@ -286,8 +298,15 @@ class TestStep4AgentFailure:
         mock_snapshot.detect_changes.return_value = []
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
 
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
         mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (False, "Error occurred")
+        mock_client.run_with_callback.return_value = (False, "Error occurred")
 
         result = step_4_update_docs(workflow_state, auggie_client=mock_client)
 
@@ -298,6 +317,7 @@ class TestStep4AgentFailure:
         assert not result.docs_updated
         mock_print_warning.assert_called()
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -306,7 +326,7 @@ class TestStep4AgentFailure:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_returns_success_when_agent_raises_exception(
         self, mock_has_any_changes, mock_get_diff, mock_print_error,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         workflow_state
     ):
         """Returns success (non-blocking) when agent raises exception."""
@@ -316,8 +336,15 @@ class TestStep4AgentFailure:
         mock_snapshot.detect_changes.return_value = []
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
 
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
         mock_client = MagicMock()
-        mock_client.run_print_with_output.side_effect = Exception("Agent crashed")
+        mock_client.run_with_callback.side_effect = Exception("Agent crashed")
 
         result = step_4_update_docs(workflow_state, auggie_client=mock_client)
 
@@ -336,6 +363,7 @@ class TestStep4AgentFailure:
 class TestStep4NonDocEnforcement:
     """Tests for non-documentation file change enforcement."""
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -347,7 +375,7 @@ class TestStep4NonDocEnforcement:
     def test_reverts_non_doc_changes_made_by_agent(
         self, mock_has_any_changes, mock_get_diff, mock_print_error, mock_print_warning,
         mock_print_success, mock_print_info, mock_print_header, mock_snapshot_class,
-        workflow_state, mock_auggie_client
+        mock_ui_class, workflow_state, mock_auggie_client
     ):
         """Reverts non-doc file changes made by the agent."""
         mock_has_any_changes.return_value = True
@@ -359,6 +387,16 @@ class TestStep4NonDocEnforcement:
         mock_snapshot.revert_changes.return_value = ["src/main.py"]
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
 
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+
         result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
 
         assert isinstance(result, Step4Result)
@@ -369,6 +407,7 @@ class TestStep4NonDocEnforcement:
         # Violations should trigger error messages
         mock_print_error.assert_called()
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -377,7 +416,7 @@ class TestStep4NonDocEnforcement:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_no_revert_when_only_doc_files_changed(
         self, mock_has_any_changes, mock_get_diff, mock_print_success,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         workflow_state, mock_auggie_client
     ):
         """Does not revert when agent only changes doc files."""
@@ -388,6 +427,16 @@ class TestStep4NonDocEnforcement:
         mock_snapshot = MagicMock()
         mock_snapshot.detect_changes.return_value = []
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
+
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
 
         result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
 
@@ -477,6 +526,7 @@ class TestBuildDocUpdatePrompt:
 class TestStep4UntrackedOnly:
     """Tests for Step 4 with only untracked files (no staged/unstaged)."""
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -485,7 +535,7 @@ class TestStep4UntrackedOnly:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_runs_when_only_untracked_files_exist(
         self, mock_has_changes, mock_get_diff, mock_print_success,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         ticket, mock_auggie_client
     ):
         """Step 4 runs when only untracked files exist (not staged/unstaged)."""
@@ -498,6 +548,16 @@ class TestStep4UntrackedOnly:
         mock_snapshot.detect_changes.return_value = []
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
 
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+
         state = WorkflowState(ticket=ticket)
         state.base_commit = ""  # No base commit
 
@@ -505,7 +565,7 @@ class TestStep4UntrackedOnly:
 
         assert result.success
         assert result.agent_ran  # Agent should run!
-        mock_auggie_client.run_print_with_output.assert_called_once()
+        mock_auggie_client.run_with_callback.assert_called_once()
 
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -534,6 +594,7 @@ class TestStep4UntrackedOnly:
 class TestStep4MissingBaseCommit:
     """Tests for Step 4 when base_commit is missing but repo is dirty."""
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -542,7 +603,7 @@ class TestStep4MissingBaseCommit:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_falls_back_to_staged_unstaged_when_no_base_commit(
         self, mock_has_changes, mock_get_diff, mock_print_success,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         ticket, mock_auggie_client
     ):
         """Uses staged+unstaged+untracked when base_commit is empty."""
@@ -554,6 +615,16 @@ class TestStep4MissingBaseCommit:
         mock_snapshot = MagicMock()
         mock_snapshot.detect_changes.return_value = []
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
+
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
 
         state = WorkflowState(ticket=ticket)
         state.base_commit = ""
@@ -574,6 +645,7 @@ class TestStep4MissingBaseCommit:
 class TestStep4ViolationTracking:
     """Tests for non-doc violation tracking and visibility."""
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -583,7 +655,7 @@ class TestStep4ViolationTracking:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_tracks_violations_in_result(
         self, mock_has_changes, mock_get_diff, mock_print_error, mock_print_warning,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         workflow_state, mock_auggie_client
     ):
         """Result tracks had_violations flag when agent modifies non-doc files."""
@@ -594,12 +666,23 @@ class TestStep4ViolationTracking:
         mock_snapshot.revert_changes.return_value = ["src/code.py"]
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
 
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+
         result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
 
         assert result.success  # Still non-blocking
         assert result.had_violations is True
         assert "src/code.py" in result.non_doc_reverted
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -609,7 +692,7 @@ class TestStep4ViolationTracking:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_tracks_failed_reverts(
         self, mock_has_changes, mock_get_diff, mock_print_error, mock_print_warning,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         workflow_state, mock_auggie_client
     ):
         """Result tracks files that failed to revert."""
@@ -620,12 +703,23 @@ class TestStep4ViolationTracking:
         mock_snapshot.revert_changes.return_value = ["src/code.py"]  # Only one reverted
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
 
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+
         result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
 
         assert result.had_violations is True
         assert "src/code.py" in result.non_doc_reverted
         assert "src/other.py" in result.non_doc_revert_failed
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
     @patch("specflow.workflow.step4_update_docs.print_header")
     @patch("specflow.workflow.step4_update_docs.print_info")
@@ -635,7 +729,7 @@ class TestStep4ViolationTracking:
     @patch("specflow.workflow.step4_update_docs.has_any_changes")
     def test_prints_error_banner_on_violations(
         self, mock_has_changes, mock_get_diff, mock_print_error, mock_print_warning,
-        mock_print_info, mock_print_header, mock_snapshot_class,
+        mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
         workflow_state, mock_auggie_client
     ):
         """Prints prominent error banner when violations occur."""
@@ -645,6 +739,16 @@ class TestStep4ViolationTracking:
         mock_snapshot.detect_changes.return_value = ["src/code.py"]
         mock_snapshot.revert_changes.return_value = ["src/code.py"]
         mock_snapshot_class.capture_non_doc_state.return_value = mock_snapshot
+
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
+
+        # Configure mock client to use run_with_callback (TUI mode)
+        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
 
         step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
 

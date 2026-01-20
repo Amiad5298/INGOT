@@ -123,7 +123,7 @@ class TestGeneratePlanWithTui:
     """Tests for _generate_plan_with_tui function."""
 
     @patch("specflow.workflow.step1_plan.AuggieClient")
-    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     def test_returns_true_on_successful_generation(
         self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
     ):
@@ -145,7 +145,7 @@ class TestGeneratePlanWithTui:
         assert result is True
 
     @patch("specflow.workflow.step1_plan.AuggieClient")
-    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     def test_returns_false_when_user_requests_quit(
         self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
     ):
@@ -167,7 +167,7 @@ class TestGeneratePlanWithTui:
         assert result is False
 
     @patch("specflow.workflow.step1_plan.AuggieClient")
-    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     def test_log_path_is_set_on_ui(
         self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
     ):
@@ -192,7 +192,7 @@ class TestGeneratePlanWithTui:
         assert ".log" in str(log_path_arg)
 
     @patch("specflow.workflow.step1_plan.AuggieClient")
-    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     def test_auggie_client_uses_subagent(
         self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
     ):
@@ -219,7 +219,7 @@ class TestGeneratePlanWithTui:
         assert call_kwargs["agent"] == workflow_state.subagent_names["planner"]
 
     @patch("specflow.workflow.step1_plan.AuggieClient")
-    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     def test_returns_false_on_auggie_failure(
         self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
     ):
@@ -241,7 +241,7 @@ class TestGeneratePlanWithTui:
         assert result is False
 
     @patch("specflow.workflow.step1_plan.AuggieClient")
-    @patch("specflow.ui.plan_tui.PlanGeneratorUI")
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     def test_dont_save_session_flag_is_passed(
         self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
     ):

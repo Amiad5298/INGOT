@@ -87,6 +87,9 @@ from specflow.workflow.tasks import (
 if TYPE_CHECKING:
     from specflow.ui.tui import TaskRunnerUI
 
+# Log directory names for workflow steps
+LOG_DIR_TEST_EXECUTION = "test_execution"
+
 
 # =============================================================================
 # Backwards-compatible re-exports from extracted modules
@@ -980,30 +983,52 @@ def _run_post_implementation_tests(state: WorkflowState) -> None:
     Finds and runs tests that cover the code changed in this Step 3 run.
     This includes both modified test files AND tests that cover modified source files.
     Does NOT run the full project test suite.
+
+    Uses StreamingOperationUI to provide a consistent collapsible UI with
+    verbose toggle, matching the UX of Steps 1 and 3.
     """
+    from specflow.ui.plan_tui import StreamingOperationUI
+    from specflow.workflow.events import format_run_directory
+
     # Prompt user to run tests
     if not prompt_confirm("Run tests for changes made in this run?", default=True):
         print_info("Skipping tests")
         return
 
     print_step("Running Tests for Changed Code via AI")
-    console.print("[dim]AI will identify and run tests that cover the code changed in this run...[/dim]")
-    console.print()
+
+    # Create log directory for test execution
+    log_dir = _get_log_base_dir() / state.ticket.ticket_id / LOG_DIR_TEST_EXECUTION
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{format_run_directory()}.log"
+
+    # Create UI with collapsible panel and verbose toggle
+    ui = StreamingOperationUI(
+        status_message="Running tests for changed code...",
+        ticket_id=state.ticket.ticket_id,
+    )
+    ui.set_log_path(log_path)
 
     # Use spec-implementer subagent for running tests
     auggie_client = AuggieClient()
 
     try:
-        success, _ = auggie_client.run_print_with_output(
-            POST_IMPLEMENTATION_TEST_PROMPT,
-            agent=state.subagent_names["implementer"],
-            dont_save_session=True,
-        )
-        console.print()
-        if success:
-            print_success("Test execution completed successfully")
-        else:
-            print_warning("Test execution reported issues")
+        with ui:
+            success, _ = auggie_client.run_with_callback(
+                POST_IMPLEMENTATION_TEST_PROMPT,
+                agent=state.subagent_names["implementer"],
+                output_callback=ui.handle_output_line,
+                dont_save_session=True,
+            )
+
+            # Check if user requested quit
+            if ui.quit_requested:
+                print_warning("Test execution cancelled by user.")
+                return
+
+        ui.print_summary(success)
+
+        if not success:
             print_info("Review test output above to identify issues")
     except Exception as e:
         print_error(f"Failed to run tests: {e}")
@@ -1044,5 +1069,6 @@ def _offer_commit_instructions(state: WorkflowState) -> None:
 
 __all__ = [
     "step_3_execute",
+    "LOG_DIR_TEST_EXECUTION",
 ]
 

@@ -528,29 +528,49 @@ class TestRunPostImplementationTests:
 
         mock_auggie_class.assert_not_called()
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step3_execute.AuggieClient")
     @patch("specflow.workflow.step3_execute.prompt_confirm")
-    def test_runs_auggie_with_test_prompt(self, mock_confirm, mock_auggie_class, workflow_state):
-        """Runs Auggie with test prompt."""
+    def test_runs_auggie_with_test_prompt(
+        self, mock_confirm, mock_auggie_class, mock_ui_class, workflow_state
+    ):
+        """Runs Auggie with test prompt using StreamingOperationUI."""
         mock_confirm.return_value = True
         mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (True, "Tests passed")
+        mock_client.run_with_callback.return_value = (True, "Tests passed")
         mock_auggie_class.return_value = mock_client
+
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
 
         _run_post_implementation_tests(workflow_state)
 
-        mock_client.run_print_with_output.assert_called_once()
-        prompt = mock_client.run_print_with_output.call_args[0][0]
+        mock_client.run_with_callback.assert_called_once()
+        prompt = mock_client.run_with_callback.call_args[0][0]
         assert "test" in prompt.lower()
 
+    @patch("specflow.ui.plan_tui.StreamingOperationUI")
     @patch("specflow.workflow.step3_execute.AuggieClient")
     @patch("specflow.workflow.step3_execute.prompt_confirm")
-    def test_handles_auggie_exceptions(self, mock_confirm, mock_auggie_class, workflow_state):
+    def test_handles_auggie_exceptions(
+        self, mock_confirm, mock_auggie_class, mock_ui_class, workflow_state
+    ):
         """Handles Auggie exceptions gracefully."""
         mock_confirm.return_value = True
         mock_client = MagicMock()
-        mock_client.run_print_with_output.side_effect = RuntimeError("Connection error")
+        mock_client.run_with_callback.side_effect = RuntimeError("Connection error")
         mock_auggie_class.return_value = mock_client
+
+        # Setup mock UI
+        mock_ui = MagicMock()
+        mock_ui_class.return_value = mock_ui
+        mock_ui.__enter__ = MagicMock(return_value=mock_ui)
+        mock_ui.__exit__ = MagicMock(return_value=None)
+        mock_ui.quit_requested = False
 
         # Should not raise exception
         _run_post_implementation_tests(workflow_state)

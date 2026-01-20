@@ -73,13 +73,13 @@ def _generate_plan_with_tui(
     Returns:
         True if plan generation succeeded.
     """
-    from specflow.ui.plan_tui import PlanGeneratorUI
+    from specflow.ui.plan_tui import StreamingOperationUI
 
     # Create log directory and log path
     log_dir = _create_plan_log_dir(state.ticket.ticket_id)
     log_path = log_dir / f"{format_run_directory()}.log"
 
-    ui = PlanGeneratorUI(
+    ui = StreamingOperationUI(
         status_message="Generating implementation plan...",
         ticket_id=state.ticket.ticket_id,
     )
