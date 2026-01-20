@@ -336,3 +336,155 @@ class TestLogBufferCleanup:
 
         # Buffer reference should be cleared even on error
         assert record.log_buffer is None
+
+
+# =============================================================================
+# Tests for Auto-Switch Selection on Task Finish in Parallel Mode
+# =============================================================================
+
+
+class TestAutoSwitchOnTaskFinish:
+    """Tests for auto-switching to another running task when selected task finishes."""
+
+    def test_auto_switch_to_running_task_when_selected_finishes(self, tui):
+        """When selected task finishes in parallel mode, auto-switch to another running task."""
+        tui.set_parallel_mode(True)
+        tui.follow_mode = True
+
+        # Start two tasks
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+
+        # Verify both are running
+        assert 0 in tui._running_task_indices
+        assert 1 in tui._running_task_indices
+
+        # Task 1 is selected (auto-selected as first running task)
+        assert tui.selected_index == 0
+
+        # Task 1 finishes
+        tui._apply_event(create_task_finished_event(0, "Task 1", "success", 1.0))
+
+        # Should auto-switch to Task 2 (the remaining running task)
+        assert tui.selected_index == 1
+        assert 0 not in tui._running_task_indices
+        assert 1 in tui._running_task_indices
+
+    def test_no_auto_switch_when_follow_mode_disabled(self, tui):
+        """No auto-switch when follow_mode is disabled."""
+        tui.set_parallel_mode(True)
+        tui.follow_mode = False  # User disabled follow mode
+
+        # Start two tasks
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+
+        # Manually select Task 1
+        tui.selected_index = 0
+
+        # Task 1 finishes
+        tui._apply_event(create_task_finished_event(0, "Task 1", "success", 1.0))
+
+        # Should NOT auto-switch (user may want to review the finished task)
+        assert tui.selected_index == 0
+
+    def test_no_auto_switch_when_different_task_selected(self, tui):
+        """No auto-switch when a different task (not the finishing one) is selected."""
+        tui.set_parallel_mode(True)
+        tui.follow_mode = True
+
+        # Start three tasks
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        tui._apply_event(create_task_started_event(2, "Task 3"))
+
+        # User manually selected Task 2
+        tui.selected_index = 1
+
+        # Task 1 finishes (not the selected task)
+        tui._apply_event(create_task_finished_event(0, "Task 1", "success", 1.0))
+
+        # Selection should remain on Task 2
+        assert tui.selected_index == 1
+
+    def test_no_auto_switch_when_no_other_running_tasks(self, tui):
+        """No auto-switch when no other tasks are running."""
+        tui.set_parallel_mode(True)
+        tui.follow_mode = True
+
+        # Start only one task
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        assert tui.selected_index == 0
+
+        # Task 1 finishes (no other running tasks)
+        tui._apply_event(create_task_finished_event(0, "Task 1", "success", 1.0))
+
+        # Selection stays on Task 1 (nothing to switch to)
+        assert tui.selected_index == 0
+        assert len(tui._running_task_indices) == 0
+
+    def test_auto_switch_selects_lowest_index_running_task(self, tui):
+        """Auto-switch picks the lowest-indexed running task."""
+        tui.set_parallel_mode(True)
+        tui.follow_mode = True
+
+        # Start three tasks
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        tui._apply_event(create_task_started_event(2, "Task 3"))
+
+        # Select Task 1
+        tui.selected_index = 0
+
+        # Task 1 finishes
+        tui._apply_event(create_task_finished_event(0, "Task 1", "success", 1.0))
+
+        # Should switch to Task 2 (lowest index among running: 1 and 2)
+        assert tui.selected_index == 1
+
+    def test_auto_switch_works_with_failed_task(self, tui):
+        """Auto-switch also works when selected task fails."""
+        tui.set_parallel_mode(True)
+        tui.follow_mode = True
+
+        # Start two tasks
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        tui.selected_index = 0
+
+        # Task 1 fails
+        tui._apply_event(create_task_finished_event(0, "Task 1", "failed", 1.0, error="Error"))
+
+        # Should auto-switch to Task 2
+        assert tui.selected_index == 1
+
+    def test_auto_switch_works_with_skipped_task(self, tui):
+        """Auto-switch also works when selected task is skipped."""
+        tui.set_parallel_mode(True)
+        tui.follow_mode = True
+
+        # Start two tasks
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        tui.selected_index = 0
+
+        # Task 1 is skipped (e.g., fail-fast triggered)
+        tui._apply_event(create_task_finished_event(0, "Task 1", "skipped", 0.0))
+
+        # Should auto-switch to Task 2
+        assert tui.selected_index == 1
+
+    def test_no_auto_switch_in_sequential_mode(self, tui):
+        """Auto-switch does not happen in sequential mode (parallel_mode=False)."""
+        tui.set_parallel_mode(False)  # Sequential mode
+        tui.follow_mode = True
+
+        # Start a task (sequential mode)
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui.selected_index = 0
+
+        # Task 1 finishes
+        tui._apply_event(create_task_finished_event(0, "Task 1", "success", 1.0))
+
+        # Selection stays unchanged (sequential mode doesn't use auto-switch)
+        assert tui.selected_index == 0

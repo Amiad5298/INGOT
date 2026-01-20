@@ -707,6 +707,14 @@ class TaskRunnerUI:
 
             if self.parallel_mode:
                 self._running_task_indices.discard(event.task_index)
+                # Auto-switch to another running task if the finished task was selected
+                # and follow_mode is enabled. This keeps the UI showing live output.
+                if (
+                    self.follow_mode
+                    and self.selected_index == event.task_index
+                    and self._running_task_indices
+                ):
+                    self.selected_index = min(self._running_task_indices)
 
     def _handle_run_finished(self, event: TaskEvent) -> None:
         """Handle RUN_FINISHED event.
