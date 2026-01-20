@@ -369,6 +369,35 @@ class TaskRunnerUI:
             return len(self._running_task_indices)
         return 1 if self._current_task_index >= 0 else 0
 
+    def _find_next_running_task(self, finished_index: int) -> int:
+        """Find the next running task index using 'Next Neighbor' logic.
+
+        Prefers the next running task after the finished one (cyclic/modulo).
+        This provides a less jarring UX than always jumping to the first task.
+
+        For example, if Task 3 finishes and Tasks 1, 4, 5 are running:
+        - Returns 4 (next after 3)
+
+        If Task 5 finishes and Tasks 1, 2 are running:
+        - Returns 1 (wraps around to beginning)
+
+        Args:
+            finished_index: Index of the task that just finished.
+
+        Returns:
+            Index of the next running task to select.
+
+        Precondition:
+            self._running_task_indices must not be empty.
+        """
+        # Find running tasks with indices greater than finished_index
+        later_tasks = [i for i in self._running_task_indices if i > finished_index]
+        if later_tasks:
+            # Pick the smallest index among later tasks (closest neighbor)
+            return min(later_tasks)
+        # No later tasks, wrap around to the beginning
+        return min(self._running_task_indices)
+
     def _render_layout(self) -> Group:
         """Render the complete TUI layout.
 
@@ -416,14 +445,15 @@ class TaskRunnerUI:
         )
         self._live.start()
 
-        # Start background refresh thread for parallel mode
-        # This ensures smooth spinner animation by refreshing at ~10 Hz
-        if self.parallel_mode:
-            self._stop_refresh_thread = False
-            self._refresh_thread = threading.Thread(
-                target=self._background_refresh_loop, daemon=True
-            )
-            self._refresh_thread.start()
+        # Start background refresh thread for smooth spinner animation.
+        # This ensures the spinner keeps animating even when the main thread
+        # is blocked waiting for subprocess output (both sequential and parallel modes).
+        # The refresh loop runs at ~10 Hz with time.sleep() to yield the GIL.
+        self._stop_refresh_thread = False
+        self._refresh_thread = threading.Thread(
+            target=self._background_refresh_loop, daemon=True
+        )
+        self._refresh_thread.start()
 
     def stop(self) -> None:
         """Stop the Live display and keyboard input handling."""
@@ -448,10 +478,12 @@ class TaskRunnerUI:
             self._live = None
 
     def _background_refresh_loop(self) -> None:
-        """Background thread loop for refreshing the display in parallel mode.
+        """Background thread loop for refreshing the display.
 
         Runs at ~10 Hz to ensure smooth spinner animation and responsive
-        log updates while the main thread is blocked on wait().
+        log updates while the main thread is blocked (e.g., waiting for
+        subprocess output in sequential mode, or wait() in parallel mode).
+        Uses time.sleep() to yield the GIL and prevent UI starvation.
         """
         refresh_interval = 0.1  # 10 Hz refresh rate
         while not self._stop_refresh_thread:
@@ -707,6 +739,16 @@ class TaskRunnerUI:
 
             if self.parallel_mode:
                 self._running_task_indices.discard(event.task_index)
+                # Auto-switch to another running task if the finished task was selected
+                # and follow_mode is enabled. This keeps the UI showing live output.
+                # Uses "Next Neighbor" logic: prefer the next running task after the
+                # finished one, wrapping around if necessary for less jarring UX.
+                if (
+                    self.follow_mode
+                    and self.selected_index == event.task_index
+                    and self._running_task_indices
+                ):
+                    self.selected_index = self._find_next_running_task(event.task_index)
 
     def _handle_run_finished(self, event: TaskEvent) -> None:
         """Handle RUN_FINISHED event.
