@@ -616,11 +616,12 @@ def _update_agent_file(agent_path: Path, agent_name: str, quiet: bool = False) -
 # Patterns that SPECFLOW requires in the target project's .gitignore
 SPECFLOW_GITIGNORE_PATTERNS = [
     ".specflow/",
+    "specs/",
     "*.log",
 ]
 
 # Comment marker to identify SPECFLOW-managed section
-SPECFLOW_GITIGNORE_MARKER = "# SPECFLOW - Run logs and temporary files"
+SPECFLOW_GITIGNORE_MARKER = "# SPECFLOW - Workflow artifacts (specs, logs, run state)"
 
 
 def _check_gitignore_has_pattern(content: str, pattern: str) -> bool:

@@ -44,6 +44,11 @@ class TestCheckGitignoreHasPattern:
         content = "*.pyc\n*.log\n__pycache__/"
         assert _check_gitignore_has_pattern(content, "*.log") is True
 
+    def test_finds_specs_pattern(self):
+        """Returns True for specs/ pattern."""
+        content = "*.pyc\nspecs/\n__pycache__/"
+        assert _check_gitignore_has_pattern(content, "specs/") is True
+
     def test_returns_false_for_missing_pattern(self):
         """Returns False when pattern is not in file."""
         content = "*.pyc\n__pycache__/"
@@ -151,7 +156,7 @@ __pycache__/
         gitignore_path = tmp_path / ".gitignore"
 
         # Create .gitignore with SPECFLOW patterns already present
-        existing_content = "*.pyc\n.specflow/\n*.log\n"
+        existing_content = "*.pyc\n.specflow/\nspecs/\n*.log\n"
         gitignore_path.write_text(existing_content)
 
         result = ensure_gitignore_configured(quiet=True)
@@ -178,7 +183,8 @@ __pycache__/
 
         # .specflow/ should appear only once (not duplicated)
         assert content.count(".specflow/") == 1
-        # *.log should be added
+        # specs/ and *.log should be added
+        assert "specs/" in content
         assert "*.log" in content
 
     def test_handles_file_without_trailing_newline(self, tmp_path, monkeypatch):
@@ -228,7 +234,7 @@ __pycache__/
         gitignore_path = tmp_path / ".gitignore"
 
         # Create fully configured .gitignore
-        gitignore_path.write_text(".specflow/\n*.log\n")
+        gitignore_path.write_text(".specflow/\nspecs/\n*.log\n")
 
         result = ensure_gitignore_configured(quiet=True)
         assert result is True
@@ -259,8 +265,9 @@ __pycache__/
         assert result is True
         content = gitignore_path.read_text()
 
-        # Both patterns should be added as actual rules (not just comments)
+        # All patterns should be added as actual rules (not just comments)
         lines = [l.strip() for l in content.split("\n") if not l.strip().startswith("#")]
         assert ".specflow/" in lines
+        assert "specs/" in lines
         assert "*.log" in lines
 
