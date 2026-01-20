@@ -99,64 +99,78 @@ def step_2_create_tasklist(state: WorkflowState, auggie: AuggieClient) -> bool:
             return False
 
 
-def _extract_task_name_from_add_tasks_format(raw_name: str) -> str:
-    """Extract clean task name from add_tasks tool output format.
+# Strict regex for add_tasks tool output format:
+# UUID:<shortuuid> NAME:[CATEGORY: ]<task_name> DESCRIPTION:<description>
+#
+# Design decisions:
+# 1. UUID field: [A-Za-z0-9]+ (shortuuid format)
+# 2. NAME field: Everything between "NAME:" and " DESCRIPTION:"
+# 3. DESCRIPTION field: Everything after " DESCRIPTION:" to end of line
+# 4. Category prefixes: UPPERCASE only (FUNDAMENTAL:, INDEPENDENT:) to avoid
+#    false positives with sentence-case words like "Fundamental analysis"
+#
+# The regex uses a greedy match for the name field up to the LAST occurrence
+# of " DESCRIPTION:" to handle task names containing the word "DESCRIPTION".
+ADD_TASKS_TOOL_PATTERN = re.compile(
+    r'^UUID:(?P<uuid>[A-Za-z0-9]+)\s+'
+    r'NAME:(?P<name>.+)\s+DESCRIPTION:(?P<desc>.*)$'
+)
 
-    The add_tasks tool outputs tasks in this format:
-    UUID:xxx NAME:Task Name DESCRIPTION:...
+# Strict category prefixes - UPPERCASE ONLY to avoid false positives
+# e.g., "FUNDAMENTAL: Setup DB" matches, but "Fundamental analysis" does NOT
+CATEGORY_PREFIX_PATTERN = re.compile(
+    r'^(?P<category>FUNDAMENTAL|INDEPENDENT):\s*(?P<task_name>.+)$'
+)
 
-    This function extracts just the task name portion.
+
+def _parse_add_tasks_line(raw_task_text: str) -> tuple[Optional[str], str]:
+    """Parse a line from add_tasks tool output format.
+
+    Strictly parses the format: UUID:<id> NAME:[CATEGORY: ]<name> DESCRIPTION:<desc>
+
+    The regex is designed to handle edge cases:
+    - Task names containing "DESCRIPTION" (e.g., "Fix DESCRIPTION field bug")
+    - Task names containing "NAME" (e.g., "Update NAME validation")
 
     Args:
-        raw_name: Raw task name string from checkbox line
+        raw_task_text: Raw text from checkbox line (after [ ] or [x])
 
     Returns:
-        Clean task name
+        Tuple of (category_metadata, clean_task_name) where:
+        - category_metadata: HTML comment like "<!-- category: fundamental -->" or None
+        - clean_task_name: The task name with UUID/DESCRIPTION/category prefix stripped
     """
-    # Check for add_tasks format: UUID:xxx NAME:... DESCRIPTION:...
-    # Extract the NAME field content
-    name_match = re.search(r'NAME:(.+?)(?:\s+DESCRIPTION:|$)', raw_name)
-    if name_match:
-        return name_match.group(1).strip()
+    match = ADD_TASKS_TOOL_PATTERN.match(raw_task_text.strip())
 
-    # Not add_tasks format, return as-is
-    return raw_name.strip()
+    if not match:
+        # Not add_tasks format - return as-is, no category
+        return (None, raw_task_text.strip())
 
+    name_field = match.group('name').strip()
 
-def _extract_category_from_prefix(task_name: str) -> tuple[Optional[str], str]:
-    """Extract category from FUNDAMENTAL:/INDEPENDENT: prefix in task name.
+    # Check for UPPERCASE category prefix (strict matching)
+    category_match = CATEGORY_PREFIX_PATTERN.match(name_field)
 
-    Args:
-        task_name: Task name that may have a category prefix
+    if category_match:
+        category = category_match.group('category').lower()
+        task_name = category_match.group('task_name').strip()
+        return (f"<!-- category: {category} -->", task_name)
 
-    Returns:
-        Tuple of (category_metadata, clean_task_name) where category_metadata
-        is the HTML comment to add (or None if no prefix found), and
-        clean_task_name is the task name with prefix removed.
-    """
-    # Check for FUNDAMENTAL: prefix (case-insensitive)
-    fundamental_match = re.match(r'^FUNDAMENTAL:\s*(.+)$', task_name, re.IGNORECASE)
-    if fundamental_match:
-        return ("<!-- category: fundamental -->", fundamental_match.group(1).strip())
-
-    # Check for INDEPENDENT: prefix (case-insensitive)
-    independent_match = re.match(r'^INDEPENDENT:\s*(.+)$', task_name, re.IGNORECASE)
-    if independent_match:
-        return ("<!-- category: independent -->", independent_match.group(1).strip())
-
-    # No category prefix found
-    return (None, task_name)
+    # No category prefix - return name as-is
+    return (None, name_field)
 
 
 def _extract_tasklist_from_output(output: str, ticket_id: str) -> Optional[str]:
     """Extract markdown checkbox task list from AI output.
 
-    Finds all lines matching checkbox format, preserving category metadata comments
-    and section headers for parallel execution support.
+    Parses checkbox tasks from AI output, supporting:
+    1. Simple checkbox format: `- [ ] Task name`
+    2. add_tasks tool output: `[ ] UUID:xxx NAME:CATEGORY: Task DESCRIPTION:...`
 
-    Also handles:
-    - add_tasks tool output format (UUID:xxx NAME:... DESCRIPTION:...)
-    - FUNDAMENTAL:/INDEPENDENT: prefixes in task names (converts to metadata)
+    Design:
+    - Strict parsing: Uses exact regex patterns, no guessing
+    - UPPERCASE-only categories: Only "FUNDAMENTAL:" and "INDEPENDENT:" (not lowercase)
+    - Edge-case safe: Handles task names containing "DESCRIPTION" or "NAME"
 
     Args:
         output: AI output text that may contain task list
@@ -165,50 +179,38 @@ def _extract_tasklist_from_output(output: str, ticket_id: str) -> Optional[str]:
     Returns:
         Formatted task list content, or None if no tasks found
     """
-    # Pattern for task items: optional indent, optional bullet, checkbox, task name
+    # Pattern for checkbox task lines: optional indent, optional bullet, checkbox, content
     task_pattern = re.compile(r"^(\s*)[-*]?\s*\[([xX ])\]\s*(.+)$")
-    # Pattern for category metadata comments
+
+    # Pattern for existing category metadata comments (preserve if present)
     metadata_pattern = re.compile(r"^\s*<!--\s*category:\s*.+-->\s*$")
-    # Pattern for section headers (## Fundamental Tasks, ## Independent Tasks, etc.)
-    section_pattern = re.compile(r"^##\s+(Fundamental|Independent)\s+Tasks.*$", re.IGNORECASE)
 
     output_lines = output.splitlines()
     result_lines = [f"# Task List: {ticket_id}", ""]
 
     task_count = 0
-    pending_metadata: list[str] = []  # Buffer for metadata before a task
+    pending_metadata: list[str] = []
 
     for line in output_lines:
-        # Check for section headers
-        if section_pattern.match(line):
-            # Add blank line before section (if we have content)
-            if len(result_lines) > 2:
-                result_lines.append("")
-            result_lines.append(line)
-            pending_metadata = []  # Reset metadata buffer
-            continue
-
-        # Check for category metadata comments
+        # Preserve existing category metadata comments
         if metadata_pattern.match(line):
             pending_metadata.append(line.strip())
             continue
 
-        # Check for task items
+        # Check for checkbox task lines
         task_match = task_pattern.match(line)
         if task_match:
-            indent, checkbox, raw_task_name = task_match.groups()
+            indent, checkbox, raw_task_content = task_match.groups()
 
-            # Extract clean task name (handles add_tasks format)
-            task_name = _extract_task_name_from_add_tasks_format(raw_task_name)
+            # Parse using strict add_tasks format parser
+            # Returns (category_metadata, clean_task_name)
+            category_metadata, task_name = _parse_add_tasks_line(raw_task_content)
 
-            # Extract category from prefix (FUNDAMENTAL:/INDEPENDENT:)
-            category_metadata, clean_task_name = _extract_category_from_prefix(task_name)
-
-            # Add category metadata if extracted from prefix
+            # Add category metadata if found
             if category_metadata:
                 pending_metadata.append(category_metadata)
 
-            # Add any pending metadata before this task
+            # Flush pending metadata before the task
             for meta in pending_metadata:
                 result_lines.append(meta)
             pending_metadata = []
@@ -216,8 +218,8 @@ def _extract_tasklist_from_output(output: str, ticket_id: str) -> Optional[str]:
             # Normalize indentation (2 spaces per level)
             indent_level = len(indent) // 2
             normalized_indent = "  " * indent_level
-            checkbox_char = checkbox.lower()  # Normalize to lowercase
-            result_lines.append(f"{normalized_indent}- [{checkbox_char}] {clean_task_name}")
+            checkbox_char = checkbox.lower()
+            result_lines.append(f"{normalized_indent}- [{checkbox_char}] {task_name}")
             task_count += 1
 
     if task_count == 0:

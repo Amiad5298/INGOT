@@ -11,6 +11,7 @@ from specflow.workflow.step2_tasklist import (
     _display_tasklist,
     _edit_tasklist,
     _create_default_tasklist,
+    _parse_add_tasks_line,
 )
 
 from specflow.workflow.state import WorkflowState
@@ -210,16 +211,17 @@ Task list updated successfully. Created: 13, Updated: 1, Deleted: 0.
                 f"Task name should not start with 'INDEPENDENT:': {task.name}"
             )
 
-    def test_extracts_category_from_name_prefix_simple(self):
-        """Extracts category metadata from FUNDAMENTAL/INDEPENDENT prefixes.
+    def test_extracts_category_from_add_tasks_format(self):
+        """Extracts category metadata from add_tasks tool format.
 
-        Simpler test case for category prefix parsing.
+        Tests the strict parser with proper UUID:... NAME:CATEGORY: ... DESCRIPTION:... format.
+        This is the only supported format for category extraction (no legacy prefix support).
         """
         output = """Here is the task list:
-- [ ] FUNDAMENTAL: Setup database schema
-- [ ] FUNDAMENTAL: Create base models
-- [ ] INDEPENDENT: Add API endpoints
-- [ ] INDEPENDENT: Write unit tests
+[ ] UUID:abc1 NAME:FUNDAMENTAL: Setup database schema DESCRIPTION:Setup the DB
+[ ] UUID:abc2 NAME:FUNDAMENTAL: Create base models DESCRIPTION:Create models
+[ ] UUID:abc3 NAME:INDEPENDENT: Add API endpoints DESCRIPTION:Add endpoints
+[ ] UUID:abc4 NAME:INDEPENDENT: Write unit tests DESCRIPTION:Write tests
 """
         result = _extract_tasklist_from_output(output, "TEST-456")
 
@@ -241,6 +243,99 @@ Task list updated successfully. Created: 13, Updated: 1, Deleted: 0.
         # Names should not include the prefix
         assert tasks[0].name == "Setup database schema"
         assert tasks[2].name == "Add API endpoints"
+
+
+class TestStrictParser:
+    """Tests for the strict _parse_add_tasks_line parser.
+
+    These tests verify robustness against edge cases:
+    - Task names containing "DESCRIPTION" or "NAME"
+    - UPPERCASE-only category matching (no false positives)
+    """
+
+    def test_handles_description_in_task_name(self):
+        """Task name containing 'DESCRIPTION' is parsed correctly.
+
+        Regression test: old regex would cut off at first DESCRIPTION: occurrence.
+        """
+        raw = "UUID:abc123 NAME:INDEPENDENT: Fix DESCRIPTION field bug DESCRIPTION:Fix the bug"
+        category_meta, task_name = _parse_add_tasks_line(raw)
+
+        assert category_meta == "<!-- category: independent -->"
+        assert task_name == "Fix DESCRIPTION field bug"
+
+    def test_handles_name_in_task_name(self):
+        """Task name containing 'NAME' is parsed correctly."""
+        raw = "UUID:xyz789 NAME:FUNDAMENTAL: Update NAME validation logic DESCRIPTION:Improve it"
+        category_meta, task_name = _parse_add_tasks_line(raw)
+
+        assert category_meta == "<!-- category: fundamental -->"
+        assert task_name == "Update NAME validation logic"
+
+    def test_no_false_positive_on_lowercase_fundamental(self):
+        """Sentence-case 'Fundamental' does NOT trigger category extraction.
+
+        Regression test: old regex used re.IGNORECASE which caused false positives.
+        """
+        raw = "UUID:test123 NAME:Fundamental analysis of the market DESCRIPTION:Research task"
+        category_meta, task_name = _parse_add_tasks_line(raw)
+
+        # No category extracted (not UPPERCASE)
+        assert category_meta is None
+        assert task_name == "Fundamental analysis of the market"
+
+    def test_no_false_positive_on_lowercase_independent(self):
+        """Sentence-case 'Independent' does NOT trigger category extraction."""
+        raw = "UUID:test456 NAME:Independent study required DESCRIPTION:Self-study"
+        category_meta, task_name = _parse_add_tasks_line(raw)
+
+        # No category extracted (not UPPERCASE)
+        assert category_meta is None
+        assert task_name == "Independent study required"
+
+    def test_simple_task_without_category(self):
+        """Task without category prefix is parsed correctly."""
+        raw = "UUID:simple1 NAME:Simple task name DESCRIPTION:A simple description"
+        category_meta, task_name = _parse_add_tasks_line(raw)
+
+        assert category_meta is None
+        assert task_name == "Simple task name"
+
+    def test_non_add_tasks_format_passthrough(self):
+        """Non-add_tasks format lines pass through unchanged."""
+        raw = "Just a regular task name"
+        category_meta, task_name = _parse_add_tasks_line(raw)
+
+        assert category_meta is None
+        assert task_name == "Just a regular task name"
+
+    def test_extract_with_tricky_description_name(self):
+        """Full integration test with tricky task containing DESCRIPTION in name.
+
+        Proves the regex handles: NAME:CATEGORY: ... DESCRIPTION ... DESCRIPTION:...
+        """
+        output = """Here is the task list:
+[ ] UUID:tricky1 NAME:INDEPENDENT: Fix DESCRIPTION field bug DESCRIPTION:This fixes the bug
+[ ] UUID:tricky2 NAME:FUNDAMENTAL: Add NAME column to DB DESCRIPTION:Database update
+[ ] UUID:normal1 NAME:INDEPENDENT: Regular task DESCRIPTION:Normal description
+"""
+        result = _extract_tasklist_from_output(output, "TRICKY-123")
+
+        assert result is not None
+        tasks = parse_task_list(result)
+
+        assert len(tasks) == 3
+
+        # Verify task names are correctly extracted
+        assert tasks[0].name == "Fix DESCRIPTION field bug"
+        assert tasks[1].name == "Add NAME column to DB"
+        assert tasks[2].name == "Regular task"
+
+        # Verify categories
+        from specflow.workflow.tasks import TaskCategory
+        assert tasks[0].category == TaskCategory.INDEPENDENT
+        assert tasks[1].category == TaskCategory.FUNDAMENTAL
+        assert tasks[2].category == TaskCategory.INDEPENDENT
 
 
 class TestGenerateTasklist:
