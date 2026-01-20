@@ -962,6 +962,17 @@ def _show_summary(state: WorkflowState, failed_tasks: list[str] | None = None) -
 
     console.print()
 
+    # Add helpful note about git staging
+    console.print(
+        "[dim]Note: Generated files may appear as 'Unversioned' (if new) or "
+        "'Modified' (if existing).[/dim]"
+    )
+    console.print(
+        "[dim]      You need to manually review and [bold]git add[/bold] them "
+        "before committing.[/dim]"
+    )
+    console.print()
+
 
 def _run_post_implementation_tests(state: WorkflowState) -> None:
     """Run post-implementation verification tests using AI.
