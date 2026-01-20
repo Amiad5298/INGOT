@@ -306,6 +306,12 @@ class TestWorkflowArtifactFiltering:
         result = check_dirty_working_tree(policy=DirtyTreePolicy.FAIL_FAST)
         assert result is True
 
+    def test_is_workflow_artifact_gitignore(self):
+        """Recognizes .gitignore as workflow artifact (modified by ensure_gitignore_configured)."""
+        from specflow.workflow.git_utils import _is_workflow_artifact
+
+        assert _is_workflow_artifact(".gitignore") is True
+
     def test_workflow_artifact_paths_constant_exported(self):
         """WORKFLOW_ARTIFACT_PATHS constant is exported."""
         from specflow.workflow.git_utils import WORKFLOW_ARTIFACT_PATHS
@@ -314,6 +320,7 @@ class TestWorkflowArtifactFiltering:
         assert ".augment/" in WORKFLOW_ARTIFACT_PATHS
         assert "specs/" in WORKFLOW_ARTIFACT_PATHS
         assert ".DS_Store" in WORKFLOW_ARTIFACT_PATHS
+        assert ".gitignore" in WORKFLOW_ARTIFACT_PATHS
 
 
 class TestGetDiffFromBaseline:

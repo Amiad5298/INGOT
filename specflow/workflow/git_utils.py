@@ -40,6 +40,7 @@ WORKFLOW_ARTIFACT_PATHS = frozenset({
     ".augment/",    # Agent definition files
     "specs/",       # Generated specs and task lists
     ".DS_Store",    # macOS system file
+    ".gitignore",   # Modified by ensure_gitignore_configured() to add SPECFLOW patterns
 })
 
 
