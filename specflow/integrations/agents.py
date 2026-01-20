@@ -611,6 +611,113 @@ def _update_agent_file(agent_path: Path, agent_name: str, quiet: bool = False) -
         return False
 
 
+# --- Gitignore Management ---
+
+# Patterns that SPECFLOW requires in the target project's .gitignore
+SPECFLOW_GITIGNORE_PATTERNS = [
+    ".specflow/",
+    "*.log",
+]
+
+# Comment marker to identify SPECFLOW-managed section
+SPECFLOW_GITIGNORE_MARKER = "# SPECFLOW - Run logs and temporary files"
+
+
+def _check_gitignore_has_pattern(content: str, pattern: str) -> bool:
+    """Check if a .gitignore file contains a specific pattern.
+
+    Handles comments and whitespace. Matches the pattern exactly
+    (not as a substring of another pattern).
+
+    Args:
+        content: Content of the .gitignore file
+        pattern: Pattern to search for (e.g., ".specflow/", "*.log")
+
+    Returns:
+        True if the pattern is already in the file
+    """
+    for line in content.split("\n"):
+        # Strip whitespace and skip comments
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            if stripped == pattern:
+                return True
+    return False
+
+
+def ensure_gitignore_configured(quiet: bool = False) -> bool:
+    """Ensure the target project's .gitignore has SPECFLOW patterns.
+
+    Checks for required patterns (.specflow/, *.log) and appends them
+    if missing. Adds patterns in a clearly marked SPECFLOW section.
+
+    This is idempotent - running multiple times won't duplicate entries.
+
+    Args:
+        quiet: If True, suppress informational messages
+
+    Returns:
+        True if .gitignore is properly configured (or was updated successfully)
+    """
+    gitignore_path = Path(".gitignore")
+
+    # Read existing content (or empty if file doesn't exist)
+    if gitignore_path.exists():
+        try:
+            existing_content = gitignore_path.read_text()
+        except Exception as e:
+            log_message(f"Failed to read .gitignore: {e}")
+            return False
+    else:
+        existing_content = ""
+
+    # Find missing patterns
+    missing_patterns = [
+        pattern for pattern in SPECFLOW_GITIGNORE_PATTERNS
+        if not _check_gitignore_has_pattern(existing_content, pattern)
+    ]
+
+    if not missing_patterns:
+        log_message(".gitignore already has all required SPECFLOW patterns")
+        return True
+
+    # Build the section to append
+    lines_to_add = []
+
+    # Add blank line separator if file has content and doesn't end with newlines
+    if existing_content and not existing_content.endswith("\n\n"):
+        if existing_content.endswith("\n"):
+            lines_to_add.append("")
+        else:
+            lines_to_add.extend(["", ""])
+
+    # Check if we already have the SPECFLOW marker
+    has_marker = SPECFLOW_GITIGNORE_MARKER in existing_content
+
+    if not has_marker:
+        lines_to_add.append(SPECFLOW_GITIGNORE_MARKER)
+
+    lines_to_add.extend(missing_patterns)
+    lines_to_add.append("")  # Trailing newline
+
+    # Append to file
+    try:
+        with open(gitignore_path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines_to_add))
+
+        if not quiet:
+            pattern_list = ", ".join(missing_patterns)
+            print_info(f"Updated .gitignore with SPECFLOW patterns: {pattern_list}")
+        log_message(f"Added patterns to .gitignore: {missing_patterns}")
+        return True
+
+    except Exception as e:
+        if not quiet:
+            print_warning(f"Failed to update .gitignore: {e}")
+        log_message(f"Failed to update .gitignore: {e}")
+        return False
+
+
 def ensure_agents_installed(quiet: bool = False) -> bool:
     """Ensure SPEC subagent files exist and are up-to-date.
 
@@ -619,12 +726,18 @@ def ensure_agents_installed(quiet: bool = False) -> bool:
     - Updates outdated files if they haven't been customized by the user
     - Preserves user customizations (creates .md.new file for review)
 
+    Also ensures the project's .gitignore is configured to ignore
+    SPECFLOW artifacts (.specflow/ directory, *.log files).
+
     Args:
         quiet: If True, suppress informational messages
 
     Returns:
         True if all agents are available (created, updated, or already current)
     """
+    # First, ensure .gitignore is configured for SPECFLOW
+    ensure_gitignore_configured(quiet=quiet)
+
     agents_dir = get_agents_dir()
 
     # Track actions taken
@@ -720,6 +833,9 @@ __all__ = [
     "ensure_agents_installed",
     "verify_agents_available",
     "get_agents_dir",
+    # Gitignore management
+    "ensure_gitignore_configured",
+    "SPECFLOW_GITIGNORE_PATTERNS",
     # Agent definitions (compatibility + new APIs)
     "AGENT_DEFINITIONS",
     "AGENT_METADATA",

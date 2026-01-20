@@ -52,6 +52,13 @@ Dramatically reduce implementation time:
 - **Git**: Feature branch creation, checkpoint commits after each task, optional commit squashing
 - **Auggie CLI**: Leverages Auggie's AI capabilities with specialized subagents
 
+### 🔧 Git Integration Details
+SPEC integrates with Git while giving you full control over your commits:
+
+- **Automatic `.gitignore` Configuration**: On first run, SPEC automatically adds patterns to your project's `.gitignore` to exclude run logs (`.specflow/` and `*.log`), keeping your repository clean without manual configuration.
+
+- **Manual Staging by Design**: SPEC generates and modifies files but does **not** automatically stage them with `git add`. This gives you full control to review changes before committing. After execution, you'll see a note reminding you to manually `git add` files you want to include.
+
 ### 🎨 Rich Terminal UI
 - Real-time task progress visualization
 - Log streaming with expandable panels
