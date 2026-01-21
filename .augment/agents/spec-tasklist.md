@@ -89,7 +89,7 @@ FUNDAMENTAL tasks must **NOT** include:
 - Integration test implementations (extract to INDEPENDENT)
 - Test fixtures or test utilities (extract to INDEPENDENT)
 
-**Minimal smoke tests** are allowed ONLY if absolutely required for task validation.
+Manual verification logs are allowed, but **NO automated test code** is permitted in FUNDAMENTAL tasks.
 
 ### INDEPENDENT Tasks = Non-Blocking Work (Consumes Dependencies)
 INDEPENDENT tasks depend on FUNDAMENTAL tasks but do NOT block each other.
@@ -183,7 +183,9 @@ EXECUTION PLAN:
    - Task B tests → extracted to "Unit Tests: Task B"
 
 4. File Disjointness Verification:
-   - Independent tasks touch disjoint files: ✅/❌
+   - Task [Name]: Touches [file A, file B]
+   - Task [Name]: Touches [file C, file D]
+   - Conflict Check: Do INDEPENDENT tasks share any files? [YES/NO] -> If YES, extract shared file to FUNDAMENTAL Setup Task.
 -->
 ```
 
@@ -194,6 +196,8 @@ After outputting this plan, generate the final markdown task list.
 **IMPORTANT:** Output ONLY the task list as plain markdown text. Do NOT use any task management tools.
 
 For each task, include a `files:` metadata comment listing the files that task should create or modify.
+
+**Placement Rule:** The `<!-- files: ... -->` comment must appear immediately before the task bullet point (`- [ ]`).
 
 ```markdown
 # Task List: [TICKET-ID]
