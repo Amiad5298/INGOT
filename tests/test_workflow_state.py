@@ -257,6 +257,7 @@ class TestWorkflowStateParallelFields:
         assert state.subagent_names == {
             "planner": "spec-planner",
             "tasklist": "spec-tasklist",
+            "tasklist_fixer": "spec-tasklist-fixer",
             "implementer": "spec-implementer",
             "reviewer": "spec-reviewer",
             "doc_updater": "spec-doc-updater",
@@ -269,12 +270,14 @@ class TestWorkflowStateParallelFields:
             subagent_names={
                 "planner": "custom-planner",
                 "tasklist": "custom-tasklist",
+                "tasklist_fixer": "custom-tasklist-fixer",
                 "implementer": "custom-implementer",
                 "reviewer": "custom-reviewer",
                 "doc_updater": "custom-doc-updater",
             },
         )
         assert state.subagent_names["planner"] == "custom-planner"
+        assert state.subagent_names["tasklist_fixer"] == "custom-tasklist-fixer"
         assert state.subagent_names["implementer"] == "custom-implementer"
         assert state.subagent_names["doc_updater"] == "custom-doc-updater"
 

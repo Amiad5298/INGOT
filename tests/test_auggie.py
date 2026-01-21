@@ -8,6 +8,7 @@ from specflow.integrations.auggie import (
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
     SPECFLOW_AGENT_TASKLIST,
+    SPECFLOW_AGENT_TASKLIST_FIXER,
     AgentDefinition,
     AuggieClient,
     AuggieRateLimitError,
@@ -656,6 +657,10 @@ class TestSubagentConstants:
     def test_tasklist_constant(self):
         """SPECFLOW_AGENT_TASKLIST has correct value."""
         assert SPECFLOW_AGENT_TASKLIST == "spec-tasklist"
+
+    def test_tasklist_fixer_constant(self):
+        """SPECFLOW_AGENT_TASKLIST_FIXER has correct value."""
+        assert SPECFLOW_AGENT_TASKLIST_FIXER == "spec-tasklist-fixer"
 
     def test_implementer_constant(self):
         """SPECFLOW_AGENT_IMPLEMENTER has correct value."""
