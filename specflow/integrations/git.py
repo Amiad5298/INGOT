@@ -80,6 +80,29 @@ def _parse_name_status_line(line: str) -> str:
     return parts[-1] if parts else ""
 
 
+def find_repo_root() -> Path | None:
+    """Find the git repository root by looking for .git directory.
+
+    Traverses from current working directory upward until:
+    - A .git directory is found (returns that directory)
+    - The filesystem root is reached (returns None)
+
+    Returns:
+        Path to repository root, or None if not in a repository
+    """
+    current = Path.cwd()
+    while True:
+        if (current / ".git").exists():
+            return current
+
+        parent = current.parent
+        if parent == current:  # Reached filesystem root
+            break
+        current = parent
+
+    return None
+
+
 def is_git_repo() -> bool:
     """Check if current directory is a git repository.
 
@@ -376,21 +399,6 @@ def handle_dirty_state(context: str, action: DirtyStateAction) -> bool:
         return False
 
     return False
-
-
-def has_changes() -> bool:
-    """Check if there are any changes to commit.
-
-    Returns:
-        True if there are staged or unstaged changes
-    """
-    return is_dirty()
-
-
-def revert_changes() -> None:
-    """Revert all uncommitted changes."""
-    subprocess.run(["git", "checkout", "."], capture_output=True)
-    subprocess.run(["git", "clean", "-fd"], capture_output=True)
 
 
 def stash_changes(message: str = "WIP") -> bool:
@@ -865,12 +873,11 @@ __all__ = [
     "create_checkpoint_commit",
     "squash_commits",
     "handle_dirty_state",
-    "has_changes",
-    "revert_changes",
     "stash_changes",
     "commit_changes",
     "get_diff_from_baseline",
     "get_changed_files_list",
     "get_untracked_files_list",
+    "find_repo_root",
 ]
 
