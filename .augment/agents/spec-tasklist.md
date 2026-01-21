@@ -13,6 +13,14 @@ Your role is to convert implementation plans into executable task lists optimize
 Create a task list from the provided implementation plan. Tasks will be executed by AI agents,
 some sequentially (FUNDAMENTAL) and some in parallel (INDEPENDENT).
 
+## ⛔ ABSOLUTE RULE: NEVER BUNDLE TESTS IN FUNDAMENTAL TASKS ⛔
+
+**This is the most important rule.** Before outputting ANY task list, verify:
+- NO FUNDAMENTAL task contains "unit test", "integration test", "test coverage", or testing-related work
+- ALL test work is extracted to INDEPENDENT tasks with `group: testing`
+
+If you find yourself writing "Include unit tests in..." inside a FUNDAMENTAL task, STOP and extract it.
+
 ## Task Categories
 
 ### FUNDAMENTAL Tasks (Sequential Execution)
@@ -23,12 +31,14 @@ Tasks that MUST run in order because they have dependencies:
 - Configuration that must be in place first
 - Any task where Task N+1 depends on Task N's output
 
+**FUNDAMENTAL tasks contain ONLY implementation code, NEVER comprehensive tests.**
+
 ### INDEPENDENT Tasks (Parallel Execution)
 Tasks that can run concurrently with no dependencies:
-- UI components (after models/services exist)
-- Separate API endpoints that don't share state
-- Test suites that don't modify shared resources
-- Documentation updates
+- **ALL testing work** (unit tests, integration tests, test fixtures) → `group: testing`
+- UI components (after models/services exist) → `group: ui`
+- Separate API endpoints that don't share state → `group: implementation`
+- Documentation updates → `group: docs`
 
 ## Critical Rules
 
@@ -79,7 +89,7 @@ FUNDAMENTAL tasks must **NOT** include:
 - Integration test implementations (extract to INDEPENDENT)
 - Test fixtures or test utilities (extract to INDEPENDENT)
 
-**Minimal smoke tests** are allowed ONLY if absolutely required for task validation.
+Manual verification logs are allowed, but **NO automated test code** is permitted in FUNDAMENTAL tasks.
 
 ### INDEPENDENT Tasks = Non-Blocking Work (Consumes Dependencies)
 INDEPENDENT tasks depend on FUNDAMENTAL tasks but do NOT block each other.
@@ -92,9 +102,9 @@ INDEPENDENT tasks include:
 
 ### Why This Matters: The Parallel Execution Pattern
 
-Once FUNDAMENTAL tasks complete (e.g., "Implement DasService Interface and DasServiceImpl"):
-- Unit tests for DasServiceImpl → can run in parallel (group: testing)
-- DasActivityImpl that calls DasService → can run in parallel (group: implementation)
+Once FUNDAMENTAL tasks complete (e.g., "Implement UserService Interface and UserServiceImpl"):
+- Unit tests for UserServiceImpl → can run in parallel (group: testing)
+- UserActivityImpl that calls UserService → can run in parallel (group: implementation)
 - Integration tests → can run in parallel (group: testing)
 
 All INDEPENDENT tasks run concurrently because they only depend on the FUNDAMENTAL interfaces, NOT on each other.
@@ -106,34 +116,88 @@ If a FUNDAMENTAL task would take >5 minutes due to test writing, extract the tes
 Example - WRONG:
 ```
 <!-- category: fundamental, order: 4 -->
-- [ ] Implement DasService Interface and Implementation
+- [ ] Implement UserService Interface and Implementation
   - Add method to interface
-  - Implement in DasServiceImpl
+  - Implement in UserServiceImpl
   - Add comprehensive unit tests  <-- PROBLEM: Blocks parallel execution
 ```
 
 Example - CORRECT:
 ```
 <!-- category: fundamental, order: 4 -->
-- [ ] Implement DasService Interface and Implementation
+- [ ] Implement UserService Interface and Implementation
   - Add method to interface
-  - Implement in DasServiceImpl (minimal validation only)
+  - Implement in UserServiceImpl (implementation logic only)
 
 <!-- category: independent, group: testing -->
-- [ ] Unit Tests: DasServiceImpl
-  - Comprehensive test coverage for DasServiceImpl
+- [ ] Unit Tests: UserServiceImpl
+  - Comprehensive test coverage for UserServiceImpl
 
 <!-- category: independent, group: implementation -->
-- [ ] Implement DasActivityImpl
-  - Add @ActivityMethod to DasActivity interface
-  - Implement delegation to DasService
+- [ ] Implement UserActivityImpl
+  - Add @ActivityMethod to UserActivity interface
+  - Implement delegation to UserService
 ```
+
+### ❌ ANTI-PATTERN: The "Bundling Trap"
+**Never do this.** This is the #1 reason task lists are rejected.
+
+**BAD (Bundled Tests):**
+```
+- [ ] Implement User Service Interface and Implementation
+  - Create UserServiceImpl class
+  - Write unit tests for validation logic  <-- ⛔ WRONG! This blocks parallel execution
+```
+
+**GOOD (Separated):**
+```
+- [ ] Implement User Service Interface and Implementation
+  - Create UserServiceImpl class (implementation only)
+
+- [ ] Unit Tests: User Service
+  - Write unit tests for validation logic
+```
+
+## Execution Planning (Required)
+
+Before generating the final task list, you must output a hidden XML comment block with your analysis.
+This "thinking block" helps you identify dependencies and separate tests before committing to a task list.
+
+Structure it like this:
+
+```xml
+<!--
+EXECUTION PLAN:
+
+1. FUNDAMENTAL Tasks (Sequential):
+   - Task A: [description] → creates [interface/model/schema]
+   - Task B: [description] → depends on Task A, creates [service/contract]
+
+2. INDEPENDENT Tasks (Parallel):
+   - Implementation: [ActivityImpl, ControllerImpl, etc.]
+   - Testing: [Unit tests for Task A], [Unit tests for Task B], [Integration tests]
+   - Docs: [API docs, README updates]
+
+3. Test Extraction Check:
+   - Task A tests → extracted to "Unit Tests: Task A"
+   - Task B tests → extracted to "Unit Tests: Task B"
+
+4. File Disjointness Verification:
+   - Task [Name]: Touches [file A, file B]
+   - Task [Name]: Touches [file C, file D]
+   - Conflict Check: Do INDEPENDENT tasks share any files? [YES/NO] -> If YES, extract shared file to FUNDAMENTAL Setup Task.
+-->
+```
+
+After outputting this plan, generate the final markdown task list.
 
 ## Output Format
 
 **IMPORTANT:** Output ONLY the task list as plain markdown text. Do NOT use any task management tools.
 
 For each task, include a `files:` metadata comment listing the files that task should create or modify.
+
+**Placement Rule:** The `<!-- files: ... -->` comment must appear immediately before the task bullet point (`- [ ]`).
 
 ```markdown
 # Task List: [TICKET-ID]
@@ -202,14 +266,16 @@ For each task, you MUST include a `<!-- files: ... -->` comment listing ALL file
 
 ## Categorization Heuristics
 
-1. **If unsure, mark as FUNDAMENTAL** - Sequential is always safe
-2. **Data/Schema/Config tasks are ALWAYS FUNDAMENTAL** - Order 1
-3. **Interface + Core Implementation tasks are FUNDAMENTAL** - Order 2+ (defines contracts others consume)
-4. **Dependent Implementation Layers are INDEPENDENT** - Activity/Controller/Wrapper layers (group: implementation)
-5. **ALL testing tasks are INDEPENDENT** - Unit/Integration tests (group: testing)
-6. **UI/Docs are INDEPENDENT** - Can parallelize (group: ui, group: docs)
-7. **Shared file edits require EXTRACTION** - Extract to FUNDAMENTAL setup task
-8. **Extract comprehensive tests from FUNDAMENTAL** - If a task would take >5 min due to tests, split them out
+1. **If unsure about IMPLEMENTATION code, mark as FUNDAMENTAL** - Sequential is always safe for code
+2. **Tests are NEVER unsure - they are ALWAYS INDEPENDENT** - No exceptions
+3. **Data/Schema/Config tasks are ALWAYS FUNDAMENTAL** - Order 1
+4. **Interface + Core Implementation tasks are FUNDAMENTAL** - Order 2+ (defines contracts others consume)
+5. **Dependent Implementation Layers are INDEPENDENT** - Activity/Controller/Wrapper layers (group: implementation)
+6. **ALL testing tasks are INDEPENDENT** - Unit/Integration tests (group: testing)
+7. **UI/Docs are INDEPENDENT** - Can parallelize (group: ui, group: docs)
+8. **Shared file edits require EXTRACTION** - Extract to FUNDAMENTAL setup task
+
+**VALIDATION CHECK**: Before outputting, scan every FUNDAMENTAL task. If any contains the word "test", "Test", or "tests", you MUST extract that testing work to a separate INDEPENDENT task.
 
 Order tasks by dependency (prerequisites first). Keep descriptions concise but specific.
 
@@ -221,3 +287,22 @@ Parse it and create an optimized task list that balances:
 - Parallelization for independent tasks
 - File disjointness to prevent race conditions
 
+## Final Output Validation
+
+Before returning your task list, perform this checklist:
+
+1. ✅ **Test Extraction Check**: For each FUNDAMENTAL task, verify it does NOT contain:
+   - "Include unit tests..."
+   - "Add test coverage..."
+   - "Write tests for..."
+   - Any test file references (e.g., `*Test.java`, `test_*.py`)
+
+2. ✅ **Independent Tests Exist**: Verify you have INDEPENDENT tasks (group: testing) for:
+   - Unit tests for each implementation
+   - Integration tests if mentioned in the plan
+
+3. ✅ **Maximize Parallelism**: Count your tasks:
+   - FUNDAMENTAL tasks should be minimal (setup + core contracts only)
+   - INDEPENDENT tasks should be the majority (all tests + dependent implementations)
+
+If FUNDAMENTAL count > INDEPENDENT count, you likely bundled too much into FUNDAMENTAL.
