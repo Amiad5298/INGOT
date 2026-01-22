@@ -102,7 +102,7 @@ def run_spec_driven_workflow(
         subagent_names={
             "planner": config.settings.subagent_planner,
             "tasklist": config.settings.subagent_tasklist,
-            "tasklist_fixer": config.settings.subagent_tasklist_fixer,
+            "tasklist_refiner": config.settings.subagent_tasklist_refiner,
             "implementer": config.settings.subagent_implementer,
             "reviewer": config.settings.subagent_reviewer,
             "doc_updater": config.settings.subagent_doc_updater,

@@ -15,7 +15,7 @@ from specflow.integrations.auggie import (
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
     SPECFLOW_AGENT_TASKLIST,
-    SPECFLOW_AGENT_TASKLIST_FIXER,
+    SPECFLOW_AGENT_TASKLIST_REFINER,
 )
 from specflow.integrations.jira import JiraTicket
 from specflow.workflow.git_utils import DirtyTreePolicy
@@ -139,7 +139,7 @@ class WorkflowState:
     subagent_names: dict[str, str] = field(default_factory=lambda: {
         "planner": SPECFLOW_AGENT_PLANNER,
         "tasklist": SPECFLOW_AGENT_TASKLIST,
-        "tasklist_fixer": SPECFLOW_AGENT_TASKLIST_FIXER,
+        "tasklist_refiner": SPECFLOW_AGENT_TASKLIST_REFINER,
         "implementer": SPECFLOW_AGENT_IMPLEMENTER,
         "reviewer": SPECFLOW_AGENT_REVIEWER,
         "doc_updater": SPECFLOW_AGENT_DOC_UPDATER,

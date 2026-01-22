@@ -14,7 +14,7 @@ from specflow.integrations.auggie import (
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
     SPECFLOW_AGENT_TASKLIST,
-    SPECFLOW_AGENT_TASKLIST_FIXER,
+    SPECFLOW_AGENT_TASKLIST_REFINER,
 )
 
 
@@ -74,7 +74,7 @@ class Settings:
     # Defaults from auggie.py constants - the single source of truth
     subagent_planner: str = SPECFLOW_AGENT_PLANNER
     subagent_tasklist: str = SPECFLOW_AGENT_TASKLIST
-    subagent_tasklist_fixer: str = SPECFLOW_AGENT_TASKLIST_FIXER
+    subagent_tasklist_refiner: str = SPECFLOW_AGENT_TASKLIST_REFINER
     subagent_implementer: str = SPECFLOW_AGENT_IMPLEMENTER
     subagent_reviewer: str = SPECFLOW_AGENT_REVIEWER
     subagent_doc_updater: str = SPECFLOW_AGENT_DOC_UPDATER
@@ -100,7 +100,7 @@ class Settings:
             "FAIL_FAST": "fail_fast",
             "SUBAGENT_PLANNER": "subagent_planner",
             "SUBAGENT_TASKLIST": "subagent_tasklist",
-            "SUBAGENT_TASKLIST_FIXER": "subagent_tasklist_fixer",
+            "SUBAGENT_TASKLIST_REFINER": "subagent_tasklist_refiner",
             "SUBAGENT_IMPLEMENTER": "subagent_implementer",
             "SUBAGENT_REVIEWER": "subagent_reviewer",
             "SUBAGENT_DOC_UPDATER": "subagent_doc_updater",

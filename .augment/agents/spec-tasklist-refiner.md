@@ -1,5 +1,5 @@
 ---
-name: spec-tasklist-fixer
+name: spec-tasklist-refiner
 description: Post-processor that extracts test-related work from FUNDAMENTAL tasks to INDEPENDENT
 model: claude-sonnet-4-5
 color: yellow
@@ -28,7 +28,7 @@ For each test-related line found in a FUNDAMENTAL task:
 3. The new task should reference which component it tests
 
 # Output Format
-Output ONLY the complete fixed task list in markdown. Keep the exact same format:
+Output ONLY the complete refined task list in markdown. Keep the exact same format:
 
 ```markdown
 # Task List: [TICKET-ID]
@@ -63,6 +63,8 @@ Output ONLY the complete fixed task list in markdown. Keep the exact same format
 5. New testing tasks should have descriptive names like "Unit Tests: DasService" or "Integration Tests: API Layer"
 6. Group related test extractions into single tasks when they test the same component
 7. Do NOT invent new implementation work - only move existing test-related work
+8. Do NOT summarize or rephrase implementation tasks. Copy them verbatim.
+9. If a task has a files comment containing both implementation and test files, you must SPLIT the file list correctly between the resulting tasks.
 
 # Example Transformation
 
@@ -92,5 +94,5 @@ AFTER:
   - Write unit tests in DasResponseConverterTest.java
 ```
 
-Output ONLY the fixed task list markdown. No explanations.
+Output ONLY the refined task list markdown. No explanations.
 

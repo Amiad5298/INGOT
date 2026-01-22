@@ -27,7 +27,7 @@ from specflow.utils.logging import log_command, log_message
 # Subagent names used by SPECFLOW workflow
 SPECFLOW_AGENT_PLANNER = "spec-planner"
 SPECFLOW_AGENT_TASKLIST = "spec-tasklist"
-SPECFLOW_AGENT_TASKLIST_FIXER = "spec-tasklist-fixer"
+SPECFLOW_AGENT_TASKLIST_REFINER = "spec-tasklist-refiner"
 SPECFLOW_AGENT_IMPLEMENTER = "spec-implementer"
 SPECFLOW_AGENT_REVIEWER = "spec-reviewer"
 SPECFLOW_AGENT_DOC_UPDATER = "spec-doc-updater"
@@ -720,7 +720,7 @@ __all__ = [
     # Subagent constants
     "SPECFLOW_AGENT_PLANNER",
     "SPECFLOW_AGENT_TASKLIST",
-    "SPECFLOW_AGENT_TASKLIST_FIXER",
+    "SPECFLOW_AGENT_TASKLIST_REFINER",
     "SPECFLOW_AGENT_IMPLEMENTER",
     "SPECFLOW_AGENT_REVIEWER",
     "SPECFLOW_AGENT_DOC_UPDATER",

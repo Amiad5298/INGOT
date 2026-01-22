@@ -19,7 +19,7 @@ from specflow.integrations.auggie import (
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
     SPECFLOW_AGENT_TASKLIST,
-    SPECFLOW_AGENT_TASKLIST_FIXER,
+    SPECFLOW_AGENT_TASKLIST_REFINER,
     version_gte,
 )
 from specflow.integrations.git import find_repo_root
@@ -196,8 +196,8 @@ AGENT_METADATA = {
         "model": "claude-sonnet-4-5",
         "color": "cyan",
     },
-    SPECFLOW_AGENT_TASKLIST_FIXER: {
-        "name": "spec-tasklist-fixer",
+    SPECFLOW_AGENT_TASKLIST_REFINER: {
+        "name": "spec-tasklist-refiner",
         "description": "Post-processor that extracts test-related work from FUNDAMENTAL to INDEPENDENT",
         "model": "claude-sonnet-4-5",
         "color": "yellow",
@@ -369,7 +369,7 @@ INDEPENDENT `group:` must be one of: `testing`, `implementation`, `docs`, `ui`
 
 If any check fails, rewrite the output until it passes.
 ''',
-    SPECFLOW_AGENT_TASKLIST_FIXER: '''
+    SPECFLOW_AGENT_TASKLIST_REFINER: '''
 You are a task list post-processor for the SPEC workflow.
 
 # Your Single Job
@@ -394,7 +394,7 @@ For each test-related line found in a FUNDAMENTAL task:
 3. The new task should reference which component it tests
 
 # Output Format
-Output ONLY the complete fixed task list in markdown. Keep the exact same format:
+Output ONLY the complete refined task list in markdown. Keep the exact same format:
 
 ```markdown
 # Task List: [TICKET-ID]
@@ -429,6 +429,8 @@ Output ONLY the complete fixed task list in markdown. Keep the exact same format
 5. New testing tasks should have descriptive names like "Unit Tests: DasService" or "Integration Tests: API Layer"
 6. Group related test extractions into single tasks when they test the same component
 7. Do NOT invent new implementation work - only move existing test-related work
+8. Do NOT summarize or rephrase implementation tasks. Copy them verbatim.
+9. If a task has a files comment containing both implementation and test files, you must SPLIT the file list correctly between the resulting tasks.
 
 # Example Transformation
 
@@ -458,7 +460,7 @@ AFTER:
   - Write unit tests in DasResponseConverterTest.java
 ```
 
-Output ONLY the fixed task list markdown. No explanations.
+Output ONLY the refined task list markdown. No explanations.
 ''',
     SPECFLOW_AGENT_IMPLEMENTER: '''
 You are a task execution AI assistant working within the SPEC workflow.

@@ -356,10 +356,54 @@ Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
     return True
 
 
+# Test-related keywords for pre-check optimization (case-insensitive)
+# Language-agnostic list covering common test terminology
+_TEST_KEYWORDS = [
+    "test", "spec", "unit", "integration", "e2e",
+    "assert", "verify", "check", "mock", "stub",
+]
+
+
+def _fundamental_section_has_test_keywords(content: str) -> bool:
+    """Check if the Fundamental Tasks section contains any test-related keywords.
+
+    This is an optimization to skip the expensive AI call when there are
+    no test-related items to extract from FUNDAMENTAL tasks.
+
+    Args:
+        content: Full task list content
+
+    Returns:
+        True if test keywords are found in the Fundamental section
+    """
+    # Extract the Fundamental section
+    content_lower = content.lower()
+
+    # Find the start of Fundamental section
+    fundamental_start = content_lower.find("## fundamental")
+    if fundamental_start == -1:
+        # No Fundamental section found
+        return False
+
+    # Find the end of Fundamental section (start of Independent or end of file)
+    independent_start = content_lower.find("## independent", fundamental_start)
+    if independent_start == -1:
+        fundamental_section = content_lower[fundamental_start:]
+    else:
+        fundamental_section = content_lower[fundamental_start:independent_start]
+
+    # Check for any test-related keywords in the Fundamental section
+    for keyword in _TEST_KEYWORDS:
+        if keyword in fundamental_section:
+            return True
+
+    return False
+
+
 def _post_process_tasklist(state: WorkflowState, tasklist_path: Path) -> bool:
     """Post-process task list to extract test-related work from FUNDAMENTAL tasks.
 
-    Uses the spec-tasklist-fixer agent to:
+    Uses the spec-tasklist-refiner agent to:
     1. Scan FUNDAMENTAL tasks for test-related content
     2. Extract those items to new INDEPENDENT tasks with group: testing
     3. Rewrite the task list with proper separation
@@ -374,24 +418,30 @@ def _post_process_tasklist(state: WorkflowState, tasklist_path: Path) -> bool:
         True if post-processing succeeded, False otherwise
     """
     tasklist_content = tasklist_path.read_text()
+    original_length = len(tasklist_content)
 
     # Skip if task list is empty or very short
     if len(tasklist_content.strip()) < 50:
         log_message("Task list too short for post-processing, skipping")
         return True
 
+    # Optimization: Skip AI call if no test-related keywords in Fundamental section
+    if not _fundamental_section_has_test_keywords(tasklist_content):
+        log_message("No test keywords found in Fundamental section, skipping post-processing")
+        return True
+
     # Build prompt with the task list content
-    prompt = f"""Fix this task list by extracting test-related work from FUNDAMENTAL to INDEPENDENT:
+    prompt = f"""Refine this task list by extracting test-related work from FUNDAMENTAL to INDEPENDENT:
 
 {tasklist_content}
 
-Output ONLY the fixed task list markdown."""
+Output ONLY the refined task list markdown."""
 
     auggie_client = AuggieClient()
 
     success, output = auggie_client.run_print_with_output(
         prompt,
-        agent=state.subagent_names["tasklist_fixer"],
+        agent=state.subagent_names["tasklist_refiner"],
         dont_save_session=True,
     )
 
@@ -399,14 +449,23 @@ Output ONLY the fixed task list markdown."""
         log_message("Post-processing agent failed")
         return False
 
-    # Extract the fixed task list from output
-    fixed_content = _extract_tasklist_from_output(output, state.ticket.ticket_id)
+    # Extract the refined task list from output
+    refined_content = _extract_tasklist_from_output(output, state.ticket.ticket_id)
 
-    if fixed_content:
-        # Verify we can still parse tasks after fixing
-        tasks = parse_task_list(fixed_content)
+    if refined_content:
+        # Safety check: warn if content is significantly shorter
+        refined_length = len(refined_content)
+        if refined_length < 0.8 * original_length:
+            print_warning(
+                "Post-processing resulted in significantly less content. "
+                "Please perform a manual double-check to ensure no implementation "
+                "tasks were accidentally dropped."
+            )
+
+        # Verify we can still parse tasks after refining
+        tasks = parse_task_list(refined_content)
         if tasks:
-            tasklist_path.write_text(fixed_content)
+            tasklist_path.write_text(refined_content)
             log_message(f"Post-processed task list: {len(tasks)} tasks")
             return True
         else:
@@ -417,6 +476,14 @@ Output ONLY the fixed task list markdown."""
     if tasklist_path.exists():
         new_content = tasklist_path.read_text()
         if new_content != tasklist_content:
+            # Safety check for directly modified file
+            if len(new_content) < 0.8 * original_length:
+                print_warning(
+                    "Post-processing resulted in significantly less content. "
+                    "Please perform a manual double-check to ensure no implementation "
+                    "tasks were accidentally dropped."
+                )
+
             # AI modified the file directly
             tasks = parse_task_list(new_content)
             if tasks:
