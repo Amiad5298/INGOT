@@ -315,7 +315,9 @@ def step_3_execute(
         review_passed = _run_phase_review(state, log_dir, phase="final")
         if not review_passed:
             # User explicitly chose to stop
-            print_warning("Workflow stopped after final review. Please address issues before committing.")
+            print_warning(
+                "Workflow stopped after final review. Please address issues before committing."
+            )
             return False
 
     _offer_commit_instructions(state)
@@ -370,7 +372,7 @@ def _execute_with_tui(
     with tui:
         for i, task in enumerate(pending):
             # Check for quit request before starting next task
-            if tui.quit_requested:
+            if tui.check_quit_requested():
                 # Stop TUI temporarily to show prompt
                 tui.stop()
                 if prompt_confirm("Quit task execution?", default=False):
@@ -379,7 +381,7 @@ def _execute_with_tui(
                     break
                 else:
                     # User changed their mind, continue
-                    tui.quit_requested = False
+                    tui.clear_quit_request()
                     tui.start()
 
             record = tui.get_record(i)
@@ -394,16 +396,19 @@ def _execute_with_tui(
             def make_callback(idx: int, name: str) -> Callable[[str], None]:
                 def cb(line: str) -> None:
                     tui.handle_event(create_task_output_event(idx, name, line))
+
                 return cb
 
             success = _execute_task_with_retry(
-                state, task, plan_path,
+                state,
+                task,
+                plan_path,
                 callback=make_callback(i, task.name),
                 is_parallel=False,
             )
 
             # Check for quit request during task execution
-            if tui.quit_requested:
+            if tui.check_quit_requested():
                 # Task finished naturally, check if user still wants to quit
                 tui.stop()
                 if prompt_confirm("Task completed. Quit execution?", default=False):
@@ -412,7 +417,10 @@ def _execute_with_tui(
                     duration = record.elapsed_time
                     status: TaskStatus = "success" if success else "failed"
                     finish_event = create_task_finished_event(
-                        i, task.name, status, duration,
+                        i,
+                        task.name,
+                        status,
+                        duration,
                         error=None if success else "Task returned failure",
                     )
                     tui.handle_event(finish_event)
@@ -424,14 +432,17 @@ def _execute_with_tui(
                     tui.mark_remaining_skipped(i + 1)
                     break
                 else:
-                    tui.quit_requested = False
+                    tui.clear_quit_request()
                     tui.start()
 
             # Emit task finished event
             duration = record.elapsed_time
             task_status: TaskStatus = "success" if success else "failed"
             finish_event = create_task_finished_event(
-                i, task.name, task_status, duration,
+                i,
+                task.name,
+                task_status,
+                duration,
                 error=None if success else "Task returned failure",
             )
             tui.handle_event(finish_event)
@@ -493,7 +504,9 @@ def _execute_fallback(
 
             # Execute with retry wrapper (sequential mode, not parallel)
             success = _execute_task_with_retry(
-                state, task, plan_path,
+                state,
+                task,
+                plan_path,
                 callback=output_callback,
                 is_parallel=False,
             )
@@ -585,8 +598,7 @@ def _execute_parallel_fallback(
     # Execute in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(execute_single_task, (i, task)): task
-            for i, task in enumerate(tasks)
+            executor.submit(execute_single_task, (i, task)): task for i, task in enumerate(tasks)
         }
 
         for future in as_completed(futures):
@@ -692,6 +704,7 @@ def _execute_parallel_with_tui(
             def make_parallel_callback(i: int, n: str) -> Callable[[str], None]:
                 def cb(line: str) -> None:
                     tui.post_event(create_task_output_event(i, n, line))
+
                 return cb
 
             success = _execute_task_with_retry(
@@ -1068,4 +1081,3 @@ __all__ = [
     "step_3_execute",
     "LOG_DIR_TEST_EXECUTION",
 ]
-

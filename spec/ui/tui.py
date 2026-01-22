@@ -292,8 +292,10 @@ class TaskRunnerUI:
     # Background refresh thread for parallel mode spinner animation
     _refresh_thread: threading.Thread | None = field(default=None, init=False, repr=False)
     _stop_refresh_thread: bool = field(default=False, init=False, repr=False)
-    # Quit signal for execution loop
-    quit_requested: bool = field(default=False, init=False, repr=False)
+    # Quit signal for execution loop.
+    # WARNING: Do not access directly. Use check_quit_requested() and
+    # clear_quit_request() to ensure thread safety.
+    _quit_requested: bool = field(default=False, init=False, repr=False)
     # Thread-safe event queue for parallel execution
     _event_queue: queue.Queue = field(default_factory=queue.Queue, init=False, repr=False)
     # Lock for thread-safe refresh operations
@@ -356,8 +358,9 @@ class TaskRunnerUI:
             if index < 0 and self.parallel_mode and self._running_task_indices:
                 index = min(self._running_task_indices)
 
-        record = self.get_record(index)
-        return record.log_buffer if record else None
+            # Access record inside lock to avoid check-then-act race
+            record = self.get_record(index)
+            return record.log_buffer if record else None
 
     def get_current_task_name(self) -> str:
         """Get the name of the currently displayed task.
@@ -372,8 +375,9 @@ class TaskRunnerUI:
             if index < 0 and self.parallel_mode and self._running_task_indices:
                 index = min(self._running_task_indices)
 
-        record = self.get_record(index)
-        return record.task_name if record else ""
+            # Access record inside lock to avoid check-then-act race
+            record = self.get_record(index)
+            return record.task_name if record else ""
 
     def _get_running_count(self) -> int:
         """Get the number of currently running tasks.
@@ -670,7 +674,7 @@ class TaskRunnerUI:
         """Handle quit request."""
         # Set quit flag under lock for consistency
         with self._state_lock:
-            self.quit_requested = True
+            self._quit_requested = True
 
     def check_quit_requested(self) -> bool:
         """Thread-safe check for quit request.
@@ -679,12 +683,12 @@ class TaskRunnerUI:
             True if quit was requested, False otherwise.
         """
         with self._state_lock:
-            return self.quit_requested
+            return self._quit_requested
 
     def clear_quit_request(self) -> None:
         """Thread-safe clear of quit request flag."""
         with self._state_lock:
-            self.quit_requested = False
+            self._quit_requested = False
 
     # =========================================================================
     # Event Handlers
