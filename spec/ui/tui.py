@@ -423,31 +423,37 @@ class TaskRunnerUI:
         Returns:
             Rich Group containing all panels.
         """
-        # Snapshot state under lock to avoid races during rendering
+        # Snapshot ALL state under lock once to avoid races and lock bouncing
         with self._state_lock:
             selected_idx = self.selected_index
             current_task_idx = self._current_task_index
-
-        running_count = self._get_running_count()
+            parallel_mode_snapshot = self.parallel_mode
+            follow_mode_snapshot = self.follow_mode
+            verbose_mode_snapshot = self.verbose_mode
+            # Calculate running_count directly here to avoid re-locking
+            if self.parallel_mode:
+                running_count = len(self._running_task_indices)
+            else:
+                running_count = 1 if self._current_task_index >= 0 else 0
 
         task_panel = render_task_list(
             self.records,
             selected_index=selected_idx,
             ticket_id=self.ticket_id,
-            parallel_mode=self.parallel_mode,
+            parallel_mode=parallel_mode_snapshot,
             spinners=self._spinners,
         )
 
         log_panel = render_log_panel(
             self.get_current_log_buffer(),
             task_name=self.get_current_task_name(),
-            follow_mode=self.follow_mode,
+            follow_mode=follow_mode_snapshot,
         )
 
         status_bar = render_status_bar(
             running=current_task_idx >= 0 or running_count > 0,
-            verbose_mode=self.verbose_mode,
-            parallel_mode=self.parallel_mode,
+            verbose_mode=verbose_mode_snapshot,
+            parallel_mode=parallel_mode_snapshot,
             running_count=running_count,
         )
 
@@ -620,12 +626,14 @@ class TaskRunnerUI:
 
     def _toggle_follow_mode(self) -> None:
         """Toggle log auto-scroll mode."""
-        self.follow_mode = not self.follow_mode
+        with self._state_lock:
+            self.follow_mode = not self.follow_mode
         self.refresh()
 
     def _toggle_verbose_mode(self) -> None:
         """Toggle verbose mode (expanded log panel)."""
-        self.verbose_mode = not self.verbose_mode
+        with self._state_lock:
+            self.verbose_mode = not self.verbose_mode
         self.refresh()
 
     def _show_log_path(self) -> None:
@@ -660,19 +668,23 @@ class TaskRunnerUI:
 
     def _handle_quit(self) -> None:
         """Handle quit request."""
-        # Check if any task is running (sequential or parallel mode)
+        # Set quit flag under lock for consistency
         with self._state_lock:
-            has_running_tasks = self._current_task_index >= 0 or (
-                self.parallel_mode and len(self._running_task_indices) > 0
-            )
+            self.quit_requested = True
 
-        if has_running_tasks:
-            # Tasks are running - set flag for execution loop to handle
-            # The execution loop will prompt for confirmation
-            self.quit_requested = True
-        else:
-            # No task running - safe to quit immediately
-            self.quit_requested = True
+    def check_quit_requested(self) -> bool:
+        """Thread-safe check for quit request.
+
+        Returns:
+            True if quit was requested, False otherwise.
+        """
+        with self._state_lock:
+            return self.quit_requested
+
+    def clear_quit_request(self) -> None:
+        """Thread-safe clear of quit request flag."""
+        with self._state_lock:
+            self.quit_requested = False
 
     # =========================================================================
     # Event Handlers

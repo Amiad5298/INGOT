@@ -270,6 +270,7 @@ class TestLogBufferCleanup:
 
     def test_log_buffer_closed_on_success(self, tui):
         """Log buffer is closed when task finishes with success."""
+
         # Create a mock log buffer
         class MockLogBuffer:
             def __init__(self):
@@ -290,6 +291,7 @@ class TestLogBufferCleanup:
 
     def test_log_buffer_closed_on_failure(self, tui):
         """Log buffer is closed when task finishes with failure."""
+
         class MockLogBuffer:
             def __init__(self):
                 self.closed = False
@@ -308,6 +310,7 @@ class TestLogBufferCleanup:
 
     def test_log_buffer_closed_on_skipped(self, tui):
         """Log buffer is closed when task finishes with skipped status."""
+
         class MockLogBuffer:
             def __init__(self):
                 self.closed = False
@@ -326,6 +329,7 @@ class TestLogBufferCleanup:
 
     def test_log_buffer_close_exception_ignored(self, tui):
         """Exceptions during log buffer close are caught and ignored."""
+
         class FailingLogBuffer:
             def close(self):
                 raise RuntimeError("Close failed!")
@@ -554,6 +558,240 @@ class TestAutoSwitchOnTaskFinish:
 
         # Selection stays unchanged (sequential mode doesn't use auto-switch)
         assert tui.selected_index == 0
+
+
+# =============================================================================
+# Tests for Spinner Caching
+# =============================================================================
+
+
+class TestSpinnerCaching:
+    """Tests for spinner caching to maintain animation state."""
+
+    def test_spinner_reuse_for_running_task(self, records):
+        """Spinner objects are reused for running tasks across renders."""
+        spinners = {}
+
+        # First render - creates spinner for task 1 (index 1, RUNNING)
+        render_task_list(records, spinners=spinners)
+        assert 1 in spinners
+        first_spinner = spinners[1]
+
+        # Second render - should reuse the same spinner object
+        render_task_list(records, spinners=spinners)
+        assert 1 in spinners
+        second_spinner = spinners[1]
+
+        # Verify it's the EXACT same object (identity check)
+        assert first_spinner is second_spinner
+
+    def test_spinner_cleanup_when_task_finishes(self, records):
+        """Spinner is removed from cache when task status changes from RUNNING."""
+        spinners = {}
+
+        # First render - task 1 is RUNNING
+        render_task_list(records, spinners=spinners)
+        assert 1 in spinners
+
+        # Change task 1 to SUCCESS
+        records[1].status = TaskRunStatus.SUCCESS
+
+        # Second render - spinner should be removed
+        render_task_list(records, spinners=spinners)
+        assert 1 not in spinners
+
+    def test_spinner_cleanup_on_failed_task(self):
+        """Spinner is removed when task fails."""
+        records = [
+            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
+        ]
+        spinners = {}
+
+        # First render - task is RUNNING
+        render_task_list(records, spinners=spinners)
+        assert 0 in spinners
+
+        # Task fails
+        records[0].status = TaskRunStatus.FAILED
+
+        # Second render - spinner removed
+        render_task_list(records, spinners=spinners)
+        assert 0 not in spinners
+
+    def test_spinner_cleanup_on_skipped_task(self):
+        """Spinner is removed when task is skipped."""
+        records = [
+            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
+        ]
+        spinners = {}
+
+        # First render - task is RUNNING
+        render_task_list(records, spinners=spinners)
+        assert 0 in spinners
+
+        # Task is skipped
+        records[0].status = TaskRunStatus.SKIPPED
+
+        # Second render - spinner removed
+        render_task_list(records, spinners=spinners)
+        assert 0 not in spinners
+
+    def test_multiple_spinners_tracked_in_parallel_mode(self):
+        """Multiple running tasks each have their own cached spinner."""
+        records = [
+            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
+            TaskRunRecord(task_index=1, task_name="Task 2", status=TaskRunStatus.RUNNING),
+            TaskRunRecord(task_index=2, task_name="Task 3", status=TaskRunStatus.RUNNING),
+        ]
+        spinners = {}
+
+        # Render with all tasks running
+        render_task_list(records, parallel_mode=True, spinners=spinners)
+
+        # All three should have spinners
+        assert 0 in spinners
+        assert 1 in spinners
+        assert 2 in spinners
+        assert len(spinners) == 3
+
+        # Verify they're different objects
+        assert spinners[0] is not spinners[1]
+        assert spinners[1] is not spinners[2]
+
+    def test_spinner_cache_partial_cleanup(self):
+        """Only finished tasks are removed from spinner cache."""
+        records = [
+            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
+            TaskRunRecord(task_index=1, task_name="Task 2", status=TaskRunStatus.RUNNING),
+            TaskRunRecord(task_index=2, task_name="Task 3", status=TaskRunStatus.RUNNING),
+        ]
+        spinners = {}
+
+        # First render - all running
+        render_task_list(records, spinners=spinners)
+        assert len(spinners) == 3
+        spinner_1 = spinners[1]
+
+        # Task 0 finishes
+        records[0].status = TaskRunStatus.SUCCESS
+
+        # Second render
+        render_task_list(records, spinners=spinners)
+
+        # Task 0 removed, but 1 and 2 still cached
+        assert 0 not in spinners
+        assert 1 in spinners
+        assert 2 in spinners
+        assert len(spinners) == 2
+
+        # Spinner for task 1 should be the same object
+        assert spinners[1] is spinner_1
+
+    def test_spinner_cache_none_creates_new_spinners(self, records):
+        """When spinners=None, new spinners are created each render (no caching)."""
+        # First render without cache
+        panel1 = render_task_list(records, spinners=None)
+
+        # Second render without cache - should work fine (no errors)
+        panel2 = render_task_list(records, spinners=None)
+
+        # Both should render successfully (no assertion needed, just verify no crash)
+        assert panel1 is not None
+        assert panel2 is not None
+
+    def test_tui_uses_spinner_cache(self, tui):
+        """TaskRunnerUI maintains spinner cache across refreshes."""
+        tui.set_parallel_mode(True)
+
+        # Start two tasks
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+
+        # First render (via _render_layout)
+        tui._render_layout()
+
+        # Spinners should be cached
+        assert 0 in tui._spinners
+        assert 1 in tui._spinners
+        spinner_0 = tui._spinners[0]
+        spinner_1 = tui._spinners[1]
+
+        # Second render
+        tui._render_layout()
+
+        # Same spinner objects should be reused
+        assert tui._spinners[0] is spinner_0
+        assert tui._spinners[1] is spinner_1
+
+        # Finish task 0
+        tui._apply_event(create_task_finished_event(0, "Task 1", "success", 1.0))
+        tui._render_layout()
+
+        # Task 0 spinner removed, task 1 still cached
+        assert 0 not in tui._spinners
+        assert 1 in tui._spinners
+        assert tui._spinners[1] is spinner_1
+
+
+# =============================================================================
+# Tests for Thread Safety Enhancements
+# =============================================================================
+
+
+class TestThreadSafetyEnhancements:
+    """Tests for thread-safe state access methods."""
+
+    def test_check_quit_requested_thread_safe(self, tui):
+        """check_quit_requested() provides thread-safe read access."""
+        assert tui.check_quit_requested() is False
+
+        # Set quit flag
+        tui._handle_quit()
+
+        assert tui.check_quit_requested() is True
+
+    def test_clear_quit_request_thread_safe(self, tui):
+        """clear_quit_request() provides thread-safe write access."""
+        # Set quit flag
+        tui._handle_quit()
+        assert tui.check_quit_requested() is True
+
+        # Clear it
+        tui.clear_quit_request()
+        assert tui.check_quit_requested() is False
+
+    def test_toggle_follow_mode_thread_safe(self, tui):
+        """_toggle_follow_mode uses lock for consistency."""
+        initial = tui.follow_mode
+        tui._toggle_follow_mode()
+        assert tui.follow_mode != initial
+
+    def test_toggle_verbose_mode_thread_safe(self, tui):
+        """_toggle_verbose_mode uses lock for consistency."""
+        initial = tui.verbose_mode
+        tui._toggle_verbose_mode()
+        assert tui.verbose_mode != initial
+
+    def test_concurrent_quit_requests(self, tui):
+        """Multiple threads can safely request quit."""
+        num_threads = 10
+        barrier = threading.Barrier(num_threads)
+
+        def request_quit():
+            barrier.wait()
+            tui._handle_quit()
+
+        threads = []
+        for _ in range(num_threads):
+            t = threading.Thread(target=request_quit)
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        # Quit should be requested
+        assert tui.check_quit_requested() is True
 
 
 # =============================================================================
