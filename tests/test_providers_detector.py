@@ -118,7 +118,7 @@ class TestPlatformDetectorJira:
         """Detects Atlassian Cloud Jira URLs."""
         platform, groups = PlatformDetector.detect("https://company.atlassian.net/browse/PROJ-123")
         assert platform == Platform.JIRA
-        assert "PROJ-123" in str(groups.values())
+        assert groups["ticket_id"] == "PROJ-123"
 
     def test_self_hosted_jira_url(self):
         """Detects self-hosted Jira URLs."""
@@ -163,24 +163,24 @@ class TestPlatformDetectorGitHub:
         """Detects GitHub issue URLs."""
         platform, groups = PlatformDetector.detect("https://github.com/owner/repo/issues/123")
         assert platform == Platform.GITHUB
-        assert groups[0] == "owner"
-        assert groups[1] == "repo"
-        assert groups[2] == "123"
+        assert groups["owner"] == "owner"
+        assert groups["repo"] == "repo"
+        assert groups["number"] == "123"
 
     def test_github_pull_request_url(self):
         """Detects GitHub pull request URLs."""
         platform, groups = PlatformDetector.detect("https://github.com/myorg/myrepo/pull/456")
         assert platform == Platform.GITHUB
-        assert groups[0] == "myorg"
-        assert groups[1] == "myrepo"
-        assert groups[2] == "456"
+        assert groups["owner"] == "myorg"
+        assert groups["repo"] == "myrepo"
+        assert groups["number"] == "456"
 
     def test_github_short_reference(self):
         """Detects GitHub short references like owner/repo#123."""
         platform, groups = PlatformDetector.detect("octocat/Hello-World#42")
         assert platform == Platform.GITHUB
-        assert groups[0] == "octocat/Hello-World"
-        assert groups[1] == "42"
+        assert groups["repo_ref"] == "octocat/Hello-World"
+        assert groups["number"] == "42"
 
     def test_github_complex_repo_name(self):
         """Detects GitHub with complex repo names."""
@@ -195,8 +195,8 @@ class TestPlatformDetectorLinear:
         """Detects Linear issue URLs."""
         platform, groups = PlatformDetector.detect("https://linear.app/myteam/issue/TEAM-123")
         assert platform == Platform.LINEAR
-        assert groups[0] == "myteam"
-        assert groups[1] == "TEAM-123"
+        assert groups["team"] == "myteam"
+        assert groups["ticket_id"] == "TEAM-123"
 
     def test_linear_url_lowercase_team(self):
         """Detects Linear URLs with lowercase team ID."""
@@ -220,9 +220,9 @@ class TestPlatformDetectorAzureDevOps:
             "https://dev.azure.com/myorg/myproject/_workitems/edit/12345"
         )
         assert platform == Platform.AZURE_DEVOPS
-        assert groups[0] == "myorg"
-        assert groups[1] == "myproject"
-        assert groups[2] == "12345"
+        assert groups["org"] == "myorg"
+        assert groups["project"] == "myproject"
+        assert groups["work_item_id"] == "12345"
 
     def test_visualstudio_url(self):
         """Detects Visual Studio online URLs."""
@@ -235,7 +235,7 @@ class TestPlatformDetectorAzureDevOps:
         """Detects Azure Boards AB# format."""
         platform, groups = PlatformDetector.detect("AB#12345")
         assert platform == Platform.AZURE_DEVOPS
-        assert groups[0] == "12345"
+        assert groups["work_item_id"] == "12345"
 
     def test_azure_boards_id_lowercase(self):
         """Detects Azure Boards AB# format (case insensitive)."""
@@ -268,19 +268,19 @@ class TestPlatformDetectorTrello:
         """Detects Trello card URLs."""
         platform, groups = PlatformDetector.detect("https://trello.com/c/abc12345")
         assert platform == Platform.TRELLO
-        assert groups[0] == "abc12345"
+        assert groups["card_id"] == "abc12345"
 
     def test_trello_card_url_with_name(self):
         """Detects Trello card URLs with card name."""
         platform, groups = PlatformDetector.detect("https://trello.com/c/xyz98765/card-title-here")
         assert platform == Platform.TRELLO
-        assert groups[0] == "xyz98765"
+        assert groups["card_id"] == "xyz98765"
 
     def test_trello_short_id(self):
         """Detects Trello 8-character short IDs."""
         platform, groups = PlatformDetector.detect("abcd1234")
         assert platform == Platform.TRELLO
-        assert groups[0] == "abcd1234"
+        assert groups["card_id"] == "abcd1234"
 
     def test_trello_short_id_uppercase(self):
         """Detects Trello short IDs (mixed case)."""
