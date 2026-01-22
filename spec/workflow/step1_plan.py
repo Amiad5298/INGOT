@@ -218,7 +218,7 @@ def _run_clarification(state: WorkflowState, auggie: AuggieClient, plan_path: Pa
 
     Args:
         state: Current workflow state
-        auggie: Auggie CLI client (unused, kept for signature compatibility)
+        auggie: Auggie CLI client for running clarification
         plan_path: Path to the created plan file
 
     Returns:
@@ -232,7 +232,9 @@ def _run_clarification(state: WorkflowState, auggie: AuggieClient, plan_path: Pa
     print_info("  - Edge cases not covered")
     console.print()
 
-    if not prompt_confirm("Would you like the AI to review the plan and ask clarification questions?", default=True):
+    if not prompt_confirm(
+        "Would you like the AI to review the plan and ask clarification questions?", default=True
+    ):
         print_info("Skipping clarification phase")
         return True
 
@@ -245,8 +247,26 @@ def _run_clarification(state: WorkflowState, auggie: AuggieClient, plan_path: Pa
     print_info("  4. Type 'done' or press Ctrl+D when you're finished with clarifications")
     console.print()
 
-    prompt = f"""Review the implementation plan at @{plan_path}.
+    # Build conflict context if a conflict was detected
+    # Truncate conflict_summary to prevent context pollution or prompt injection
+    # from malformed LLM outputs (max 500 characters)
+    _MAX_CONFLICT_SUMMARY_LENGTH = 500
+    conflict_context = ""
+    if state.conflict_detected and state.conflict_summary:
+        sanitized_summary = state.conflict_summary[:_MAX_CONFLICT_SUMMARY_LENGTH]
+        if len(state.conflict_summary) > _MAX_CONFLICT_SUMMARY_LENGTH:
+            sanitized_summary += "..."
+        conflict_context = f"""
+⚠️ IMPORTANT: A conflict was detected between the ticket description and the user's additional context:
+"{sanitized_summary}"
 
+Your FIRST priority should be to ask a clarifying question about this specific conflict to help
+the user resolve the ambiguity. Then proceed with other clarification questions as needed.
+
+"""
+
+    prompt = f"""Review the implementation plan at @{plan_path}.
+{conflict_context}
 Ask 2-4 clarifying questions about any ambiguous or unclear aspects:
 - Requirements that could be interpreted multiple ways
 - Missing technical details needed for implementation
@@ -266,20 +286,20 @@ A2: [My answer]
 
 If the plan is complete and clear, simply respond with 'No clarifications needed - plan is comprehensive.' and do not modify the file."""
 
-    # Use spec-planner subagent for clarification (same agent that created the plan)
-    auggie_client = AuggieClient()
-
     print_step("Running: auggie (interactive mode)")
     print_info(f"Using agent: {state.subagent_names['planner']}")
     console.print()
 
-    success = auggie_client.run_print(prompt, agent=state.subagent_names["planner"])
+    # Use the passed auggie client for clarification (same agent that created the plan)
+    success = auggie.run_print(prompt, agent=state.subagent_names["planner"])
 
     console.print()
     if success:
         print_success("Clarification phase completed!")
         console.print()
-        print_info("The plan file has been updated with clarification Q&A (if any questions were asked)")
+        print_info(
+            "The plan file has been updated with clarification Q&A (if any questions were asked)"
+        )
     else:
         print_warning("Clarification phase encountered an issue, but continuing...")
 
@@ -350,4 +370,3 @@ def _display_plan_summary(plan_path: Path) -> None:
 __all__ = [
     "step_1_create_plan",
 ]
-
