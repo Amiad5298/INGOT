@@ -510,9 +510,7 @@ class TestRunClarification:
 
     @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.workflow.step1_plan.prompt_confirm")
-    def test_uses_planner_subagent(
-        self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
-    ):
+    def test_uses_planner_subagent(self, mock_confirm, mock_auggie_class, workflow_state, tmp_path):
         """Uses spec-planner subagent for clarification."""
         mock_confirm.return_value = True
         mock_client = MagicMock()
@@ -546,8 +544,14 @@ class TestStep1CreatePlanTuiMode:
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     @patch("spec.ui.tui._should_use_tui")
     def test_creates_specs_directory_if_not_exists(
-        self, mock_should_tui, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self,
+        mock_should_tui,
+        mock_generate,
+        mock_display,
+        mock_confirm,
+        workflow_state,
+        tmp_path,
+        monkeypatch,
     ):
         """Creates specs directory if not exists."""
         monkeypatch.chdir(tmp_path)
@@ -575,8 +579,7 @@ class TestStep1CreatePlanTuiMode:
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_calls_generate_plan_with_tui(
-        self, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
         """Calls _generate_plan_with_tui for plan generation."""
         monkeypatch.chdir(tmp_path)
@@ -622,8 +625,7 @@ class TestStep1CreatePlanFileHandling:
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_saves_plan_file_on_success(
-        self, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
         """Saves plan file on success."""
         monkeypatch.chdir(tmp_path)
@@ -650,8 +652,14 @@ class TestStep1CreatePlanFileHandling:
     @patch("spec.workflow.step1_plan._save_plan_from_output")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_calls_save_plan_from_output_when_plan_file_not_created(
-        self, mock_generate, mock_save_plan, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self,
+        mock_generate,
+        mock_save_plan,
+        mock_display,
+        mock_confirm,
+        workflow_state,
+        tmp_path,
+        monkeypatch,
     ):
         """Calls _save_plan_from_output when plan file not created."""
         monkeypatch.chdir(tmp_path)
@@ -677,8 +685,7 @@ class TestStep1CreatePlanFileHandling:
     @patch("spec.workflow.step1_plan._save_plan_from_output")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_false_when_save_fails_to_create_file(
-        self, mock_generate, mock_save_plan, mock_print_error,
-        workflow_state, tmp_path, monkeypatch
+        self, mock_generate, mock_save_plan, mock_print_error, workflow_state, tmp_path, monkeypatch
     ):
         """Returns False when _save_plan_from_output fails to create the file."""
         monkeypatch.chdir(tmp_path)
@@ -717,8 +724,14 @@ class TestStep1CreatePlanClarification:
     @patch("spec.workflow.step1_plan._run_clarification")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_calls_run_clarification_when_skip_clarification_false(
-        self, mock_generate, mock_clarify, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self,
+        mock_generate,
+        mock_clarify,
+        mock_display,
+        mock_confirm,
+        workflow_state,
+        tmp_path,
+        monkeypatch,
     ):
         """Calls _run_clarification when skip_clarification=False."""
         monkeypatch.chdir(tmp_path)
@@ -745,8 +758,14 @@ class TestStep1CreatePlanClarification:
     @patch("spec.workflow.step1_plan._run_clarification")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_skips_clarification_when_skip_clarification_true(
-        self, mock_generate, mock_clarify, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self,
+        mock_generate,
+        mock_clarify,
+        mock_display,
+        mock_confirm,
+        workflow_state,
+        tmp_path,
+        monkeypatch,
     ):
         """Skips clarification when skip_clarification=True."""
         monkeypatch.chdir(tmp_path)
@@ -772,8 +791,14 @@ class TestStep1CreatePlanClarification:
     @patch("spec.workflow.step1_plan._run_clarification")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_false_when_clarification_returns_false(
-        self, mock_generate, mock_clarify, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self,
+        mock_generate,
+        mock_clarify,
+        mock_display,
+        mock_confirm,
+        workflow_state,
+        tmp_path,
+        monkeypatch,
     ):
         """Returns False immediately when _run_clarification returns False."""
         monkeypatch.chdir(tmp_path)
@@ -812,8 +837,7 @@ class TestStep1CreatePlanConfirmation:
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_true_when_plan_confirmed(
-        self, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
         """Returns True when plan confirmed."""
         monkeypatch.chdir(tmp_path)
@@ -838,8 +862,7 @@ class TestStep1CreatePlanConfirmation:
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_false_when_plan_rejected(
-        self, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
         """Returns False when plan rejected."""
         monkeypatch.chdir(tmp_path)
@@ -864,8 +887,7 @@ class TestStep1CreatePlanConfirmation:
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_updates_current_step_to_2_on_success(
-        self, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
         """Updates state.current_step to 2 on success."""
         monkeypatch.chdir(tmp_path)
@@ -892,8 +914,7 @@ class TestStep1CreatePlanConfirmation:
     @patch("spec.workflow.step1_plan._display_plan_summary")
     @patch("spec.workflow.step1_plan._generate_plan_with_tui")
     def test_does_not_update_current_step_on_rejection(
-        self, mock_generate, mock_display, mock_confirm,
-        workflow_state, tmp_path, monkeypatch
+        self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
         """Does not update state.current_step when plan is rejected."""
         monkeypatch.chdir(tmp_path)
@@ -916,3 +937,95 @@ class TestStep1CreatePlanConfirmation:
 
         assert workflow_state.current_step == 1  # Unchanged
 
+
+# =============================================================================
+# Tests for _run_clarification() with conflict detection
+# =============================================================================
+
+
+class TestRunClarificationWithConflict:
+    """Tests for _run_clarification conflict-aware behavior."""
+
+    @patch("spec.workflow.step1_plan.AuggieClient")
+    @patch("spec.workflow.step1_plan.prompt_confirm")
+    def test_includes_conflict_summary_in_prompt_when_conflict_detected(
+        self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
+    ):
+        """Prompt includes conflict summary when state.conflict_detected is True."""
+        mock_confirm.return_value = True
+        mock_client = MagicMock()
+        mock_client.run_print.return_value = True
+        mock_auggie_class.return_value = mock_client
+
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan content")
+        mock_auggie = MagicMock()
+
+        # Set conflict fields
+        workflow_state.conflict_detected = True
+        workflow_state.conflict_summary = "Ticket says add X but user says remove X."
+
+        _run_clarification(workflow_state, mock_auggie, plan_path)
+
+        mock_client.run_print.assert_called_once()
+        prompt = mock_client.run_print.call_args[0][0]
+
+        # Verify conflict context is in prompt
+        assert "conflict" in prompt.lower()
+        assert "Ticket says add X but user says remove X" in prompt
+        assert "FIRST priority" in prompt
+
+    @patch("spec.workflow.step1_plan.AuggieClient")
+    @patch("spec.workflow.step1_plan.prompt_confirm")
+    def test_no_conflict_context_when_conflict_not_detected(
+        self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
+    ):
+        """Prompt does not include conflict context when state.conflict_detected is False."""
+        mock_confirm.return_value = True
+        mock_client = MagicMock()
+        mock_client.run_print.return_value = True
+        mock_auggie_class.return_value = mock_client
+
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan content")
+        mock_auggie = MagicMock()
+
+        # Ensure no conflict
+        workflow_state.conflict_detected = False
+        workflow_state.conflict_summary = ""
+
+        _run_clarification(workflow_state, mock_auggie, plan_path)
+
+        mock_client.run_print.assert_called_once()
+        prompt = mock_client.run_print.call_args[0][0]
+
+        # Verify conflict-specific context is NOT in prompt
+        assert "FIRST priority" not in prompt
+        assert "IMPORTANT: A conflict was detected" not in prompt
+
+    @patch("spec.workflow.step1_plan.AuggieClient")
+    @patch("spec.workflow.step1_plan.prompt_confirm")
+    def test_no_conflict_context_when_detected_but_no_summary(
+        self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
+    ):
+        """Prompt does not include conflict context when conflict_detected but summary is empty."""
+        mock_confirm.return_value = True
+        mock_client = MagicMock()
+        mock_client.run_print.return_value = True
+        mock_auggie_class.return_value = mock_client
+
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan content")
+        mock_auggie = MagicMock()
+
+        # conflict_detected but empty summary
+        workflow_state.conflict_detected = True
+        workflow_state.conflict_summary = ""
+
+        _run_clarification(workflow_state, mock_auggie, plan_path)
+
+        mock_client.run_print.assert_called_once()
+        prompt = mock_client.run_print.call_args[0][0]
+
+        # Verify conflict-specific context is NOT in prompt (empty summary)
+        assert "FIRST priority" not in prompt

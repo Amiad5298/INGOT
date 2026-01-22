@@ -232,7 +232,9 @@ def _run_clarification(state: WorkflowState, auggie: AuggieClient, plan_path: Pa
     print_info("  - Edge cases not covered")
     console.print()
 
-    if not prompt_confirm("Would you like the AI to review the plan and ask clarification questions?", default=True):
+    if not prompt_confirm(
+        "Would you like the AI to review the plan and ask clarification questions?", default=True
+    ):
         print_info("Skipping clarification phase")
         return True
 
@@ -245,8 +247,20 @@ def _run_clarification(state: WorkflowState, auggie: AuggieClient, plan_path: Pa
     print_info("  4. Type 'done' or press Ctrl+D when you're finished with clarifications")
     console.print()
 
-    prompt = f"""Review the implementation plan at @{plan_path}.
+    # Build conflict context if a conflict was detected
+    conflict_context = ""
+    if state.conflict_detected and state.conflict_summary:
+        conflict_context = f"""
+⚠️ IMPORTANT: A conflict was detected between the ticket description and the user's additional context:
+"{state.conflict_summary}"
 
+Your FIRST priority should be to ask a clarifying question about this specific conflict to help
+the user resolve the ambiguity. Then proceed with other clarification questions as needed.
+
+"""
+
+    prompt = f"""Review the implementation plan at @{plan_path}.
+{conflict_context}
 Ask 2-4 clarifying questions about any ambiguous or unclear aspects:
 - Requirements that could be interpreted multiple ways
 - Missing technical details needed for implementation
@@ -279,7 +293,9 @@ If the plan is complete and clear, simply respond with 'No clarifications needed
     if success:
         print_success("Clarification phase completed!")
         console.print()
-        print_info("The plan file has been updated with clarification Q&A (if any questions were asked)")
+        print_info(
+            "The plan file has been updated with clarification Q&A (if any questions were asked)"
+        )
     else:
         print_warning("Clarification phase encountered an issue, but continuing...")
 
@@ -350,4 +366,3 @@ def _display_plan_summary(plan_path: Path) -> None:
 __all__ = [
     "step_1_create_plan",
 ]
-

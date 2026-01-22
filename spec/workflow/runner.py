@@ -39,6 +39,99 @@ from spec.workflow.step3_execute import step_3_execute
 from spec.workflow.step4_update_docs import step_4_update_docs
 
 
+def _detect_context_conflict(
+    ticket: JiraTicket,
+    user_context: str,
+    auggie: "AuggieClient",
+) -> tuple[bool, str]:
+    """Detect semantic conflicts between ticket description and user context.
+
+    Uses a lightweight LLM call to identify contradictions or conflicts between
+    the official ticket description and the user-provided additional context.
+
+    This implements the "Fail-Fast Semantic Check" pattern:
+    - Runs immediately after user context is collected
+    - Uses semantic analysis (not brittle keyword matching)
+    - Returns conflict info for advisory warnings (non-blocking)
+
+    Args:
+        ticket: JiraTicket with title and description
+        user_context: User-provided additional context
+
+    Returns:
+        Tuple of (conflict_detected: bool, conflict_summary: str)
+        - conflict_detected: True if semantic conflicts were found
+        - conflict_summary: Description of the conflict(s) if any
+    """
+    # If no user context or no ticket description, no conflict is possible
+    if not user_context.strip():
+        return False, ""
+
+    ticket_info = f"Title: {ticket.title or 'Not available'}\nDescription: {ticket.description or 'Not available'}"
+    if not ticket.description and not ticket.title:
+        return False, ""
+
+    # Build a lightweight prompt for conflict detection
+    prompt = f"""Analyze the following ticket information and user-provided context for semantic conflicts.
+
+TICKET INFORMATION:
+{ticket_info}
+
+USER-PROVIDED CONTEXT:
+{user_context}
+
+TASK: Determine if there are any semantic conflicts between the ticket and user context.
+Conflicts include:
+- Contradictory requirements (e.g., ticket says "add feature X" but user says "remove feature X")
+- Scope mismatches (e.g., ticket is about backend but user context discusses frontend changes)
+- Incompatible constraints (e.g., different target versions, conflicting technical approaches)
+
+RESPOND IN EXACTLY THIS FORMAT:
+CONFLICT: [YES or NO]
+SUMMARY: [If YES, provide a 1-2 sentence summary of the conflict. If NO, write "No conflicts detected."]
+
+Be conservative - only flag clear contradictions, not mere differences in detail level."""
+
+    log_message("Running conflict detection between ticket and user context")
+
+    try:
+        # Use run_print_with_output with a no-op callback to capture output silently
+        success, output = auggie.run_with_callback(
+            prompt,
+            output_callback=lambda _: None,  # Silent - don't print to console
+            dont_save_session=True,
+        )
+
+        if not success:
+            log_message("Conflict detection LLM call failed")
+            return False, ""
+
+        # Parse the response
+        output_upper = output.upper()
+        conflict_detected = "CONFLICT: YES" in output_upper or "CONFLICT:YES" in output_upper
+
+        # Extract summary
+        summary = ""
+        if conflict_detected:
+            # Try to extract the summary line
+            for line in output.split("\n"):
+                if line.upper().startswith("SUMMARY:"):
+                    summary = line.split(":", 1)[1].strip()
+                    break
+
+            if not summary:
+                summary = "Potential conflict detected between ticket and user context."
+
+        log_message(
+            f"Conflict detection result: detected={conflict_detected}, summary={summary[:100]}"
+        )
+        return conflict_detected, summary
+
+    except Exception as e:
+        log_message(f"Conflict detection error: {e}")
+        return False, ""
+
+
 def run_spec_driven_workflow(
     ticket: JiraTicket,
     config: ConfigManager,
@@ -139,7 +232,9 @@ def run_spec_driven_workflow(
             print_warning("Could not fetch ticket details. Continuing with ticket ID only.")
 
         # Ask user for additional context
-        if prompt_confirm("Would you like to add additional context about this ticket?", default=False):
+        if prompt_confirm(
+            "Would you like to add additional context about this ticket?", default=False
+        ):
             user_context = prompt_input(
                 "Enter additional context (press Enter twice when done):",
                 multiline=True,
@@ -147,6 +242,29 @@ def run_spec_driven_workflow(
             state.user_context = user_context.strip()
             if state.user_context:
                 print_success("Additional context saved")
+
+                # Fail-Fast Semantic Check: Detect conflicts between ticket and user context
+                print_step("Checking for conflicts between ticket and your context...")
+                conflict_detected, conflict_summary = _detect_context_conflict(
+                    state.ticket, state.user_context, auggie
+                )
+                state.conflict_detected = conflict_detected
+                state.conflict_summary = conflict_summary
+
+                if conflict_detected:
+                    console.print()
+                    print_warning(
+                        "⚠️  Potential conflict detected between ticket description and your additional context"
+                    )
+                    console.print(f"[yellow]   {conflict_summary}[/yellow]")
+                    console.print()
+                    print_info(
+                        "💡 Running the clarification step is strongly recommended to resolve this conflict."
+                    )
+                    print_info(
+                        "   You'll be prompted about clarification after the initial plan is generated."
+                    )
+                    console.print()
 
         # Create feature branch (now with ticket summary available)
         # Use state.ticket which has the updated summary from fetch_ticket_info
@@ -312,4 +430,3 @@ __all__ = [
     "run_spec_driven_workflow",
     "workflow_cleanup",
 ]
-
