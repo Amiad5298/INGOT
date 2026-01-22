@@ -75,7 +75,7 @@ def _detect_context_conflict(
     ticket: JiraTicket,
     user_context: str,
     auggie: AuggieClient,
-    state: "WorkflowState",
+    state: WorkflowState,
 ) -> tuple[bool, str]:
     """Detect semantic conflicts between ticket description and user context.
 
