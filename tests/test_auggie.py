@@ -3,7 +3,7 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from specflow.integrations.auggie import (
+from spec.integrations.auggie import (
     SPECFLOW_AGENT_IMPLEMENTER,
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
@@ -112,10 +112,10 @@ class TestGetNodeVersion:
 class TestCheckAuggieInstalled:
     """Tests for check_auggie_installed function."""
 
-    @patch("specflow.integrations.auggie.get_auggie_version")
-    @patch("specflow.integrations.auggie.print_step")
-    @patch("specflow.integrations.auggie.print_info")
-    @patch("specflow.integrations.auggie.print_success")
+    @patch("spec.integrations.auggie.get_auggie_version")
+    @patch("spec.integrations.auggie.print_step")
+    @patch("spec.integrations.auggie.print_info")
+    @patch("spec.integrations.auggie.print_success")
     def test_returns_true_when_valid(self, mock_success, mock_info, mock_step, mock_version):
         """Returns True when version meets requirements."""
         mock_version.return_value = "0.13.0"
@@ -125,8 +125,8 @@ class TestCheckAuggieInstalled:
         assert is_valid is True
         assert message == ""
 
-    @patch("specflow.integrations.auggie.get_auggie_version")
-    @patch("specflow.integrations.auggie.print_step")
+    @patch("spec.integrations.auggie.get_auggie_version")
+    @patch("spec.integrations.auggie.print_step")
     def test_returns_false_when_not_installed(self, mock_step, mock_version):
         """Returns False when not installed."""
         mock_version.return_value = None
@@ -136,9 +136,9 @@ class TestCheckAuggieInstalled:
         assert is_valid is False
         assert "not installed" in message
 
-    @patch("specflow.integrations.auggie.get_auggie_version")
-    @patch("specflow.integrations.auggie.print_step")
-    @patch("specflow.integrations.auggie.print_info")
+    @patch("spec.integrations.auggie.get_auggie_version")
+    @patch("spec.integrations.auggie.print_step")
+    @patch("spec.integrations.auggie.print_info")
     def test_returns_false_when_old_version(self, mock_info, mock_step, mock_version):
         """Returns False when version is too old."""
         mock_version.return_value = "0.10.0"
@@ -325,7 +325,7 @@ class TestBuildCommand:
         assert "--dont-save-session" in cmd
         assert cmd[-1] == "test prompt"
 
-    @patch("specflow.integrations.auggie._parse_agent_definition")
+    @patch("spec.integrations.auggie._parse_agent_definition")
     def test_with_agent(self, mock_parse_agent):
         """Uses model from agent definition when agent is provided."""
         mock_parse_agent.return_value = AgentDefinition(
@@ -344,7 +344,7 @@ class TestBuildCommand:
         assert "You are a planner agent." in cmd[-1]
         assert "test prompt" in cmd[-1]
 
-    @patch("specflow.integrations.auggie._parse_agent_definition")
+    @patch("spec.integrations.auggie._parse_agent_definition")
     def test_agent_overrides_model(self, mock_parse_agent):
         """Agent's model takes precedence over client model."""
         mock_parse_agent.return_value = AgentDefinition(
@@ -360,7 +360,7 @@ class TestBuildCommand:
         assert "agent-model" in cmd
         assert "claude-3" not in cmd
 
-    @patch("specflow.integrations.auggie._parse_agent_definition")
+    @patch("spec.integrations.auggie._parse_agent_definition")
     def test_agent_with_all_flags(self, mock_parse_agent):
         """Agent works with all other flags."""
         mock_parse_agent.return_value = AgentDefinition(
@@ -385,7 +385,7 @@ class TestBuildCommand:
         # Prompt should contain agent instructions
         assert "## Agent Instructions" in cmd[-1]
 
-    @patch("specflow.integrations.auggie._parse_agent_definition")
+    @patch("spec.integrations.auggie._parse_agent_definition")
     def test_agent_not_found_falls_back_to_default_model(self, mock_parse_agent):
         """Falls back to default model when agent definition not found."""
         mock_parse_agent.return_value = None
@@ -501,7 +501,7 @@ class TestRunWithCallback:
         assert "--model" in cmd
         assert "claude-3" in cmd
 
-    @patch("specflow.integrations.auggie._parse_agent_definition")
+    @patch("spec.integrations.auggie._parse_agent_definition")
     @patch("subprocess.Popen")
     def test_passes_agent_to_command(self, mock_popen, mock_parse_agent):
         """Agent model and prompt are included in command when provided."""

@@ -1,4 +1,4 @@
-"""Tests for specflow.integrations.providers.user_interaction module.
+"""Tests for spec.integrations.providers.user_interaction module.
 
 Tests cover:
 - SelectOption dataclass functionality
@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from specflow.integrations.providers.user_interaction import (
+from spec.integrations.providers.user_interaction import (
     CLIUserInteraction,
     NonInteractiveUserInteraction,
     SelectOption,

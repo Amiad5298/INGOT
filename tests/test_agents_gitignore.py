@@ -6,7 +6,7 @@ that manage the target project's .gitignore file.
 
 from unittest.mock import patch
 
-from specflow.integrations.agents import (
+from spec.integrations.agents import (
     SPECFLOW_GITIGNORE_MARKER,
     SPECFLOW_GITIGNORE_PATTERNS,
     _check_gitignore_has_pattern,
@@ -19,23 +19,23 @@ class TestCheckGitignoreHasPattern:
 
     def test_finds_exact_pattern_match(self):
         """Returns True when pattern exists exactly."""
-        content = "*.pyc\n.specflow/\n__pycache__/"
-        assert _check_gitignore_has_pattern(content, ".specflow/") is True
+        content = "*.pyc\n.spec/\n__pycache__/"
+        assert _check_gitignore_has_pattern(content, ".spec/") is True
 
     def test_finds_pattern_with_surrounding_whitespace(self):
         """Returns True when pattern has leading/trailing whitespace."""
-        content = "*.pyc\n  .specflow/  \n__pycache__/"
-        assert _check_gitignore_has_pattern(content, ".specflow/") is True
+        content = "*.pyc\n  .spec/  \n__pycache__/"
+        assert _check_gitignore_has_pattern(content, ".spec/") is True
 
     def test_does_not_match_partial_pattern(self):
         """Returns False when pattern is substring of another."""
         content = "*.pyc\n.specflow-backup/\n__pycache__/"
-        assert _check_gitignore_has_pattern(content, ".specflow/") is False
+        assert _check_gitignore_has_pattern(content, ".spec/") is False
 
     def test_does_not_match_commented_pattern(self):
         """Returns False when pattern is in a comment."""
-        content = "*.pyc\n# .specflow/\n__pycache__/"
-        assert _check_gitignore_has_pattern(content, ".specflow/") is False
+        content = "*.pyc\n# .spec/\n__pycache__/"
+        assert _check_gitignore_has_pattern(content, ".spec/") is False
 
     def test_finds_log_pattern(self):
         """Returns True for *.log pattern."""
@@ -45,29 +45,29 @@ class TestCheckGitignoreHasPattern:
     def test_returns_false_for_missing_pattern(self):
         """Returns False when pattern is not in file."""
         content = "*.pyc\n__pycache__/"
-        assert _check_gitignore_has_pattern(content, ".specflow/") is False
+        assert _check_gitignore_has_pattern(content, ".spec/") is False
 
     def test_handles_empty_content(self):
         """Returns False for empty content."""
-        assert _check_gitignore_has_pattern("", ".specflow/") is False
+        assert _check_gitignore_has_pattern("", ".spec/") is False
 
     def test_handles_only_comments(self):
         """Returns False when file has only comments."""
         content = "# Python\n# Ignore pyc files"
-        assert _check_gitignore_has_pattern(content, ".specflow/") is False
+        assert _check_gitignore_has_pattern(content, ".spec/") is False
 
 
 class TestGitignorePatternsConfiguration:
     """Tests for SPECFLOW_GITIGNORE_PATTERNS configuration.
 
     These tests verify the patterns list is correctly configured to:
-    - Ignore runtime artifacts (.specflow/, *.log)
+    - Ignore runtime artifacts (.spec/, *.log)
     - NOT ignore user-visible files (specs/ directory with plan/tasklist .md files)
     """
 
-    def test_patterns_include_specflow_directory(self):
-        """The .specflow/ directory should be ignored (runtime state/logs)."""
-        assert ".specflow/" in SPECFLOW_GITIGNORE_PATTERNS
+    def test_patterns_include_spec_directory(self):
+        """The .spec/ directory should be ignored (runtime state/logs)."""
+        assert ".spec/" in SPECFLOW_GITIGNORE_PATTERNS
 
     def test_patterns_include_log_files(self):
         """Log files (*.log) should be ignored."""
@@ -85,7 +85,7 @@ class TestGitignorePatternsConfiguration:
 
     def test_patterns_only_contain_expected_entries(self):
         """Verify the exact patterns list to catch unexpected additions."""
-        expected_patterns = [".specflow/", "*.log"]
+        expected_patterns = [".spec/", "*.log"]
         assert SPECFLOW_GITIGNORE_PATTERNS == expected_patterns
 
 
@@ -181,7 +181,7 @@ __pycache__/
         gitignore_path = tmp_path / ".gitignore"
 
         # Create .gitignore with SPECFLOW patterns already present
-        existing_content = "*.pyc\n.specflow/\n*.log\n"
+        existing_content = "*.pyc\n.spec/\n*.log\n"
         gitignore_path.write_text(existing_content)
 
         result = ensure_gitignore_configured(quiet=True)
@@ -198,7 +198,7 @@ __pycache__/
         gitignore_path = tmp_path / ".gitignore"
 
         # Create .gitignore with only one SPECFLOW pattern
-        existing_content = "*.pyc\n.specflow/\n"
+        existing_content = "*.pyc\n.spec/\n"
         gitignore_path.write_text(existing_content)
 
         result = ensure_gitignore_configured(quiet=True)
@@ -206,8 +206,8 @@ __pycache__/
         assert result is True
         content = gitignore_path.read_text()
 
-        # .specflow/ should appear only once (not duplicated)
-        assert content.count(".specflow/") == 1
+        # .spec/ should appear only once (not duplicated)
+        assert content.count(".spec/") == 1
         # *.log should be added
         assert "*.log" in content
 
@@ -239,7 +239,7 @@ __pycache__/
         gitignore_path = tmp_path / ".gitignore"
 
         # Create .gitignore with marker but only one pattern
-        existing_content = f"*.pyc\n{SPECFLOW_GITIGNORE_MARKER}\n.specflow/\n"
+        existing_content = f"*.pyc\n{SPECFLOW_GITIGNORE_MARKER}\n.spec/\n"
         gitignore_path.write_text(existing_content)
 
         result = ensure_gitignore_configured(quiet=True)
@@ -258,12 +258,12 @@ __pycache__/
         gitignore_path = tmp_path / ".gitignore"
 
         # Create fully configured .gitignore
-        gitignore_path.write_text(".specflow/\n*.log\n")
+        gitignore_path.write_text(".spec/\n*.log\n")
 
         result = ensure_gitignore_configured(quiet=True)
         assert result is True
 
-    @patch("specflow.integrations.agents.print_info")
+    @patch("spec.integrations.agents.print_info")
     def test_prints_info_when_not_quiet(self, mock_print, tmp_path, monkeypatch):
         """Prints info message when quiet=False and patterns are added."""
         monkeypatch.chdir(tmp_path)
@@ -281,7 +281,7 @@ __pycache__/
         gitignore_path = tmp_path / ".gitignore"
 
         # Create .gitignore with patterns only in comments
-        existing_content = "# Ignore .specflow/ for logs\n# *.log files\n"
+        existing_content = "# Ignore .spec/ for logs\n# *.log files\n"
         gitignore_path.write_text(existing_content)
 
         result = ensure_gitignore_configured(quiet=True)
@@ -291,7 +291,7 @@ __pycache__/
 
         # All patterns should be added as actual rules (not just comments)
         lines = [line.strip() for line in content.split("\n") if not line.strip().startswith("#")]
-        assert ".specflow/" in lines
+        assert ".spec/" in lines
         assert "*.log" in lines
 
 
@@ -320,7 +320,7 @@ class TestRepoRootDetection:
 
         # .gitignore at repo root should be updated
         content = (repo_root / ".gitignore").read_text()
-        assert ".specflow/" in content
+        assert ".spec/" in content
         assert "*.log" in content
 
         # No .gitignore should be created in the subdirectory
@@ -342,4 +342,4 @@ class TestRepoRootDetection:
         gitignore_path = no_git_dir / ".gitignore"
         assert gitignore_path.exists()
         content = gitignore_path.read_text()
-        assert ".specflow/" in content
+        assert ".spec/" in content

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from specflow.integrations.jira import JiraTicket
-from specflow.workflow.state import RateLimitConfig, WorkflowState
+from spec.integrations.jira import JiraTicket
+from spec.workflow.state import RateLimitConfig, WorkflowState
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ class TestWorkflowState:
 
     def test_task_memories_can_be_appended(self, state):
         """task_memories can have items appended."""
-        from specflow.workflow.task_memory import TaskMemory
+        from spec.workflow.task_memory import TaskMemory
 
         memory = TaskMemory(
             task_name="Test Task",

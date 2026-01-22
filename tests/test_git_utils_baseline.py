@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from specflow.workflow.git_utils import (
+from spec.workflow.git_utils import (
     DirtyTreePolicy,
     DirtyWorkingTreeError,
     capture_baseline,
@@ -165,22 +165,22 @@ class TestCheckDirtyWorkingTree:
 class TestWorkflowArtifactFiltering:
     """Tests for workflow artifact exclusion from dirty tree checks.
 
-    Workflow artifacts (.specflow/, .augment/, specs/, .DS_Store) are
+    Workflow artifacts (.spec/, .augment/, specs/, .DS_Store) are
     excluded from dirty tree checks because they are created by Steps 1-2
     and should not block Step 3 execution.
     """
 
-    def test_is_workflow_artifact_specflow_dir(self):
-        """Recognizes .specflow/ directory as workflow artifact."""
-        from specflow.workflow.git_utils import _is_workflow_artifact
+    def test_is_workflow_artifact_spec_dir(self):
+        """Recognizes .spec/ directory as workflow artifact."""
+        from spec.workflow.git_utils import _is_workflow_artifact
 
-        assert _is_workflow_artifact(".specflow/") is True
-        assert _is_workflow_artifact(".specflow/runs/log.txt") is True
-        assert _is_workflow_artifact(".specflow") is True
+        assert _is_workflow_artifact(".spec/") is True
+        assert _is_workflow_artifact(".spec/runs/log.txt") is True
+        assert _is_workflow_artifact(".spec") is True
 
     def test_is_workflow_artifact_augment_dir(self):
         """Recognizes .augment/ directory as workflow artifact."""
-        from specflow.workflow.git_utils import _is_workflow_artifact
+        from spec.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact(".augment/") is True
         assert _is_workflow_artifact(".augment/agents/spec-planner.md") is True
@@ -188,7 +188,7 @@ class TestWorkflowArtifactFiltering:
 
     def test_is_workflow_artifact_specs_dir(self):
         """Recognizes specs/ directory as workflow artifact."""
-        from specflow.workflow.git_utils import _is_workflow_artifact
+        from spec.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact("specs/") is True
         assert _is_workflow_artifact("specs/TICKET-123-plan.md") is True
@@ -196,26 +196,26 @@ class TestWorkflowArtifactFiltering:
 
     def test_is_workflow_artifact_ds_store(self):
         """Recognizes .DS_Store as workflow artifact."""
-        from specflow.workflow.git_utils import _is_workflow_artifact
+        from spec.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact(".DS_Store") is True
 
     def test_is_workflow_artifact_non_artifact(self):
         """Correctly identifies non-artifact paths."""
-        from specflow.workflow.git_utils import _is_workflow_artifact
+        from spec.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact("src/main.py") is False
         assert _is_workflow_artifact("README.md") is False
         assert _is_workflow_artifact("tests/test_foo.py") is False
         assert _is_workflow_artifact("config.yaml") is False
 
-    def test_untracked_specflow_dir_ignored(self, temp_git_repo):
-        """Untracked .specflow/ files do not trigger dirty tree error."""
-        specflow_dir = temp_git_repo.path / ".specflow" / "runs"
-        specflow_dir.mkdir(parents=True)
-        (specflow_dir / "log.txt").write_text("log content")
+    def test_untracked_spec_dir_ignored(self, temp_git_repo):
+        """Untracked .spec/ files do not trigger dirty tree error."""
+        spec_dir = temp_git_repo.path / ".spec" / "runs"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "log.txt").write_text("log content")
 
-        # Should not raise - .specflow/ is excluded
+        # Should not raise - .spec/ is excluded
         result = check_dirty_working_tree(policy=DirtyTreePolicy.FAIL_FAST)
         assert result is True
 
@@ -280,9 +280,9 @@ class TestWorkflowArtifactFiltering:
         specs_dir.mkdir(parents=True)
         (specs_dir / "plan.md").write_text("plan")
 
-        specflow_dir = temp_git_repo.path / ".specflow" / "runs"
-        specflow_dir.mkdir(parents=True)
-        (specflow_dir / "log.txt").write_text("log")
+        spec_dir = temp_git_repo.path / ".spec" / "runs"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "log.txt").write_text("log")
 
         augment_dir = temp_git_repo.path / ".augment" / "agents"
         augment_dir.mkdir(parents=True)
@@ -307,15 +307,15 @@ class TestWorkflowArtifactFiltering:
 
     def test_is_workflow_artifact_gitignore(self):
         """Recognizes .gitignore as workflow artifact (modified by ensure_gitignore_configured)."""
-        from specflow.workflow.git_utils import _is_workflow_artifact
+        from spec.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact(".gitignore") is True
 
     def test_workflow_artifact_paths_constant_exported(self):
         """WORKFLOW_ARTIFACT_PATHS constant is exported."""
-        from specflow.workflow.git_utils import WORKFLOW_ARTIFACT_PATHS
+        from spec.workflow.git_utils import WORKFLOW_ARTIFACT_PATHS
 
-        assert ".specflow/" in WORKFLOW_ARTIFACT_PATHS
+        assert ".spec/" in WORKFLOW_ARTIFACT_PATHS
         assert ".augment/" in WORKFLOW_ARTIFACT_PATHS
         assert "specs/" in WORKFLOW_ARTIFACT_PATHS
         assert ".DS_Store" in WORKFLOW_ARTIFACT_PATHS
@@ -537,7 +537,7 @@ class TestUntrackedFiles:
 
     def test_get_untracked_files_returns_list(self, temp_git_repo):
         """Returns list of untracked files."""
-        from specflow.workflow.git_utils import get_untracked_files
+        from spec.workflow.git_utils import get_untracked_files
 
         # Create untracked files
         temp_git_repo.create_file("untracked1.txt", "content1")
@@ -551,7 +551,7 @@ class TestUntrackedFiles:
 
     def test_get_untracked_files_empty_when_all_tracked(self, temp_git_repo):
         """Returns empty list when no untracked files."""
-        from specflow.workflow.git_utils import get_untracked_files
+        from spec.workflow.git_utils import get_untracked_files
 
         # All files are tracked (initial commit has README.md)
         untracked = get_untracked_files()
@@ -559,7 +559,7 @@ class TestUntrackedFiles:
 
     def test_get_untracked_files_excludes_gitignored(self, temp_git_repo):
         """Excludes files matching .gitignore patterns."""
-        from specflow.workflow.git_utils import get_untracked_files
+        from spec.workflow.git_utils import get_untracked_files
 
         # Create .gitignore
         temp_git_repo.create_file(".gitignore", "*.log\n__pycache__/\n")
@@ -577,7 +577,7 @@ class TestUntrackedFiles:
 
     def test_untracked_files_diff_generates_unified_format(self, temp_git_repo):
         """Generates unified diff format for untracked files."""
-        from specflow.workflow.git_utils import get_untracked_files_diff
+        from spec.workflow.git_utils import get_untracked_files_diff
 
         temp_git_repo.create_file("new_file.py", "def hello():\n    pass\n")
 
@@ -590,7 +590,7 @@ class TestUntrackedFiles:
 
     def test_untracked_files_diff_stat_only(self, temp_git_repo):
         """Generates stat-like output for untracked files."""
-        from specflow.workflow.git_utils import get_untracked_files_diff
+        from spec.workflow.git_utils import get_untracked_files_diff
 
         temp_git_repo.create_file("file1.txt", "content")
         temp_git_repo.create_file("file2.txt", "content")
@@ -604,7 +604,7 @@ class TestUntrackedFiles:
 
     def test_untracked_binary_file_marked(self, temp_git_repo):
         """Binary untracked files are marked with placeholder."""
-        from specflow.workflow.git_utils import get_untracked_files_diff
+        from spec.workflow.git_utils import get_untracked_files_diff
 
         # Create a binary file (contains null bytes)
         binary_path = temp_git_repo.path / "image.bin"

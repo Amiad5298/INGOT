@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specflow.ui.plan_tui import (
+from spec.ui.plan_tui import (
     DEFAULT_VERBOSE_LINES,
     MAX_LIVENESS_WIDTH,
     REFRESH_RATE,
@@ -186,7 +186,7 @@ class TestStreamingOperationUIQuitRequest:
 class TestStreamingOperationUIContextManager:
     """Tests for context manager protocol."""
 
-    @patch("specflow.ui.plan_tui.Live")
+    @patch("spec.ui.plan_tui.Live")
     @patch.object(StreamingOperationUI, "_input_loop")
     def test_context_manager_starts_and_stops(self, mock_input_loop, mock_live_class, tmp_path: Path):
         """Context manager starts and stops TUI."""
@@ -203,7 +203,7 @@ class TestStreamingOperationUIContextManager:
         # Live should have been stopped
         mock_live.stop.assert_called_once()
 
-    @patch("specflow.ui.plan_tui.Live")
+    @patch("spec.ui.plan_tui.Live")
     @patch.object(StreamingOperationUI, "_input_loop")
     def test_context_manager_closes_log_buffer(self, mock_input_loop, mock_live_class, tmp_path: Path):
         """Context manager closes log buffer on exit."""
@@ -220,7 +220,7 @@ class TestStreamingOperationUIContextManager:
         # After context, buffer should be closed
         assert ui._log_buffer._file_handle is None
 
-    @patch("specflow.ui.plan_tui.Live")
+    @patch("spec.ui.plan_tui.Live")
     @patch.object(StreamingOperationUI, "_input_loop")
     def test_context_manager_returns_self(self, mock_input_loop, mock_live_class):
         """Context manager returns self on entry."""
@@ -321,7 +321,7 @@ class TestStreamingOperationUIKeyboardHandling:
 
     def test_handle_key_v_toggles_verbose(self):
         """Pressing 'v' toggles verbose mode."""
-        from specflow.ui.keyboard import Key
+        from spec.ui.keyboard import Key
 
         ui = StreamingOperationUI()
         assert ui.verbose_mode is False
@@ -331,7 +331,7 @@ class TestStreamingOperationUIKeyboardHandling:
 
     def test_handle_key_q_sets_quit(self):
         """Pressing 'q' sets quit_requested."""
-        from specflow.ui.keyboard import Key
+        from spec.ui.keyboard import Key
 
         ui = StreamingOperationUI()
         assert ui.quit_requested is False
@@ -367,8 +367,8 @@ class TestStep1TUIIntegration:
     @pytest.fixture
     def workflow_state(self, tmp_path: Path):
         """Create a workflow state for testing."""
-        from specflow.integrations.jira import JiraTicket
-        from specflow.workflow.state import WorkflowState
+        from spec.integrations.jira import JiraTicket
+        from spec.workflow.state import WorkflowState
 
         ticket = JiraTicket(
             ticket_id="TEST-456",
@@ -386,8 +386,8 @@ class TestStep1TUIIntegration:
 
         return state
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step1_plan.AuggieClient")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step1_plan.AuggieClient")
     def test_uses_tui_when_enabled(
         self,
         mock_auggie_class,
@@ -397,7 +397,7 @@ class TestStep1TUIIntegration:
         monkeypatch,
     ):
         """Step 1 uses TUI when _should_use_tui returns True."""
-        from specflow.workflow.step1_plan import _generate_plan_with_tui
+        from spec.workflow.step1_plan import _generate_plan_with_tui
 
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
@@ -421,8 +421,8 @@ class TestStep1TUIIntegration:
         mock_ui_class.assert_called_once()
         mock_client.run_with_callback.assert_called_once()
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step1_plan.AuggieClient")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step1_plan.AuggieClient")
     def test_tui_quit_returns_false(
         self,
         mock_auggie_class,
@@ -432,7 +432,7 @@ class TestStep1TUIIntegration:
         monkeypatch,
     ):
         """TUI returns False when user requests quit."""
-        from specflow.workflow.step1_plan import _generate_plan_with_tui
+        from spec.workflow.step1_plan import _generate_plan_with_tui
 
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
@@ -456,7 +456,7 @@ class TestStep1TUIIntegration:
 
     def test_creates_log_directory(self, tmp_path: Path, monkeypatch):
         """Log directory is created for plan generation."""
-        from specflow.workflow.step1_plan import _create_plan_log_dir
+        from spec.workflow.step1_plan import _create_plan_log_dir
 
         # Set log base dir to tmp_path
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
@@ -471,7 +471,7 @@ class TestStep1TUIIntegration:
 
     def test_get_log_base_dir_uses_env_var(self, tmp_path: Path, monkeypatch):
         """Log base dir uses SPECFLOW_LOG_DIR env var."""
-        from specflow.workflow.step1_plan import _get_log_base_dir
+        from spec.workflow.step1_plan import _get_log_base_dir
 
         custom_dir = tmp_path / "custom_logs"
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(custom_dir))
@@ -480,11 +480,11 @@ class TestStep1TUIIntegration:
         assert result == custom_dir
 
     def test_get_log_base_dir_default(self, monkeypatch):
-        """Log base dir defaults to .specflow/runs."""
-        from specflow.workflow.step1_plan import _get_log_base_dir
+        """Log base dir defaults to .spec/runs."""
+        from spec.workflow.step1_plan import _get_log_base_dir
 
         monkeypatch.delenv("SPECFLOW_LOG_DIR", raising=False)
 
         result = _get_log_base_dir()
-        assert result == Path(".specflow/runs")
+        assert result == Path(".spec/runs")
 

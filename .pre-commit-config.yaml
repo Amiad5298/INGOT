@@ -12,20 +12,17 @@ repos:
       - id: ruff-format
         args: [--config=pyproject.toml]
 
-  # Mypy - Static type checker
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+  # Mypy - Static type checker (uses system-installed mypy from active environment)
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - typer>=0.9.0
-          - rich>=13.0.0
-          - questionary>=2.0.0
-          - pytest>=7.0.0
-        args: [--config-file=pyproject.toml]
+        name: mypy
+        entry: mypy spec --config-file=pyproject.toml
+        language: system
+        types: [python]
         pass_filenames: false
-        # Run on entire project for better type inference
-        entry: mypy spec
+        # Uses dependencies from the active virtual environment
+        # No need to duplicate deps - just run: pip install -e ".[dev]"
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks

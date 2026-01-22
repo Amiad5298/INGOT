@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from specflow.config.settings import CONFIG_FILE, Settings
+from spec.config.settings import CONFIG_FILE, Settings
 
 
 class TestSettings:
@@ -171,5 +171,5 @@ class TestConfigFile:
 
     def test_config_file_name(self):
         """CONFIG_FILE has correct name."""
-        assert CONFIG_FILE.name == ".specflow-config"
+        assert CONFIG_FILE.name == ".spec-config"
 

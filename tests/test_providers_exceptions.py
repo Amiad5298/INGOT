@@ -1,4 +1,4 @@
-"""Tests for specflow.integrations.providers.exceptions module.
+"""Tests for spec.integrations.providers.exceptions module.
 
 Tests cover:
 - Exception inheritance hierarchy
@@ -9,7 +9,7 @@ Tests cover:
 
 import pytest
 
-from specflow.integrations.providers.exceptions import (
+from spec.integrations.providers.exceptions import (
     AuthenticationError,
     IssueTrackerError,
     PlatformNotSupportedError,

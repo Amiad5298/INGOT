@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specflow.integrations.jira import (
+from spec.integrations.jira import (
     JiraTicket,
     check_jira_integration,
     fetch_ticket_info,
@@ -89,7 +89,7 @@ class TestCheckJiraIntegration:
 
         mock_auggie = MagicMock()
 
-        with patch("specflow.integrations.jira.print_success"):
+        with patch("spec.integrations.jira.print_success"):
             result = check_jira_integration(mock_config, mock_auggie, force=False)
 
         assert result is True
@@ -108,9 +108,9 @@ class TestCheckJiraIntegration:
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = "YES, Jira is available"
 
-        with patch("specflow.integrations.jira.print_info"), \
-             patch("specflow.integrations.jira.print_success"), \
-             patch("specflow.integrations.jira.print_step"):
+        with patch("spec.integrations.jira.print_info"), \
+             patch("spec.integrations.jira.print_success"), \
+             patch("spec.integrations.jira.print_step"):
             check_jira_integration(mock_config, mock_auggie, force=True)
 
         mock_auggie.run_print_quiet.assert_called_once()
@@ -123,9 +123,9 @@ class TestCheckJiraIntegration:
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = "YES, Jira is available"
 
-        with patch("specflow.integrations.jira.print_info"), \
-             patch("specflow.integrations.jira.print_success"), \
-             patch("specflow.integrations.jira.print_step"):
+        with patch("spec.integrations.jira.print_info"), \
+             patch("spec.integrations.jira.print_success"), \
+             patch("spec.integrations.jira.print_step"):
             result = check_jira_integration(mock_config, mock_auggie)
 
         assert result is True
@@ -139,9 +139,9 @@ class TestCheckJiraIntegration:
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = "Jira is not configured"
 
-        with patch("specflow.integrations.jira.print_info"), \
-             patch("specflow.integrations.jira.print_warning"), \
-             patch("specflow.integrations.jira.print_step"):
+        with patch("spec.integrations.jira.print_info"), \
+             patch("spec.integrations.jira.print_warning"), \
+             patch("spec.integrations.jira.print_step"):
             result = check_jira_integration(mock_config, mock_auggie)
 
         assert result is False

@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specflow.integrations.jira import JiraTicket
-from specflow.workflow.state import WorkflowState
-from specflow.workflow.step3_execute import (
+from spec.integrations.jira import JiraTicket
+from spec.workflow.state import WorkflowState
+from spec.workflow.step3_execute import (
     _build_task_prompt,
     _cleanup_old_runs,
     _create_run_log_dir,
@@ -21,7 +21,7 @@ from specflow.workflow.step3_execute import (
     _show_summary,
     step_3_execute,
 )
-from specflow.workflow.tasks import Task, TaskCategory, TaskStatus
+from spec.workflow.tasks import Task, TaskCategory, TaskStatus
 
 
 @pytest.fixture
@@ -82,10 +82,10 @@ class TestGetLogBaseDir:
     """Tests for _get_log_base_dir function."""
 
     def test_default_returns_spec_runs(self, monkeypatch):
-        """Default returns Path('.specflow/runs')."""
+        """Default returns Path('.spec/runs')."""
         monkeypatch.delenv("SPECFLOW_LOG_DIR", raising=False)
         result = _get_log_base_dir()
-        assert result == Path(".specflow/runs")
+        assert result == Path(".spec/runs")
 
     def test_respects_environment_variable(self, monkeypatch):
         """Respects SPECFLOW_LOG_DIR environment variable."""
@@ -279,7 +279,7 @@ class TestBuildTaskPrompt:
 class TestExecuteTask:
     """Tests for _execute_task function."""
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_returns_true_on_success(self, mock_auggie_class, workflow_state, sample_task):
         """Returns True on Auggie success."""
         mock_client = MagicMock()
@@ -290,7 +290,7 @@ class TestExecuteTask:
 
         assert result is True
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_returns_false_on_failure(self, mock_auggie_class, workflow_state, sample_task):
         """Returns False on Auggie failure."""
         mock_client = MagicMock()
@@ -301,7 +301,7 @@ class TestExecuteTask:
 
         assert result is False
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_returns_false_on_exception(self, mock_auggie_class, workflow_state, sample_task):
         """Returns False on exception."""
         mock_client = MagicMock()
@@ -312,7 +312,7 @@ class TestExecuteTask:
 
         assert result is False
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_uses_spec_implementer_agent(self, mock_auggie_class, workflow_state, sample_task):
         """Uses state.subagent_names implementer agent."""
         mock_client = MagicMock()
@@ -337,7 +337,7 @@ class TestExecuteTask:
 class TestExecuteTaskWithCallback:
     """Tests for _execute_task_with_callback function."""
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_returns_true_on_success(self, mock_auggie_class, workflow_state, sample_task):
         """Returns True on success."""
         mock_client = MagicMock()
@@ -351,7 +351,7 @@ class TestExecuteTaskWithCallback:
 
         assert result is True
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_returns_false_on_failure(self, mock_auggie_class, workflow_state, sample_task):
         """Returns False on failure."""
         mock_client = MagicMock()
@@ -365,7 +365,7 @@ class TestExecuteTaskWithCallback:
 
         assert result is False
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_callback_receives_output(self, mock_auggie_class, workflow_state, sample_task):
         """Callback is called with output lines."""
         mock_client = MagicMock()
@@ -388,7 +388,7 @@ class TestExecuteTaskWithCallback:
         callback.assert_any_call("Line 1")
         callback.assert_any_call("Line 2")
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_callback_receives_error_on_exception(self, mock_auggie_class, workflow_state, sample_task):
         """Callback receives error message on exception."""
         mock_client = MagicMock()
@@ -407,7 +407,7 @@ class TestExecuteTaskWithCallback:
         assert "ERROR" in error_call
         assert "Connection failed" in error_call
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_uses_spec_implementer_agent(self, mock_auggie_class, workflow_state, sample_task):
         """Uses state.subagent_names implementer agent."""
         mock_client = MagicMock()
@@ -435,8 +435,8 @@ class TestExecuteTaskWithCallback:
 class TestShowSummary:
     """Tests for _show_summary function."""
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.get_current_branch")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.get_current_branch")
     def test_displays_ticket_id(self, mock_branch, mock_console, workflow_state):
         """Displays ticket ID."""
         mock_branch.return_value = "main"
@@ -447,8 +447,8 @@ class TestShowSummary:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("TEST-123" in c for c in calls)
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.get_current_branch")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.get_current_branch")
     def test_displays_branch_name(self, mock_branch, mock_console, workflow_state):
         """Displays branch name."""
         workflow_state.branch_name = "feature/test-branch"
@@ -459,8 +459,8 @@ class TestShowSummary:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("feature/test-branch" in c for c in calls)
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.get_current_branch")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.get_current_branch")
     def test_displays_completed_task_count(self, mock_branch, mock_console, workflow_state):
         """Displays completed task count."""
         mock_branch.return_value = "main"
@@ -471,8 +471,8 @@ class TestShowSummary:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("2" in c for c in calls)
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.get_current_branch")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.get_current_branch")
     def test_displays_checkpoint_count(self, mock_branch, mock_console, workflow_state):
         """Displays checkpoint count."""
         mock_branch.return_value = "main"
@@ -483,8 +483,8 @@ class TestShowSummary:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("Checkpoints" in c for c in calls)
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.get_current_branch")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.get_current_branch")
     def test_displays_failed_tasks_when_present(self, mock_branch, mock_console, workflow_state):
         """Displays failed task names when present."""
         mock_branch.return_value = "main"
@@ -504,8 +504,8 @@ class TestShowSummary:
 class TestRunPostImplementationTests:
     """Tests for _run_post_implementation_tests function."""
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
     def test_prompts_user_to_run_tests(self, mock_confirm, mock_auggie_class, workflow_state):
         """Prompts user to run tests."""
         mock_confirm.return_value = True
@@ -518,8 +518,8 @@ class TestRunPostImplementationTests:
         mock_confirm.assert_called_once()
         assert "test" in mock_confirm.call_args[0][0].lower()
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
     def test_skips_when_user_declines(self, mock_confirm, mock_auggie_class, workflow_state):
         """Skips when user declines."""
         mock_confirm.return_value = False
@@ -528,9 +528,9 @@ class TestRunPostImplementationTests:
 
         mock_auggie_class.assert_not_called()
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step3_execute.AuggieClient")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
     def test_runs_auggie_with_test_prompt(
         self, mock_confirm, mock_auggie_class, mock_ui_class, workflow_state
     ):
@@ -553,9 +553,9 @@ class TestRunPostImplementationTests:
         prompt = mock_client.run_with_callback.call_args[0][0]
         assert "test" in prompt.lower()
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step3_execute.AuggieClient")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
     def test_handles_auggie_exceptions(
         self, mock_confirm, mock_auggie_class, mock_ui_class, workflow_state
     ):
@@ -584,8 +584,8 @@ class TestRunPostImplementationTests:
 class TestOfferCommitInstructions:
     """Tests for _offer_commit_instructions function."""
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.is_dirty")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.is_dirty")
     def test_does_nothing_when_no_dirty_files(self, mock_is_dirty, mock_console, workflow_state):
         """Does nothing when no dirty files."""
         mock_is_dirty.return_value = False
@@ -596,9 +596,9 @@ class TestOfferCommitInstructions:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert not any("git commit" in c for c in calls)
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
-    @patch("specflow.workflow.step3_execute.is_dirty")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute.is_dirty")
     def test_prompts_user_for_instructions(self, mock_is_dirty, mock_confirm, mock_console, workflow_state):
         """Prompts user for instructions."""
         mock_is_dirty.return_value = True
@@ -608,9 +608,9 @@ class TestOfferCommitInstructions:
 
         mock_confirm.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
-    @patch("specflow.workflow.step3_execute.is_dirty")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute.is_dirty")
     def test_does_nothing_when_user_declines(self, mock_is_dirty, mock_confirm, mock_console, workflow_state):
         """Does nothing when user declines."""
         mock_is_dirty.return_value = True
@@ -621,9 +621,9 @@ class TestOfferCommitInstructions:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert not any("git commit" in c for c in calls)
 
-    @patch("specflow.workflow.step3_execute.console")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
-    @patch("specflow.workflow.step3_execute.is_dirty")
+    @patch("spec.workflow.step3_execute.console")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute.is_dirty")
     def test_prints_commit_commands_when_accepted(self, mock_is_dirty, mock_confirm, mock_console, workflow_state):
         """Prints commit commands when accepted."""
         mock_is_dirty.return_value = True
@@ -644,9 +644,9 @@ class TestOfferCommitInstructions:
 class TestExecuteFallback:
     """Tests for _execute_fallback function."""
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_executes_tasks_sequentially(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -667,9 +667,9 @@ class TestExecuteFallback:
 
         assert mock_execute.call_count == 2
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_marks_tasks_complete_on_success(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -688,9 +688,9 @@ class TestExecuteFallback:
         mock_mark.assert_called_once()
         assert "Task 1" in workflow_state.completed_tasks
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_tracks_failed_tasks(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -712,9 +712,9 @@ class TestExecuteFallback:
 
         assert failed == ["Task 2"]
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_calls_capture_task_memory_on_success(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -732,9 +732,9 @@ class TestExecuteFallback:
 
         mock_capture.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_handles_capture_task_memory_exceptions(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -754,9 +754,9 @@ class TestExecuteFallback:
 
         assert failed == []  # Task still counts as success
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_respects_fail_fast_option(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -781,9 +781,9 @@ class TestExecuteFallback:
         assert mock_execute.call_count == 2
         assert failed == ["Task 2"]
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_returns_list_of_failed_task_names(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -814,10 +814,10 @@ class TestExecuteFallback:
 class TestExecuteWithTui:
     """Tests for _execute_with_tui function."""
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
-    @patch("specflow.ui.tui.TaskRunnerUI")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.ui.tui.TaskRunnerUI")
     def test_initializes_tui_correctly(
         self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -842,10 +842,10 @@ class TestExecuteWithTui:
         )
         mock_tui.initialize_records.assert_called_once_with(["Task 1"])
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
-    @patch("specflow.ui.tui.TaskRunnerUI")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.ui.tui.TaskRunnerUI")
     def test_marks_tasks_complete_on_success(
         self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -868,10 +868,10 @@ class TestExecuteWithTui:
         mock_mark.assert_called_once()
         assert "Task 1" in workflow_state.completed_tasks
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
-    @patch("specflow.ui.tui.TaskRunnerUI")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.ui.tui.TaskRunnerUI")
     def test_tracks_failed_tasks(
         self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -896,10 +896,10 @@ class TestExecuteWithTui:
 
         assert failed == ["Task 2"]
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
-    @patch("specflow.ui.tui.TaskRunnerUI")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.ui.tui.TaskRunnerUI")
     def test_respects_fail_fast_option(
         self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -928,10 +928,10 @@ class TestExecuteWithTui:
         assert mock_execute.call_count == 2
         mock_tui.mark_remaining_skipped.assert_called()
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
-    @patch("specflow.ui.tui.TaskRunnerUI")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.ui.tui.TaskRunnerUI")
     def test_handles_capture_task_memory_exceptions(
         self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -976,10 +976,10 @@ class TestStep3Execute:
 
         assert result is False
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_returns_true_when_all_tasks_already_complete(
         self, mock_baseline, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
     ):
@@ -997,14 +997,14 @@ class TestStep3Execute:
 
         assert result is True
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_with_tui")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_with_tui")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_execute_with_tui_when_tui_mode(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_tui,
         mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1019,14 +1019,14 @@ class TestStep3Execute:
 
         mock_execute_tui.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_execute_fallback_when_non_tui_mode(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
         mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1041,15 +1041,15 @@ class TestStep3Execute:
 
         mock_execute_fallback.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_prompts_user_on_task_failures(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
         mock_confirm, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1065,14 +1065,14 @@ class TestStep3Execute:
 
         mock_confirm.assert_called()
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_returns_true_when_all_tasks_succeed(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
         mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1087,14 +1087,14 @@ class TestStep3Execute:
 
         assert result is True
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
     def test_returns_false_when_user_declines_after_failures(
         self, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
         mock_confirm, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1109,14 +1109,14 @@ class TestStep3Execute:
 
         assert result is False
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_show_summary(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
         mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1131,14 +1131,14 @@ class TestStep3Execute:
 
         mock_summary.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_run_post_implementation_tests(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
         mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1153,14 +1153,14 @@ class TestStep3Execute:
 
         mock_tests.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_offer_commit_instructions(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
         mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1175,11 +1175,11 @@ class TestStep3Execute:
 
         mock_commit.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute.prompt_confirm")
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
-    @patch("specflow.ui.tui.TaskRunnerUI")
+    @patch("spec.workflow.step3_execute.prompt_confirm")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.ui.tui.TaskRunnerUI")
     def test_stops_execution_when_quit_requested(
         self, mock_tui_class, mock_execute, mock_mark, mock_capture, mock_confirm, workflow_state, tmp_path
     ):
@@ -1224,15 +1224,15 @@ class TestStep3Execute:
 class TestTwoPhaseExecution:
     """Tests for two-phase execution model."""
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_parallel_fallback")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_parallel_fallback")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_executes_fundamental_tasks_first(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
         mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1265,14 +1265,14 @@ class TestTwoPhaseExecution:
         assert mock_execute_fallback.call_count >= 1
         assert mock_execute_parallel.call_count == 1
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_fundamental_tasks_run_sequentially(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
         mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1303,15 +1303,15 @@ class TestTwoPhaseExecution:
         tasks = call_args[0][1]  # Second positional arg is tasks
         assert len(tasks) == 2
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_parallel_fallback")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_parallel_fallback")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_independent_tasks_run_in_parallel(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
         mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1342,15 +1342,15 @@ class TestTwoPhaseExecution:
         # Should use _execute_parallel_fallback for independent tasks
         assert mock_execute_parallel.called
 
-    @patch("specflow.workflow.step3_execute._offer_commit_instructions")
-    @patch("specflow.workflow.step3_execute._run_post_implementation_tests")
-    @patch("specflow.workflow.step3_execute._show_summary")
-    @patch("specflow.workflow.step3_execute._execute_parallel_fallback")
-    @patch("specflow.workflow.step3_execute._execute_fallback")
-    @patch("specflow.ui.tui._should_use_tui")
-    @patch("specflow.workflow.step3_execute._cleanup_old_runs")
-    @patch("specflow.workflow.step3_execute._create_run_log_dir")
-    @patch("specflow.workflow.step3_execute._capture_baseline_for_diffs")
+    @patch("spec.workflow.step3_execute._offer_commit_instructions")
+    @patch("spec.workflow.step3_execute._run_post_implementation_tests")
+    @patch("spec.workflow.step3_execute._show_summary")
+    @patch("spec.workflow.step3_execute._execute_parallel_fallback")
+    @patch("spec.workflow.step3_execute._execute_fallback")
+    @patch("spec.ui.tui._should_use_tui")
+    @patch("spec.workflow.step3_execute._cleanup_old_runs")
+    @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_skips_parallel_phase_when_disabled(
         self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
         mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
@@ -1391,14 +1391,14 @@ class TestTwoPhaseExecution:
 class TestParallelExecution:
     """Tests for parallel task execution."""
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_uses_thread_pool_executor(
         self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
     ):
         """Uses ThreadPoolExecutor for concurrent execution."""
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute_retry.return_value = True
 
@@ -1419,14 +1419,14 @@ class TestParallelExecution:
         # Both tasks should be executed
         assert mock_execute_retry.call_count == 2
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_respects_max_parallel_tasks(
         self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
     ):
         """Limits concurrent workers to max_parallel_tasks."""
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute_retry.return_value = True
         workflow_state.max_parallel_tasks = 2
@@ -1447,14 +1447,14 @@ class TestParallelExecution:
         assert failed == []
         assert mock_execute_retry.call_count == 5
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_collects_failed_tasks(
         self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
     ):
         """Collects names of failed tasks."""
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         # First task succeeds, second fails
         mock_execute_retry.side_effect = [True, False]
@@ -1475,14 +1475,14 @@ class TestParallelExecution:
         assert len(failed) == 1
         assert "Failed Task" in failed
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_marks_successful_tasks_complete(
         self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
     ):
         """Marks completed tasks in tasklist."""
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute_retry.return_value = True
 
@@ -1509,13 +1509,13 @@ class TestParallelExecution:
 class TestTaskRetry:
     """Tests for task retry with rate limit handling."""
 
-    @patch("specflow.workflow.step3_execute._execute_task")
+    @patch("spec.workflow.step3_execute._execute_task")
     def test_skips_retry_when_disabled(
         self, mock_execute, workflow_state, tmp_path
     ):
         """Skips retry wrapper when max_retries=0."""
-        from specflow.workflow.state import RateLimitConfig
-        from specflow.workflow.step3_execute import _execute_task_with_retry
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
 
         mock_execute.return_value = True
         workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
@@ -1528,13 +1528,13 @@ class TestTaskRetry:
         assert result is True
         mock_execute.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute._execute_task_with_callback")
+    @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_uses_callback_when_provided(
         self, mock_execute_callback, workflow_state, tmp_path
     ):
         """Uses callback version when callback provided."""
-        from specflow.workflow.state import RateLimitConfig
-        from specflow.workflow.step3_execute import _execute_task_with_retry
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
 
         mock_execute_callback.return_value = True
         workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
@@ -1548,13 +1548,13 @@ class TestTaskRetry:
         assert result is True
         mock_execute_callback.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute._execute_task")
+    @patch("spec.workflow.step3_execute._execute_task")
     def test_returns_false_on_failure(
         self, mock_execute, workflow_state, tmp_path
     ):
         """Returns False when task execution fails."""
-        from specflow.workflow.state import RateLimitConfig
-        from specflow.workflow.step3_execute import _execute_task_with_retry
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
 
         mock_execute.return_value = False
         workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
@@ -1566,13 +1566,13 @@ class TestTaskRetry:
 
         assert result is False
 
-    @patch("specflow.workflow.step3_execute._execute_task")
+    @patch("spec.workflow.step3_execute._execute_task")
     def test_retries_on_rate_limit_error(
         self, mock_execute, workflow_state, tmp_path
     ):
         """Retries execution on rate limit errors."""
-        from specflow.workflow.state import RateLimitConfig
-        from specflow.workflow.step3_execute import _execute_task_with_retry
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
 
         # First call raises rate limit error (HTTP 429), second succeeds
         mock_execute.side_effect = [Exception("HTTP Error 429: Too Many Requests"), True]
@@ -1597,14 +1597,14 @@ class TestTaskRetry:
 class TestParallelTaskMemorySkipped:
     """Tests for memory capture being skipped in parallel mode."""
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_parallel_fallback_skips_memory_capture(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
         """Parallel fallback does not call capture_task_memory."""
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute.return_value = True
 
@@ -1620,9 +1620,9 @@ class TestParallelTaskMemorySkipped:
         # Memory capture should NOT be called for parallel tasks
         mock_capture.assert_not_called()
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_sequential_fallback_calls_memory_capture(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -1645,14 +1645,14 @@ class TestParallelTaskMemorySkipped:
 class TestParallelFailFast:
     """Tests for fail_fast semantics in parallel execution."""
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_fail_fast_stops_pending_tasks(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
         """Fail-fast stops pending tasks when one fails."""
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         # First task fails, second should be skipped
         mock_execute.side_effect = [False, True, True]
@@ -1675,14 +1675,14 @@ class TestParallelFailFast:
         # Task 1 should fail, others should be skipped
         assert "Task 1" in failed
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_no_fail_fast_continues_after_failure(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
         """Without fail-fast, execution continues after failure."""
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute.side_effect = [False, True, True]
         workflow_state.fail_fast = False
@@ -1705,9 +1705,9 @@ class TestParallelFailFast:
         assert mock_execute.call_count == 3
         assert failed == ["Task 1"]
 
-    @patch("specflow.workflow.step3_execute.capture_task_memory")
-    @patch("specflow.workflow.step3_execute.mark_task_complete")
-    @patch("specflow.workflow.step3_execute._execute_task_with_retry")
+    @patch("spec.workflow.step3_execute.capture_task_memory")
+    @patch("spec.workflow.step3_execute.mark_task_complete")
+    @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_stop_flag_prevents_new_task_execution(
         self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
     ):
@@ -1719,7 +1719,7 @@ class TestParallelFailFast:
         """
         import threading
 
-        from specflow.workflow.step3_execute import _execute_parallel_fallback
+        from spec.workflow.step3_execute import _execute_parallel_fallback
 
         # Shared event to simulate stop_flag behavior
         stop_event = threading.Event()
@@ -1770,12 +1770,12 @@ class TestParallelFailFast:
 class TestExecuteTaskWithCallbackRateLimit:
     """Tests for rate limit detection in _execute_task_with_callback."""
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_raises_rate_limit_error_on_rate_limit_output(
         self, mock_auggie_class, workflow_state, sample_task
     ):
         """Raises AuggieRateLimitError when output indicates rate limit."""
-        from specflow.integrations.auggie import AuggieRateLimitError
+        from spec.integrations.auggie import AuggieRateLimitError
 
         mock_client = MagicMock()
         # Simulate rate limit in output
@@ -1792,7 +1792,7 @@ class TestExecuteTaskWithCallbackRateLimit:
                 callback=callback
             )
 
-    @patch("specflow.workflow.step3_execute.AuggieClient")
+    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_returns_false_on_non_rate_limit_failure(
         self, mock_auggie_class, workflow_state, sample_task
     ):
@@ -1813,14 +1813,14 @@ class TestExecuteTaskWithCallbackRateLimit:
 class TestCaptureBaselineForDiffs:
     """Tests for _capture_baseline_for_diffs function."""
 
-    @patch("specflow.workflow.step3_execute.capture_baseline")
-    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
-    @patch("specflow.workflow.step3_execute.print_info")
+    @patch("spec.workflow.step3_execute.capture_baseline")
+    @patch("spec.workflow.step3_execute.check_dirty_working_tree")
+    @patch("spec.workflow.step3_execute.print_info")
     def test_captures_baseline_successfully(
         self, mock_print, mock_check_dirty, mock_capture, workflow_state
     ):
         """Captures baseline and returns True on success."""
-        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+        from spec.workflow.step3_execute import _capture_baseline_for_diffs
 
         mock_check_dirty.return_value = True
         mock_capture.return_value = "abc123def456"
@@ -1830,15 +1830,15 @@ class TestCaptureBaselineForDiffs:
         assert result is True
         assert workflow_state.diff_baseline_ref == "abc123def456"
 
-    @patch("specflow.workflow.step3_execute.capture_baseline")
-    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
-    @patch("specflow.workflow.step3_execute.print_warning")
-    @patch("specflow.workflow.step3_execute.print_info")
+    @patch("spec.workflow.step3_execute.capture_baseline")
+    @patch("spec.workflow.step3_execute.check_dirty_working_tree")
+    @patch("spec.workflow.step3_execute.print_warning")
+    @patch("spec.workflow.step3_execute.print_info")
     def test_continues_with_dirty_tree_on_warn_policy(
         self, mock_info, mock_warning, mock_check_dirty, mock_capture, workflow_state
     ):
         """Continues with dirty tree when policy allows."""
-        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+        from spec.workflow.step3_execute import _capture_baseline_for_diffs
 
         mock_check_dirty.return_value = False  # Dirty but not raising
         mock_capture.return_value = "abc123"
@@ -1848,14 +1848,14 @@ class TestCaptureBaselineForDiffs:
         assert result is True
         mock_warning.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
-    @patch("specflow.workflow.step3_execute.print_error")
+    @patch("spec.workflow.step3_execute.check_dirty_working_tree")
+    @patch("spec.workflow.step3_execute.print_error")
     def test_returns_false_on_dirty_tree_fail_fast(
         self, mock_error, mock_check_dirty, workflow_state
     ):
         """Returns False when dirty tree check raises DirtyWorkingTreeError."""
-        from specflow.workflow.git_utils import DirtyWorkingTreeError
-        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+        from spec.workflow.git_utils import DirtyWorkingTreeError
+        from spec.workflow.step3_execute import _capture_baseline_for_diffs
 
         mock_check_dirty.side_effect = DirtyWorkingTreeError("Dirty tree")
 
@@ -1864,14 +1864,14 @@ class TestCaptureBaselineForDiffs:
         assert result is False
         mock_error.assert_called_once()
 
-    @patch("specflow.workflow.step3_execute.capture_baseline")
-    @patch("specflow.workflow.step3_execute.check_dirty_working_tree")
-    @patch("specflow.workflow.step3_execute.print_error")
+    @patch("spec.workflow.step3_execute.capture_baseline")
+    @patch("spec.workflow.step3_execute.check_dirty_working_tree")
+    @patch("spec.workflow.step3_execute.print_error")
     def test_returns_false_on_capture_failure(
         self, mock_error, mock_check_dirty, mock_capture, workflow_state
     ):
         """Returns False when baseline capture fails."""
-        from specflow.workflow.step3_execute import _capture_baseline_for_diffs
+        from spec.workflow.step3_execute import _capture_baseline_for_diffs
 
         mock_check_dirty.return_value = True
         mock_capture.side_effect = Exception("Git error")

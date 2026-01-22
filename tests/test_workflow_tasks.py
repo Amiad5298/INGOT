@@ -3,7 +3,7 @@
 
 import pytest
 
-from specflow.workflow.tasks import (
+from spec.workflow.tasks import (
     Task,
     TaskStatus,
     format_task_list,
@@ -388,12 +388,12 @@ class TestTaskCategory:
 
     def test_fundamental_value(self):
         """FUNDAMENTAL has correct string value."""
-        from specflow.workflow.tasks import TaskCategory
+        from spec.workflow.tasks import TaskCategory
         assert TaskCategory.FUNDAMENTAL.value == "fundamental"
 
     def test_independent_value(self):
         """INDEPENDENT has correct string value."""
-        from specflow.workflow.tasks import TaskCategory
+        from spec.workflow.tasks import TaskCategory
         assert TaskCategory.INDEPENDENT.value == "independent"
 
 
@@ -407,7 +407,7 @@ class TestParseTaskMetadata:
 
     def test_parses_fundamental_category(self):
         """Parses 'category: fundamental' correctly."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!-- category: fundamental, order: 1 -->",
@@ -422,7 +422,7 @@ class TestParseTaskMetadata:
 
     def test_parses_independent_category(self):
         """Parses 'category: independent' correctly."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!-- category: independent, group: ui -->",
@@ -436,7 +436,7 @@ class TestParseTaskMetadata:
 
     def test_parses_order_field(self):
         """Parses 'order: N' correctly."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- category: fundamental, order: 5 -->",
@@ -448,7 +448,7 @@ class TestParseTaskMetadata:
 
     def test_parses_group_field(self):
         """Parses 'group: name' correctly."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- category: independent, group: backend -->",
@@ -460,7 +460,7 @@ class TestParseTaskMetadata:
 
     def test_handles_missing_metadata(self):
         """Returns defaults when no metadata comment."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "## Tasks",
@@ -475,7 +475,7 @@ class TestParseTaskMetadata:
 
     def test_handles_partial_metadata(self):
         """Handles metadata with only some fields."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!-- category: fundamental -->",
@@ -488,7 +488,7 @@ class TestParseTaskMetadata:
 
     def test_case_insensitive_parsing(self):
         """Parses 'Category: FUNDAMENTAL' correctly."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!-- category: FUNDAMENTAL, order: 2 -->",
@@ -510,7 +510,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_parses_single_file(self):
         """Parses single file in files metadata."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- files: src/models/user.py -->",
@@ -522,7 +522,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_parses_multiple_comma_separated_files(self):
         """Parses multiple comma-separated files."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- files: src/models/user.py, src/db/migrations/001.py, tests/test_user.py -->",
@@ -538,7 +538,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_parses_files_on_separate_line_from_category(self):
         """Parses files metadata on separate line from category."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!-- category: fundamental, order: 1 -->",
@@ -553,7 +553,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_parses_files_above_category(self):
         """Parses files metadata above category line."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!-- files: src/api/login.py -->",
@@ -568,7 +568,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_handles_empty_files_list(self):
         """Handles empty files metadata gracefully."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- files: -->",
@@ -580,7 +580,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_handles_missing_files_metadata(self):
         """Returns empty list when no files metadata present."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- category: fundamental, order: 1 -->",
@@ -592,7 +592,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_handles_whitespace_in_file_paths(self):
         """Handles extra whitespace around file paths."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- files:   src/file1.py  ,  src/file2.py  -->",
@@ -604,7 +604,7 @@ class TestTargetFilesMetadataParsing:
 
     def test_parses_files_with_blank_lines_above_task(self):
         """Parses files metadata with blank lines between metadata and task."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!-- category: independent, group: utils -->",
@@ -680,7 +680,7 @@ class TestGetFundamentalTasks:
 
     def test_returns_only_fundamental_tasks(self):
         """Filters to fundamental category only."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
             Task(name="Schema", category=TaskCategory.FUNDAMENTAL),
@@ -695,7 +695,7 @@ class TestGetFundamentalTasks:
 
     def test_returns_empty_when_none_exist(self):
         """Returns empty list when no fundamental tasks."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
             Task(name="UI Component", category=TaskCategory.INDEPENDENT),
@@ -708,7 +708,7 @@ class TestGetFundamentalTasks:
 
     def test_preserves_order(self):
         """Tasks returned in dependency_order."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
             Task(name="Third", category=TaskCategory.FUNDAMENTAL, dependency_order=3),
@@ -731,7 +731,7 @@ class TestGetIndependentTasks:
 
     def test_returns_only_independent_tasks(self):
         """Filters to independent category only."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_independent_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_independent_tasks
 
         tasks = [
             Task(name="Schema", category=TaskCategory.FUNDAMENTAL),
@@ -746,7 +746,7 @@ class TestGetIndependentTasks:
 
     def test_returns_empty_when_none_exist(self):
         """Returns empty list when no independent tasks."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_independent_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_independent_tasks
 
         tasks = [
             Task(name="Schema", category=TaskCategory.FUNDAMENTAL),
@@ -768,7 +768,7 @@ class TestGetPendingFundamentalTasks:
 
     def test_excludes_completed_tasks(self):
         """Only returns non-completed fundamental tasks."""
-        from specflow.workflow.tasks import (
+        from spec.workflow.tasks import (
             Task,
             TaskCategory,
             TaskStatus,
@@ -787,7 +787,7 @@ class TestGetPendingFundamentalTasks:
 
     def test_excludes_independent_tasks(self):
         """Only returns fundamental tasks, not independent."""
-        from specflow.workflow.tasks import (
+        from spec.workflow.tasks import (
             Task,
             TaskCategory,
             TaskStatus,
@@ -815,7 +815,7 @@ class TestGetPendingIndependentTasks:
 
     def test_excludes_completed_tasks(self):
         """Only returns non-completed independent tasks."""
-        from specflow.workflow.tasks import (
+        from spec.workflow.tasks import (
             Task,
             TaskCategory,
             TaskStatus,
@@ -839,7 +839,7 @@ class TestFundamentalTaskOrdering:
 
     def test_sorts_by_dependency_order_then_line_number(self):
         """Fundamental tasks sort by dependency_order, then line_number."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
             Task(name="Task C", category=TaskCategory.FUNDAMENTAL, dependency_order=1, line_number=30),
@@ -858,7 +858,7 @@ class TestFundamentalTaskOrdering:
 
     def test_stable_ordering_with_same_values(self):
         """Tasks with same dependency_order and line_number maintain stable order."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         # All tasks have same dependency_order and line_number
         tasks = [
@@ -877,7 +877,7 @@ class TestFundamentalTaskOrdering:
 
     def test_explicit_order_comes_before_order_zero(self):
         """Tasks with explicit order (>0) come before tasks with order=0."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
             Task(name="NoOrder1", category=TaskCategory.FUNDAMENTAL, dependency_order=0, line_number=10),
@@ -897,7 +897,7 @@ class TestFundamentalTaskOrdering:
 
     def test_mixed_explicit_and_implicit_ordering(self):
         """Mixed explicit and implicit orders produce correct sequence."""
-        from specflow.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
+        from spec.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
             # Implicit order tasks (order=0), sorted by line_number
@@ -941,28 +941,28 @@ class TestNormalizePath:
 
     def test_trims_whitespace(self, tmp_path):
         """Trims leading and trailing whitespace."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         assert normalize_path("  src/file.py  ", repo_root=tmp_path) == "src/file.py"
         assert normalize_path("\tsrc/file.py\n", repo_root=tmp_path) == "src/file.py"
 
     def test_standardizes_separators(self, tmp_path):
         """Converts backslashes to forward slashes."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         assert normalize_path("src\\utils\\file.py", repo_root=tmp_path) == "src/utils/file.py"
         assert normalize_path("src\\\\nested\\\\file.py", repo_root=tmp_path) == "src/nested/file.py"
 
     def test_resolves_dot_components(self, tmp_path):
         """Resolves ./ and removes it."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         assert normalize_path("./src/file.py", repo_root=tmp_path) == "src/file.py"
         assert normalize_path("src/./utils/./file.py", repo_root=tmp_path) == "src/utils/file.py"
 
     def test_resolves_double_dot_components(self, tmp_path):
         """Resolves ../ components in paths that stay within repo."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         # Create directories so paths resolve correctly
         (tmp_path / "src").mkdir()
@@ -973,7 +973,7 @@ class TestNormalizePath:
 
     def test_empty_path_returns_empty_string(self, tmp_path):
         """Empty or whitespace-only paths return empty string."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         assert normalize_path("", repo_root=tmp_path) == ""
         assert normalize_path("   ", repo_root=tmp_path) == ""
@@ -981,7 +981,7 @@ class TestNormalizePath:
 
     def test_equivalent_paths_normalize_same(self, tmp_path):
         """Equivalent paths normalize to the same string."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         # Create src directory
         (tmp_path / "src").mkdir()
@@ -998,7 +998,7 @@ class TestNormalizePathWithRepoRoot:
 
     def test_resolves_relative_to_repo_root(self, tmp_path):
         """Resolves relative paths against repo_root."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         # Create a file structure
         (tmp_path / "src").mkdir()
@@ -1009,7 +1009,7 @@ class TestNormalizePathWithRepoRoot:
 
     def test_jail_check_raises_on_escape(self, tmp_path):
         """Raises PathSecurityError when path escapes repo_root."""
-        from specflow.workflow.tasks import PathSecurityError, normalize_path
+        from spec.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError) as exc_info:
             normalize_path("../outside_repo.txt", repo_root=tmp_path)
@@ -1019,14 +1019,14 @@ class TestNormalizePathWithRepoRoot:
 
     def test_jail_check_on_deeply_nested_escape(self, tmp_path):
         """Raises PathSecurityError on deeply nested escape attempt."""
-        from specflow.workflow.tasks import PathSecurityError, normalize_path
+        from spec.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
             normalize_path("src/../../../../../../etc/passwd", repo_root=tmp_path)
 
     def test_jail_check_allows_valid_nested_paths(self, tmp_path):
         """Allows valid nested paths that stay within repo."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         # Path that goes up and back down but stays within repo
         (tmp_path / "src").mkdir()
@@ -1037,7 +1037,7 @@ class TestNormalizePathWithRepoRoot:
 
     def test_jail_check_on_absolute_path_outside_repo(self, tmp_path):
         """Raises PathSecurityError on absolute path outside repo."""
-        from specflow.workflow.tasks import PathSecurityError, normalize_path
+        from spec.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
             normalize_path("/etc/passwd", repo_root=tmp_path)
@@ -1052,7 +1052,7 @@ class TestDeduplicatePaths:
 
     def test_removes_exact_duplicates(self, tmp_path):
         """Removes exact duplicate paths."""
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         paths = ["src/file.py", "src/other.py", "src/file.py"]
         result = deduplicate_paths(paths, repo_root=tmp_path)
@@ -1061,7 +1061,7 @@ class TestDeduplicatePaths:
 
     def test_removes_equivalent_duplicates(self, tmp_path):
         """Removes duplicates that differ only by normalization."""
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         # Create src directory
         (tmp_path / "src").mkdir()
@@ -1074,7 +1074,7 @@ class TestDeduplicatePaths:
 
     def test_preserves_order(self, tmp_path):
         """Preserves insertion order of first occurrence."""
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         paths = ["z_file.py", "a_file.py", "m_file.py"]
         result = deduplicate_paths(paths, repo_root=tmp_path)
@@ -1083,7 +1083,7 @@ class TestDeduplicatePaths:
 
     def test_removes_empty_paths(self, tmp_path):
         """Removes empty strings from result."""
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         paths = ["src/file.py", "", "  ", "src/other.py"]
         result = deduplicate_paths(paths, repo_root=tmp_path)
@@ -1092,13 +1092,13 @@ class TestDeduplicatePaths:
 
     def test_handles_empty_list(self, tmp_path):
         """Handles empty input list."""
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         assert deduplicate_paths([], repo_root=tmp_path) == []
 
     def test_deduplicates_with_repo_root(self, tmp_path):
         """Deduplicates using repo_root for normalization."""
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         (tmp_path / "src").mkdir()
 
@@ -1110,7 +1110,7 @@ class TestDeduplicatePaths:
 
     def test_raises_on_security_violation(self, tmp_path):
         """Raises PathSecurityError if any path escapes repo."""
-        from specflow.workflow.tasks import PathSecurityError, deduplicate_paths
+        from spec.workflow.tasks import PathSecurityError, deduplicate_paths
 
         paths = ["src/file.py", "../outside.py"]
 
@@ -1123,7 +1123,7 @@ class TestPathSecurityError:
 
     def test_exception_attributes(self):
         """Exception stores path and repo_root attributes."""
-        from specflow.workflow.tasks import PathSecurityError
+        from spec.workflow.tasks import PathSecurityError
 
         error = PathSecurityError("../bad/path.txt", "/repo/root")
 
@@ -1132,7 +1132,7 @@ class TestPathSecurityError:
 
     def test_exception_message(self):
         """Exception message contains path and repo info."""
-        from specflow.workflow.tasks import PathSecurityError
+        from spec.workflow.tasks import PathSecurityError
 
         error = PathSecurityError("../escape.txt", "/my/repo")
 
@@ -1152,7 +1152,7 @@ class TestMultilineMetadataParsing:
 
     def test_parses_multiline_files_comment(self):
         """Parses files metadata spanning multiple lines."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!--",
@@ -1172,7 +1172,7 @@ class TestMultilineMetadataParsing:
 
     def test_parses_multiline_category_and_files(self):
         """Parses multiline comment with both category and files."""
-        from specflow.workflow.tasks import TaskCategory, _parse_task_metadata
+        from spec.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
             "<!--",
@@ -1189,7 +1189,7 @@ class TestMultilineMetadataParsing:
 
     def test_parses_files_with_newline_separators(self):
         """Parses files separated by newlines with trailing commas."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         # Note: When files are on separate lines, trailing commas are recommended
         # to ensure proper parsing after multiline comment joining
@@ -1208,7 +1208,7 @@ class TestMultilineMetadataParsing:
 
     def test_parses_three_plus_line_comment(self):
         """Parses metadata block spanning 3+ lines (required test case)."""
-        from specflow.workflow.tasks import parse_task_list
+        from spec.workflow.tasks import parse_task_list
 
         content = """## Tasks
 <!--
@@ -1234,7 +1234,7 @@ class TestMultilineMetadataParsing:
 
     def test_handles_mixed_single_and_multiline_comments(self):
         """Handles mix of single-line and multi-line comments."""
-        from specflow.workflow.tasks import parse_task_list
+        from spec.workflow.tasks import parse_task_list
 
         content = """## Tasks
 <!-- category: fundamental, order: 1 -->
@@ -1263,7 +1263,7 @@ class TestMultilineMetadataParsing:
 
     def test_multiline_with_blank_lines_above_task(self):
         """Handles multiline comment with blank lines before task."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!--",
@@ -1288,7 +1288,7 @@ class TestRoundTripPersistence:
 
     def test_round_trip_preserves_target_files(self):
         """Parse -> format -> parse preserves target_files exactly."""
-        from specflow.workflow.tasks import format_task_list, parse_task_list
+        from spec.workflow.tasks import format_task_list, parse_task_list
 
         original_content = """## Tasks
 <!-- category: independent, group: api -->
@@ -1318,7 +1318,7 @@ class TestRoundTripPersistence:
 
     def test_round_trip_preserves_category_and_order(self):
         """Parse -> format -> parse preserves category and order."""
-        from specflow.workflow.tasks import TaskCategory, format_task_list, parse_task_list
+        from spec.workflow.tasks import TaskCategory, format_task_list, parse_task_list
 
         original_content = """## Fundamental Tasks
 <!-- category: fundamental, order: 1 -->
@@ -1349,7 +1349,7 @@ class TestRoundTripPersistence:
 
     def test_round_trip_preserves_task_status(self):
         """Parse -> format -> parse preserves complete/pending status."""
-        from specflow.workflow.tasks import TaskStatus, format_task_list, parse_task_list
+        from spec.workflow.tasks import TaskStatus, format_task_list, parse_task_list
 
         original_content = """<!-- category: fundamental, order: 1 -->
 - [x] Completed task
@@ -1366,7 +1366,7 @@ class TestRoundTripPersistence:
 
     def test_round_trip_preserves_indentation(self):
         """Parse -> format -> parse preserves task indentation."""
-        from specflow.workflow.tasks import format_task_list, parse_task_list
+        from spec.workflow.tasks import format_task_list, parse_task_list
 
         original_content = """<!-- category: fundamental -->
 - [ ] Parent task
@@ -1385,7 +1385,7 @@ class TestRoundTripPersistence:
 
     def test_round_trip_with_empty_target_files(self):
         """Parse -> format -> parse handles tasks with no target_files."""
-        from specflow.workflow.tasks import format_task_list, parse_task_list
+        from spec.workflow.tasks import format_task_list, parse_task_list
 
         original_content = """<!-- category: fundamental, order: 1 -->
 - [ ] Task without files
@@ -1402,7 +1402,7 @@ class TestRoundTripPersistence:
 
     def test_round_trip_preserves_all_metadata_fields(self):
         """Full round-trip test preserving all metadata fields."""
-        from specflow.workflow.tasks import TaskCategory, format_task_list, parse_task_list
+        from spec.workflow.tasks import TaskCategory, format_task_list, parse_task_list
 
         original_content = """<!-- category: independent, group: batch -->
 <!-- files: src/batch/processor.py, src/batch/handler.py, tests/batch/test_processor.py -->
@@ -1427,7 +1427,7 @@ class TestRoundTripPersistence:
 
     def test_format_includes_category_metadata(self):
         """format_task_list includes category metadata in output."""
-        from specflow.workflow.tasks import Task, TaskCategory, format_task_list
+        from spec.workflow.tasks import Task, TaskCategory, format_task_list
 
         tasks = [
             Task(
@@ -1449,7 +1449,7 @@ class TestRoundTripPersistence:
 
     def test_format_includes_files_metadata(self):
         """format_task_list includes files metadata in output."""
-        from specflow.workflow.tasks import Task, TaskCategory, format_task_list
+        from spec.workflow.tasks import Task, TaskCategory, format_task_list
 
         tasks = [
             Task(
@@ -1475,7 +1475,7 @@ class TestMetadataBleedPrevention:
 
     def test_metadata_followed_by_text_then_task(self):
         """Metadata followed by text paragraph, then task - metadata should NOT attach."""
-        from specflow.workflow.tasks import parse_task_list
+        from spec.workflow.tasks import parse_task_list
 
         content = """## Tasks
 <!-- category: independent, group: api -->
@@ -1499,7 +1499,7 @@ It should prevent the metadata from attaching to the task.
 
     def test_metadata_immediately_before_task(self):
         """Metadata immediately before task should attach correctly."""
-        from specflow.workflow.tasks import parse_task_list
+        from spec.workflow.tasks import parse_task_list
 
         content = """## Tasks
 <!-- category: independent, group: api -->
@@ -1517,7 +1517,7 @@ It should prevent the metadata from attaching to the task.
 
     def test_metadata_with_blank_lines_still_attaches(self):
         """Metadata with only blank lines before task should still attach."""
-        from specflow.workflow.tasks import parse_task_list
+        from spec.workflow.tasks import parse_task_list
 
         content = """## Tasks
 <!-- category: independent, group: api -->
@@ -1535,7 +1535,7 @@ It should prevent the metadata from attaching to the task.
 
     def test_text_between_metadata_and_task_blocks_attachment(self):
         """Text content between metadata and task blocks attachment."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- category: independent, group: api -->",
@@ -1552,7 +1552,7 @@ It should prevent the metadata from attaching to the task.
 
     def test_multiple_tasks_each_get_own_metadata(self):
         """Each task gets only its own metadata, not from other tasks."""
-        from specflow.workflow.tasks import parse_task_list
+        from spec.workflow.tasks import parse_task_list
 
         content = """## Tasks
 <!-- category: independent, group: group1 -->
@@ -1577,7 +1577,7 @@ It should prevent the metadata from attaching to the task.
 
     def test_orphan_metadata_does_not_attach_to_later_task(self):
         """Orphan metadata (no task after) doesn't attach to later tasks."""
-        from specflow.workflow.tasks import parse_task_list
+        from spec.workflow.tasks import parse_task_list
 
         content = """## Section 1
 <!-- category: independent, group: orphan -->
@@ -1597,7 +1597,7 @@ It should prevent the metadata from attaching to the task.
 
     def test_heading_between_metadata_and_task_blocks_attachment(self):
         """Heading between metadata and task blocks attachment."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- category: independent, group: api -->",
@@ -1614,7 +1614,7 @@ It should prevent the metadata from attaching to the task.
 
     def test_code_block_between_metadata_and_task_blocks_attachment(self):
         """Code block between metadata and task blocks attachment."""
-        from specflow.workflow.tasks import _parse_task_metadata
+        from spec.workflow.tasks import _parse_task_metadata
 
         lines = [
             "<!-- category: independent, group: api -->",
@@ -1651,7 +1651,7 @@ class TestSecurityRegressions:
 
     def test_malicious_path_traversal_raises_security_error(self, tmp_path):
         """SECURITY: Malicious path ../outside.py with repo_root raises PathSecurityError."""
-        from specflow.workflow.tasks import PathSecurityError, normalize_path
+        from spec.workflow.tasks import PathSecurityError, normalize_path
 
         # Attempt directory traversal attack
         with pytest.raises(PathSecurityError) as exc_info:
@@ -1664,14 +1664,14 @@ class TestSecurityRegressions:
 
     def test_deeply_nested_traversal_attack(self, tmp_path):
         """SECURITY: Deeply nested traversal ../../../../../../etc/passwd is blocked."""
-        from specflow.workflow.tasks import PathSecurityError, normalize_path
+        from spec.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
             normalize_path("src/../../../../../../etc/passwd", repo_root=tmp_path)
 
     def test_path_normalization_detects_collision(self, tmp_path):
         """SECURITY: src/foo.py and ./src/foo.py normalize to same path (collision detection)."""
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         # Create src directory
         (tmp_path / "src").mkdir()
@@ -1684,7 +1684,7 @@ class TestSecurityRegressions:
 
     def test_deduplicate_detects_normalized_collision(self, tmp_path):
         """SECURITY: deduplicate_paths treats ./src/foo.py and src/foo.py as same file."""
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         # Create src directory
         (tmp_path / "src").mkdir()
@@ -1699,7 +1699,7 @@ class TestSecurityRegressions:
 
     def test_absolute_path_outside_repo_blocked(self, tmp_path):
         """SECURITY: Absolute paths outside repo are blocked."""
-        from specflow.workflow.tasks import PathSecurityError, normalize_path
+        from spec.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
             normalize_path("/etc/passwd", repo_root=tmp_path)
@@ -1707,7 +1707,7 @@ class TestSecurityRegressions:
     def test_symlink_escape_attempt_blocked(self, tmp_path):
         """SECURITY: Symlink-based escape attempts are blocked by resolve()."""
 
-        from specflow.workflow.tasks import PathSecurityError, normalize_path
+        from spec.workflow.tasks import PathSecurityError, normalize_path
 
         # Create a symlink pointing outside the repo
         outside_dir = tmp_path.parent / "outside_target"
@@ -1728,7 +1728,7 @@ class TestSecurityRegressions:
         """SECURITY: normalize_path requires repo_root (no default None)."""
         import inspect
 
-        from specflow.workflow.tasks import normalize_path
+        from spec.workflow.tasks import normalize_path
 
         # Verify repo_root has no default value (is required)
         sig = inspect.signature(normalize_path)
@@ -1742,7 +1742,7 @@ class TestSecurityRegressions:
         """SECURITY: deduplicate_paths requires repo_root (no default None)."""
         import inspect
 
-        from specflow.workflow.tasks import deduplicate_paths
+        from spec.workflow.tasks import deduplicate_paths
 
         # Verify repo_root has no default value (is required)
         sig = inspect.signature(deduplicate_paths)

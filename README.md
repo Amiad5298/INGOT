@@ -55,7 +55,7 @@ Dramatically reduce implementation time:
 ### 🔧 Git Integration Details
 SPEC integrates with Git while giving you full control over your commits:
 
-- **Automatic `.gitignore` Configuration**: On first run, SPEC automatically adds patterns to your project's `.gitignore` to exclude run logs (`.specflow/` and `*.log`), keeping your repository clean without manual configuration.
+- **Automatic `.gitignore` Configuration**: On first run, SPEC automatically adds patterns to your project's `.gitignore` to exclude run logs (`.spec/` and `*.log`), keeping your repository clean without manual configuration.
 
 - **Manual Staging by Design**: SPEC generates and modifies files but does **not** automatically stage them with `git add`. This gives you full control to review changes before committing. After execution, you'll see a note reminding you to manually `git add` files you want to include.
 
@@ -112,7 +112,7 @@ Example task list with file annotations:
 
 ```bash
 # Install SPEC
-pip install specflow
+pip install spec
 
 # Navigate to your git repository
 cd your-project
@@ -210,7 +210,7 @@ Run logs are stored in `.spec/runs/{ticket}/` for debugging and audit purposes.
 ### Install from PyPI
 
 ```bash
-pip install specflow
+pip install spec
 ```
 
 ### Install from Source
@@ -359,7 +359,7 @@ spec PROJ-202 --fail-fast
 
 ### Configuration File
 
-SPECFLOW stores configuration in `~/.specflow-config`:
+SPEC stores configuration in `~/.spec-config`:
 
 ```bash
 # AI Model Configuration
@@ -472,7 +472,7 @@ SPEC tracks agent file versions:
 ## Project Structure
 
 ```
-specflow/
+spec/
 ├── __init__.py          # Version and constants
 ├── __main__.py          # Module entry point (python -m specflow)
 ├── cli.py               # CLI entry point and command handling

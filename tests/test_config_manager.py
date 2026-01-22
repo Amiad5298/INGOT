@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from specflow.config.manager import ConfigManager
+from spec.config.manager import ConfigManager
 
 
 class TestConfigManagerLoad:
@@ -253,9 +253,9 @@ class TestConfigManagerGet:
 class TestConfigManagerShow:
     """Tests for ConfigManager.show method."""
 
-    @patch("specflow.utils.console.print_header")
-    @patch("specflow.utils.console.print_info")
-    @patch("specflow.utils.console.console")
+    @patch("spec.utils.console.print_header")
+    @patch("spec.utils.console.print_info")
+    @patch("spec.utils.console.console")
     def test_show_missing_file(self, mock_console, mock_info, mock_header, tmp_path):
         """Shows message when config file doesn't exist."""
         config_path = tmp_path / "missing"
@@ -266,9 +266,9 @@ class TestConfigManagerShow:
         mock_header.assert_called_once()
         assert mock_info.call_count >= 1
 
-    @patch("specflow.utils.console.print_header")
-    @patch("specflow.utils.console.print_info")
-    @patch("specflow.utils.console.console")
+    @patch("spec.utils.console.print_header")
+    @patch("spec.utils.console.print_info")
+    @patch("spec.utils.console.console")
     def test_show_displays_settings(self, mock_console, mock_info, mock_header, temp_config_file):
         """Shows all settings from config file."""
         manager = ConfigManager(temp_config_file)
@@ -287,7 +287,7 @@ class TestCascadingConfigHierarchy:
     def test_global_config_loaded(self, tmp_path):
         """Global config values are loaded."""
         # Create global config
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
 
         manager = ConfigManager(global_config)
@@ -298,13 +298,13 @@ class TestCascadingConfigHierarchy:
     def test_local_overrides_global(self, tmp_path, monkeypatch):
         """Local config overrides global config."""
         # Create global config
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
 
         # Create local config in a subdirectory
         project_dir = tmp_path / "project"
         project_dir.mkdir()
-        local_config = project_dir / ".specflow"
+        local_config = project_dir / ".spec"
         local_config.write_text('DEFAULT_MODEL="local-model"\n')
 
         # Create fake .git to mark repo root
@@ -322,13 +322,13 @@ class TestCascadingConfigHierarchy:
     def test_environment_overrides_all(self, tmp_path, monkeypatch):
         """Environment variables override local and global config."""
         # Create global config
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
 
         # Create local config
         project_dir = tmp_path / "project"
         project_dir.mkdir()
-        local_config = project_dir / ".specflow"
+        local_config = project_dir / ".spec"
         local_config.write_text('DEFAULT_MODEL="local-model"\n')
         (project_dir / ".git").mkdir()
         monkeypatch.chdir(project_dir)
@@ -344,7 +344,7 @@ class TestCascadingConfigHierarchy:
     def test_multiple_keys_from_different_sources(self, tmp_path, monkeypatch):
         """Different keys can come from different sources."""
         # Global has multiple keys
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         global_config.write_text('''DEFAULT_MODEL="global-model"
 PLANNING_MODEL="global-planning"
 DEFAULT_JIRA_PROJECT="GLOBAL"
@@ -353,7 +353,7 @@ DEFAULT_JIRA_PROJECT="GLOBAL"
         # Local overrides one key
         project_dir = tmp_path / "project"
         project_dir.mkdir()
-        local_config = project_dir / ".specflow"
+        local_config = project_dir / ".spec"
         local_config.write_text('DEFAULT_JIRA_PROJECT="LOCAL"\n')
         (project_dir / ".git").mkdir()
         monkeypatch.chdir(project_dir)
@@ -373,10 +373,10 @@ class TestFindLocalConfig:
     """Tests for _find_local_config method."""
 
     def test_finds_config_in_cwd(self, tmp_path, monkeypatch):
-        """Finds .specflow in current directory."""
+        """Finds .spec in current directory."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
-        local_config = project_dir / ".specflow"
+        local_config = project_dir / ".spec"
         local_config.write_text("TEST_KEY=value\n")
         (project_dir / ".git").mkdir()
         monkeypatch.chdir(project_dir)
@@ -387,12 +387,12 @@ class TestFindLocalConfig:
         assert found == local_config
 
     def test_finds_config_in_parent(self, tmp_path, monkeypatch):
-        """Finds .specflow in parent directory."""
+        """Finds .spec in parent directory."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         sub_dir = project_dir / "src" / "module"
         sub_dir.mkdir(parents=True)
-        local_config = project_dir / ".specflow"
+        local_config = project_dir / ".spec"
         local_config.write_text("TEST_KEY=value\n")
         (project_dir / ".git").mkdir()
         monkeypatch.chdir(sub_dir)
@@ -411,7 +411,7 @@ class TestFindLocalConfig:
         (project / ".git").mkdir()
 
         # Config above .git should not be found
-        (workspace / ".specflow").write_text("TEST_KEY=value\n")
+        (workspace / ".spec").write_text("TEST_KEY=value\n")
         monkeypatch.chdir(project)
 
         manager = ConfigManager()
@@ -420,7 +420,7 @@ class TestFindLocalConfig:
         assert found is None
 
     def test_returns_none_if_not_found(self, tmp_path, monkeypatch):
-        """Returns None when no .specflow exists."""
+        """Returns None when no .spec exists."""
         project = tmp_path / "empty-project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -431,13 +431,13 @@ class TestFindLocalConfig:
 
         assert found is None
 
-    def test_ignores_specflow_directory(self, tmp_path, monkeypatch):
-        """Ignores .specflow if it is a directory, not a file."""
+    def test_ignores_spec_directory(self, tmp_path, monkeypatch):
+        """Ignores .spec if it is a directory, not a file."""
         project = tmp_path / "project"
         project.mkdir()
-        # Create .specflow as a directory instead of a file
-        specflow_dir = project / ".specflow"
-        specflow_dir.mkdir()
+        # Create .spec as a directory instead of a file
+        spec_dir = project / ".spec"
+        spec_dir.mkdir()
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
@@ -496,7 +496,7 @@ class TestConfigManagerPathAccessors:
         """local_config_path is set after load finds local config."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
-        local_config = project_dir / ".specflow"
+        local_config = project_dir / ".spec"
         local_config.write_text("TEST=value\n")
         (project_dir / ".git").mkdir()
         monkeypatch.chdir(project_dir)
@@ -531,7 +531,7 @@ class TestConfigManagerIdempotency:
         # First load with local config
         project1 = tmp_path / "project1"
         project1.mkdir()
-        local1 = project1 / ".specflow"
+        local1 = project1 / ".spec"
         local1.write_text("TEST=value1\n")
         (project1 / ".git").mkdir()
         monkeypatch.chdir(project1)
@@ -591,7 +591,7 @@ class TestConfigManagerSaveScope:
 
         manager.save("LOCAL_KEY", "local_value", scope="local")
 
-        local_config = project / ".specflow"
+        local_config = project / ".spec"
         assert local_config.exists()
         assert 'LOCAL_KEY="local_value"' in local_config.read_text()
 
@@ -606,7 +606,7 @@ class TestConfigManagerSaveScope:
         """save() returns warning when local config overrides saved value."""
         project = tmp_path / "project"
         project.mkdir()
-        local_config = project / ".specflow"
+        local_config = project / ".spec"
         local_config.write_text('OVERRIDE_KEY="local-value"\n')
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
@@ -646,7 +646,7 @@ class TestConfigManagerSaveScope:
         assert warning is None
 
     def test_save_to_local_creates_file(self, tmp_path, monkeypatch):
-        """save() with scope='local' creates .specflow if it doesn't exist."""
+        """save() with scope='local' creates .spec if it doesn't exist."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -658,7 +658,7 @@ class TestConfigManagerSaveScope:
 
         manager.save("NEW_KEY", "new_value", scope="local")
 
-        local_config = project / ".specflow"
+        local_config = project / ".spec"
         assert local_config.exists()
         assert 'NEW_KEY="new_value"' in local_config.read_text()
 
@@ -678,12 +678,12 @@ class TestConfigManagerSavePrecedence:
         the local (higher priority) value.
         """
         # Setup: global has one value, local has a different value
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
 
         project = tmp_path / "project"
         project.mkdir()
-        local_config = project / ".specflow"
+        local_config = project / ".spec"
         local_config.write_text('DEFAULT_MODEL="local-model"\n')
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
@@ -719,7 +719,7 @@ class TestConfigManagerSavePrecedence:
         # Setup: set environment variable
         monkeypatch.setenv("DEFAULT_MODEL", "env-model")
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
         manager.load()
 
@@ -756,7 +756,7 @@ class TestConfigManagerSavePrecedence:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
         manager.load()
 
@@ -772,7 +772,7 @@ class TestConfigManagerSavePrecedence:
         assert "environment" in warning.lower()
 
         # Assert: local file was created with new value
-        local_config = project / ".specflow"
+        local_config = project / ".spec"
         assert local_config.exists()
         assert 'DEFAULT_MODEL="new-local"' in local_config.read_text()
 
@@ -786,7 +786,7 @@ class TestConfigManagerSavePrecedence:
         Verifies that when saving to global config without any local
         or env overrides, the in-memory settings are updated.
         """
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
         manager.load()
 
@@ -817,7 +817,7 @@ class TestConfigManagerSavePrecedence:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
 
         manager = ConfigManager(global_config)
@@ -833,7 +833,7 @@ class TestConfigManagerSavePrecedence:
         assert warning is None
 
         # Assert: local file was created with new value
-        local_config = project / ".specflow"
+        local_config = project / ".spec"
         assert local_config.exists()
         assert 'DEFAULT_MODEL="new-local"' in local_config.read_text()
 
@@ -848,7 +848,7 @@ class TestConfigManagerSavePrecedence:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
         # Don't call load() first to test save creating local config
 
@@ -856,7 +856,7 @@ class TestConfigManagerSavePrecedence:
         manager.save("TEST_KEY", "test_value", scope="local")
 
         # Assert: local_config_path is set correctly
-        expected_path = project / ".specflow"
+        expected_path = project / ".spec"
         assert manager.local_config_path == expected_path
         assert manager.local_config_path.exists()
 
@@ -907,9 +907,9 @@ class TestConfigManagerSensitiveValueMasking:
         monkeypatch.chdir(project)
 
         # Enable logging
-        monkeypatch.setenv("SPECFLOW_LOG", "true")
+        monkeypatch.setenv("SPEC_LOG", "true")
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
 
         # Capture logs
@@ -957,7 +957,7 @@ class TestConfigManagerQuoteEscaping:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
 
         # Save value with quotes
@@ -978,7 +978,7 @@ class TestConfigManagerQuoteEscaping:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
 
         # Save value with backslashes
@@ -999,7 +999,7 @@ class TestConfigManagerQuoteEscaping:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
 
         # Save value with multiple special characters
@@ -1020,7 +1020,7 @@ class TestConfigManagerQuoteEscaping:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
 
         # Manually write a config file with single-quoted value containing backslashes
         # In bash single quotes, \\ is literal (not an escape sequence)
@@ -1040,7 +1040,7 @@ class TestConfigManagerQuoteEscaping:
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
 
         # Manually write a config file with double-quoted escaped value
         # This represents a value that was escaped on save
@@ -1069,16 +1069,16 @@ class TestConfigManagerRepoRootDetection:
         # Change to nested directory
         monkeypatch.chdir(nested_dir)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
 
         # Act: save to local scope
         manager.save("PROJECT_SETTING", "value", scope="local")
 
         # Assert: config created at repo root, not in nested dir
-        expected_path = repo_root / ".specflow"
+        expected_path = repo_root / ".spec"
         assert expected_path.exists()
-        assert not (nested_dir / ".specflow").exists()
+        assert not (nested_dir / ".spec").exists()
         assert manager.local_config_path == expected_path
 
     def test_save_local_falls_back_to_cwd_without_git(self, tmp_path, monkeypatch):
@@ -1088,13 +1088,13 @@ class TestConfigManagerRepoRootDetection:
         project.mkdir()
         monkeypatch.chdir(project)
 
-        global_config = tmp_path / ".specflow-config"
+        global_config = tmp_path / ".spec-config"
         manager = ConfigManager(global_config)
 
         # Act: save to local scope
         manager.save("SETTING", "value", scope="local")
 
         # Assert: config created in cwd
-        expected_path = project / ".specflow"
+        expected_path = project / ".spec"
         assert expected_path.exists()
         assert manager.local_config_path == expected_path

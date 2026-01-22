@@ -1,4 +1,4 @@
-"""Tests for specflow.utils.logging module."""
+"""Tests for spec.utils.logging module."""
 
 import os
 from pathlib import Path
@@ -9,12 +9,12 @@ class TestLogging:
     """Tests for logging functionality."""
 
     def test_log_disabled_by_default(self):
-        """Logging is disabled when SPECFLOW_LOG is not set."""
+        """Logging is disabled when SPEC_LOG is not set."""
         with patch.dict(os.environ, {}, clear=True):
             # Need to reimport to pick up env changes
             import importlib
 
-            import specflow.utils.logging as logging_module
+            import spec.utils.logging as logging_module
 
             # Reset the module state
             logging_module._logger = None
@@ -23,11 +23,11 @@ class TestLogging:
             assert logging_module.LOG_ENABLED is False
 
     def test_log_enabled_with_env_var(self):
-        """Logging is enabled when SPECFLOW_LOG=true."""
-        with patch.dict(os.environ, {"SPECFLOW_LOG": "true"}):
+        """Logging is enabled when SPEC_LOG=true."""
+        with patch.dict(os.environ, {"SPEC_LOG": "true"}):
             import importlib
 
-            import specflow.utils.logging as logging_module
+            import spec.utils.logging as logging_module
 
             logging_module._logger = None
             importlib.reload(logging_module)
@@ -36,18 +36,18 @@ class TestLogging:
 
     def test_log_file_default_path(self):
         """Default log file is in home directory."""
-        import specflow.utils.logging as logging_module
+        import spec.utils.logging as logging_module
 
-        expected = Path.home() / ".specflow.log"
+        expected = Path.home() / ".spec.log"
         assert logging_module.LOG_FILE == expected
 
     def test_log_file_custom_path(self):
         """Custom log file path from environment."""
         custom_path = "/tmp/custom-log.log"
-        with patch.dict(os.environ, {"SPECFLOW_LOG_FILE": custom_path}):
+        with patch.dict(os.environ, {"SPEC_LOG_FILE": custom_path}):
             import importlib
 
-            import specflow.utils.logging as logging_module
+            import spec.utils.logging as logging_module
 
             logging_module._logger = None
             importlib.reload(logging_module)
@@ -56,17 +56,17 @@ class TestLogging:
 
     def test_setup_logging_returns_logger(self):
         """setup_logging returns a logger instance."""
-        import specflow.utils.logging as logging_module
+        import spec.utils.logging as logging_module
 
         logging_module._logger = None
         logger = logging_module.setup_logging()
 
         assert logger is not None
-        assert logger.name == "specflow"
+        assert logger.name == "spec"
 
     def test_get_logger_returns_same_instance(self):
         """get_logger returns the same logger instance."""
-        import specflow.utils.logging as logging_module
+        import spec.utils.logging as logging_module
 
         logging_module._logger = None
         logger1 = logging_module.get_logger()
@@ -76,10 +76,10 @@ class TestLogging:
 
     def test_log_message_when_disabled(self):
         """log_message does nothing when logging is disabled."""
-        with patch.dict(os.environ, {"SPECFLOW_LOG": "false"}):
+        with patch.dict(os.environ, {"SPEC_LOG": "false"}):
             import importlib
 
-            import specflow.utils.logging as logging_module
+            import spec.utils.logging as logging_module
 
             logging_module._logger = None
             importlib.reload(logging_module)
@@ -92,12 +92,12 @@ class TestLogging:
         log_file = tmp_path / "test.log"
 
         with patch.dict(os.environ, {
-            "SPECFLOW_LOG": "true",
-            "SPECFLOW_LOG_FILE": str(log_file),
+            "SPEC_LOG": "true",
+            "SPEC_LOG_FILE": str(log_file),
         }):
             import importlib
 
-            import specflow.utils.logging as logging_module
+            import spec.utils.logging as logging_module
 
             logging_module._logger = None
             importlib.reload(logging_module)
@@ -116,12 +116,12 @@ class TestLogging:
         log_file = tmp_path / "test.log"
 
         with patch.dict(os.environ, {
-            "SPECFLOW_LOG": "true",
-            "SPECFLOW_LOG_FILE": str(log_file),
+            "SPEC_LOG": "true",
+            "SPEC_LOG_FILE": str(log_file),
         }):
             import importlib
 
-            import specflow.utils.logging as logging_module
+            import spec.utils.logging as logging_module
 
             logging_module._logger = None
             importlib.reload(logging_module)

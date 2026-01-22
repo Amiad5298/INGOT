@@ -4,10 +4,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specflow.integrations.jira import JiraTicket
-from specflow.ui.menus import TaskReviewChoice
-from specflow.workflow.state import WorkflowState
-from specflow.workflow.step2_tasklist import (
+from spec.integrations.jira import JiraTicket
+from spec.ui.menus import TaskReviewChoice
+from spec.workflow.state import WorkflowState
+from spec.workflow.step2_tasklist import (
     _create_default_tasklist,
     _display_tasklist,
     _edit_tasklist,
@@ -17,7 +17,7 @@ from specflow.workflow.step2_tasklist import (
     _parse_add_tasks_line,
     step_2_create_tasklist,
 )
-from specflow.workflow.tasks import parse_task_list
+from spec.workflow.tasks import parse_task_list
 
 
 @pytest.fixture
@@ -292,7 +292,7 @@ Task list updated successfully. Created: 13, Updated: 1, Deleted: 0.
         assert len(tasks) == 13, f"Expected 13 tasks, got {len(tasks)}"
 
         # Count tasks by category
-        from specflow.workflow.tasks import TaskCategory
+        from spec.workflow.tasks import TaskCategory
         fundamental_tasks = [t for t in tasks if t.category == TaskCategory.FUNDAMENTAL]
         independent_tasks = [t for t in tasks if t.category == TaskCategory.INDEPENDENT]
 
@@ -334,7 +334,7 @@ Task list updated successfully. Created: 13, Updated: 1, Deleted: 0.
 
         assert len(tasks) == 4
 
-        from specflow.workflow.tasks import TaskCategory
+        from spec.workflow.tasks import TaskCategory
 
         # First two should be FUNDAMENTAL
         assert tasks[0].category == TaskCategory.FUNDAMENTAL
@@ -436,7 +436,7 @@ class TestStrictParser:
         assert tasks[2].name == "Regular task"
 
         # Verify categories
-        from specflow.workflow.tasks import TaskCategory
+        from spec.workflow.tasks import TaskCategory
         assert tasks[0].category == TaskCategory.INDEPENDENT
         assert tasks[1].category == TaskCategory.FUNDAMENTAL
         assert tasks[2].category == TaskCategory.INDEPENDENT
@@ -445,7 +445,7 @@ class TestStrictParser:
 class TestGenerateTasklist:
     """Tests for _generate_tasklist function."""
 
-    @patch("specflow.workflow.step2_tasklist.AuggieClient")
+    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_persists_ai_output_to_file(
         self,
         mock_auggie_class,
@@ -484,7 +484,7 @@ class TestGenerateTasklist:
         assert len(tasks) == 3
         assert tasks[0].name == "Create user module"
 
-    @patch("specflow.workflow.step2_tasklist.AuggieClient")
+    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_uses_subagent_for_tasklist_generation(
         self,
         mock_auggie_class,
@@ -522,7 +522,7 @@ class TestGenerateTasklist:
         assert call_kwargs["agent"] == state.subagent_names["tasklist"]
         assert result is True
 
-    @patch("specflow.workflow.step2_tasklist.AuggieClient")
+    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_falls_back_to_default_when_no_tasks_extracted(
         self,
         mock_auggie_class,
@@ -558,9 +558,9 @@ class TestGenerateTasklist:
 class TestStep2CreateTasklist:
     """Tests for step_2_create_tasklist function."""
 
-    @patch("specflow.workflow.step2_tasklist.show_task_review_menu")
-    @patch("specflow.workflow.step2_tasklist._edit_tasklist")
-    @patch("specflow.workflow.step2_tasklist._generate_tasklist")
+    @patch("spec.workflow.step2_tasklist.show_task_review_menu")
+    @patch("spec.workflow.step2_tasklist._edit_tasklist")
+    @patch("spec.workflow.step2_tasklist._generate_tasklist")
     def test_edit_does_not_regenerate(
         self,
         mock_generate,
@@ -650,8 +650,8 @@ class TestStep2CreateTasklist:
         assert state.current_step == 3
         assert state.tasklist_file == tasklist_path
 
-    @patch("specflow.workflow.step2_tasklist.show_task_review_menu")
-    @patch("specflow.workflow.step2_tasklist._generate_tasklist")
+    @patch("spec.workflow.step2_tasklist.show_task_review_menu")
+    @patch("spec.workflow.step2_tasklist._generate_tasklist")
     def test_regenerate_calls_generate_again(
         self,
         mock_generate,
@@ -689,8 +689,8 @@ class TestStep2CreateTasklist:
         # Should be called twice: initial + after REGENERATE
         assert mock_generate.call_count == 2
 
-    @patch("specflow.workflow.step2_tasklist.show_task_review_menu")
-    @patch("specflow.workflow.step2_tasklist._generate_tasklist")
+    @patch("spec.workflow.step2_tasklist.show_task_review_menu")
+    @patch("spec.workflow.step2_tasklist._generate_tasklist")
     def test_abort_returns_false(
         self,
         mock_generate,
@@ -717,7 +717,7 @@ class TestStep2CreateTasklist:
 
         assert result is False
 
-    @patch("specflow.workflow.step2_tasklist._generate_tasklist")
+    @patch("spec.workflow.step2_tasklist._generate_tasklist")
     def test_returns_false_when_plan_not_found(
         self,
         mock_generate,
@@ -755,7 +755,7 @@ class TestDisplayTasklist:
 - [x] Task three
 """)
 
-        with patch("specflow.workflow.step2_tasklist.console") as mock_console:
+        with patch("spec.workflow.step2_tasklist.console") as mock_console:
             _display_tasklist(tasklist_path)
 
             # Verify console.print was called multiple times
@@ -769,7 +769,7 @@ class TestDisplayTasklist:
         tasklist_path = tmp_path / "tasklist.md"
         tasklist_path.write_text("# Task List: TEST-123\n\nNo tasks yet.\n")
 
-        with patch("specflow.workflow.step2_tasklist.console") as mock_console:
+        with patch("spec.workflow.step2_tasklist.console") as mock_console:
             _display_tasklist(tasklist_path)
 
             calls = [str(c) for c in mock_console.print.call_args_list]
@@ -801,7 +801,7 @@ class TestEditTasklist:
 
         mock_run.assert_called_once_with(["vim", str(tasklist_path)], check=True)
 
-    @patch("specflow.workflow.step2_tasklist.prompt_enter")
+    @patch("spec.workflow.step2_tasklist.prompt_enter")
     @patch("subprocess.run")
     @patch.dict("os.environ", {"EDITOR": "nonexistent_editor"}, clear=False)
     def test_handles_editor_not_found(self, mock_run, mock_prompt, tmp_path):
@@ -875,7 +875,7 @@ class TestCreateDefaultTasklist:
 class TestGenerateTasklistRetry:
     """Tests for _generate_tasklist retry behavior."""
 
-    @patch("specflow.workflow.step2_tasklist.AuggieClient")
+    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_returns_false_on_auggie_failure(self, mock_auggie_class, tmp_path):
         """Returns False when Auggie command fails."""
         ticket = JiraTicket(ticket_id="TEST-FAIL", ticket_url="test", summary="Test")

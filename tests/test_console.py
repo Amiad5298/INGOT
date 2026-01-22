@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from specflow.utils.console import (
+from spec.utils.console import (
     custom_theme,
     print_error,
     print_header,
@@ -46,8 +46,8 @@ class TestCustomTheme:
 class TestPrintFunctions:
     """Tests for print functions."""
 
-    @patch("specflow.utils.console.console_err")
-    @patch("specflow.utils.logging.log_message")
+    @patch("spec.utils.console.console_err")
+    @patch("spec.utils.logging.log_message")
     def test_print_error(self, mock_log, mock_console_err):
         """print_error outputs error message."""
         print_error("Test error")
@@ -58,8 +58,8 @@ class TestPrintFunctions:
         assert "Test error" in call_args[0][0]
         mock_log.assert_called_once_with("ERROR: Test error")
 
-    @patch("specflow.utils.console.console")
-    @patch("specflow.utils.logging.log_message")
+    @patch("spec.utils.console.console")
+    @patch("spec.utils.logging.log_message")
     def test_print_success(self, mock_log, mock_console):
         """print_success outputs success message."""
         print_success("Test success")
@@ -70,8 +70,8 @@ class TestPrintFunctions:
         assert "Test success" in call_args[0][0]
         mock_log.assert_called_once_with("SUCCESS: Test success")
 
-    @patch("specflow.utils.console.console")
-    @patch("specflow.utils.logging.log_message")
+    @patch("spec.utils.console.console")
+    @patch("spec.utils.logging.log_message")
     def test_print_warning(self, mock_log, mock_console):
         """print_warning outputs warning message."""
         print_warning("Test warning")
@@ -82,8 +82,8 @@ class TestPrintFunctions:
         assert "Test warning" in call_args[0][0]
         mock_log.assert_called_once_with("WARNING: Test warning")
 
-    @patch("specflow.utils.console.console")
-    @patch("specflow.utils.logging.log_message")
+    @patch("spec.utils.console.console")
+    @patch("spec.utils.logging.log_message")
     def test_print_info(self, mock_log, mock_console):
         """print_info outputs info message."""
         print_info("Test info")
@@ -94,7 +94,7 @@ class TestPrintFunctions:
         assert "Test info" in call_args[0][0]
         mock_log.assert_called_once_with("INFO: Test info")
 
-    @patch("specflow.utils.console.console")
+    @patch("spec.utils.console.console")
     def test_print_header(self, mock_console):
         """print_header outputs header with formatting."""
         print_header("Test Header")
@@ -104,7 +104,7 @@ class TestPrintFunctions:
         calls = mock_console.print.call_args_list
         assert "=== Test Header ===" in calls[1][0][0]
 
-    @patch("specflow.utils.console.console")
+    @patch("spec.utils.console.console")
     def test_print_step(self, mock_console):
         """print_step outputs step with arrow."""
         print_step("Test step")
@@ -118,7 +118,7 @@ class TestPrintFunctions:
 class TestBanner:
     """Tests for banner display."""
 
-    @patch("specflow.utils.console.console")
+    @patch("spec.utils.console.console")
     def test_show_banner(self, mock_console):
         """show_banner displays ASCII art."""
         show_banner()
@@ -133,7 +133,7 @@ class TestBanner:
 class TestVersion:
     """Tests for version display."""
 
-    @patch("specflow.utils.console.console")
+    @patch("spec.utils.console.console")
     def test_show_version(self, mock_console):
         """show_version displays version info."""
         show_version()

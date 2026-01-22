@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from specflow.ui.prompts import (
+from spec.ui.prompts import (
     custom_style,
     prompt_checkbox,
     prompt_confirm,
@@ -12,7 +12,7 @@ from specflow.ui.prompts import (
     prompt_input,
     prompt_select,
 )
-from specflow.utils.errors import UserCancelledError
+from spec.utils.errors import UserCancelledError
 
 
 class TestCustomStyle:

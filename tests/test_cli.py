@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from specflow.cli import app
-from specflow.utils.errors import ExitCode
+from spec.cli import app
+from spec.utils.errors import ExitCode
 
 runner = CliRunner()
 
@@ -32,8 +32,8 @@ class TestCLIVersion:
 class TestCLIConfig:
     """Tests for --config flag."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
     def test_config_flag_shows_config(self, mock_config_class, mock_banner):
         """--config shows configuration and exits."""
         mock_config = MagicMock()
@@ -47,9 +47,9 @@ class TestCLIConfig:
 class TestCLIPrerequisites:
     """Tests for prerequisite checking."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli.is_git_repo")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli.is_git_repo")
     def test_fails_outside_git_repo(self, mock_git, mock_config_class, mock_banner):
         """Fails when not in a git repository."""
         mock_git.return_value = False
@@ -60,11 +60,11 @@ class TestCLIPrerequisites:
 
         assert result.exit_code == ExitCode.GENERAL_ERROR
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli.is_git_repo")
-    @patch("specflow.cli.check_auggie_installed")
-    @patch("specflow.ui.prompts.prompt_confirm")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli.is_git_repo")
+    @patch("spec.cli.check_auggie_installed")
+    @patch("spec.ui.prompts.prompt_confirm")
     def test_prompts_auggie_install(
         self, mock_confirm, mock_check, mock_git, mock_config_class, mock_banner
     ):
@@ -83,10 +83,10 @@ class TestCLIPrerequisites:
 class TestCLIWorkflow:
     """Tests for workflow execution."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_runs_workflow_with_ticket(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -100,10 +100,10 @@ class TestCLIWorkflow:
 
         mock_run.assert_called_once()
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_main_menu")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_main_menu")
     def test_shows_menu_without_ticket(
         self, mock_menu, mock_prereq, mock_config_class, mock_banner
     ):
@@ -120,10 +120,10 @@ class TestCLIWorkflow:
 class TestCLIFlags:
     """Tests for CLI flags."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_model_flag(self, mock_run, mock_prereq, mock_config_class, mock_banner):
         """--model flag is passed to workflow."""
         mock_prereq.return_value = True
@@ -136,10 +136,10 @@ class TestCLIFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["model"] == "claude-3"
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_skip_clarification_flag(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -154,10 +154,10 @@ class TestCLIFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["skip_clarification"] is True
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_no_squash_flag(self, mock_run, mock_prereq, mock_config_class, mock_banner):
         """--no-squash flag is passed to workflow."""
         mock_prereq.return_value = True
@@ -174,10 +174,10 @@ class TestCLIFlags:
 class TestParallelFlags:
     """Tests for parallel execution CLI flags."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_parallel_flag_enables_parallel(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -192,10 +192,10 @@ class TestParallelFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["parallel"] is True
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_no_parallel_flag_disables(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -210,10 +210,10 @@ class TestParallelFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["parallel"] is False
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_max_parallel_sets_value(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -228,7 +228,7 @@ class TestParallelFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["max_parallel"] == 4
 
-    @patch("specflow.cli.show_banner")
+    @patch("spec.cli.show_banner")
     def test_max_parallel_validates_range(self, mock_banner):
         """--max-parallel validates range (1-5)."""
         # Test value too low
@@ -239,10 +239,10 @@ class TestParallelFlags:
         result = runner.invoke(app, ["--max-parallel", "10", "TEST-123"])
         assert result.exit_code != 0
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_fail_fast_flag(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -257,10 +257,10 @@ class TestParallelFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["fail_fast"] is True
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_no_fail_fast_flag(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -275,10 +275,10 @@ class TestParallelFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["fail_fast"] is False
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_max_parallel_none_uses_config(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -293,10 +293,10 @@ class TestParallelFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["max_parallel"] is None
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_fail_fast_none_uses_config(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -315,10 +315,10 @@ class TestParallelFlags:
 class TestRetryFlags:
     """Tests for retry CLI flags."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_max_retries_sets_value(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -333,10 +333,10 @@ class TestRetryFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["max_retries"] == 10
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_max_retries_zero_disables(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -351,10 +351,10 @@ class TestRetryFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["max_retries"] == 0
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_retry_base_delay_sets_value(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -373,10 +373,10 @@ class TestRetryFlags:
 class TestAutoUpdateDocsFlags:
     """Tests for --auto-update-docs CLI flag."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_auto_update_docs_flag_enables(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -391,10 +391,10 @@ class TestAutoUpdateDocsFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["auto_update_docs"] is True
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_no_auto_update_docs_flag_disables(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -409,10 +409,10 @@ class TestAutoUpdateDocsFlags:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["auto_update_docs"] is False
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_auto_update_docs_none_uses_config(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
@@ -433,7 +433,7 @@ class TestShowHelp:
 
     def test_show_help_displays_usage(self, capsys):
         """show_help displays usage information."""
-        from specflow.cli import show_help
+        from spec.cli import show_help
 
         show_help()
 
@@ -444,15 +444,15 @@ class TestShowHelp:
 class TestExceptionHandlers:
     """Tests for exception handling in main command."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_user_cancelled_error_handled(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
         """UserCancelledError is handled gracefully."""
-        from specflow.utils.errors import UserCancelledError
+        from spec.utils.errors import UserCancelledError
 
         mock_prereq.return_value = True
         mock_config = MagicMock()
@@ -464,15 +464,15 @@ class TestExceptionHandlers:
 
         assert result.exit_code == ExitCode.USER_CANCELLED
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli._check_prerequisites")
-    @patch("specflow.cli._run_workflow")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
     def test_spec_error_handled(
         self, mock_run, mock_prereq, mock_config_class, mock_banner
     ):
         """SpecError is handled gracefully."""
-        from specflow.utils.errors import SpecError
+        from spec.utils.errors import SpecError
 
         mock_prereq.return_value = True
         mock_config = MagicMock()
@@ -488,12 +488,12 @@ class TestExceptionHandlers:
 class TestDirtyTreePolicy:
     """Tests for dirty tree policy parsing."""
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_dirty_tree_policy_fail_fast(self, mock_parse, mock_run_workflow):
         """--dirty-tree-policy fail-fast sets FAIL_FAST policy."""
-        from specflow.cli import _run_workflow
-        from specflow.workflow.state import DirtyTreePolicy
+        from spec.cli import _run_workflow
+        from spec.workflow.state import DirtyTreePolicy
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -517,12 +517,12 @@ class TestDirtyTreePolicy:
         call_kwargs = mock_run_workflow.call_args[1]
         assert call_kwargs["dirty_tree_policy"] == DirtyTreePolicy.FAIL_FAST
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_dirty_tree_policy_warn(self, mock_parse, mock_run_workflow):
         """--dirty-tree-policy warn sets WARN_AND_CONTINUE policy."""
-        from specflow.cli import _run_workflow
-        from specflow.workflow.state import DirtyTreePolicy
+        from spec.cli import _run_workflow
+        from spec.workflow.state import DirtyTreePolicy
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -546,12 +546,12 @@ class TestDirtyTreePolicy:
         call_kwargs = mock_run_workflow.call_args[1]
         assert call_kwargs["dirty_tree_policy"] == DirtyTreePolicy.WARN_AND_CONTINUE
 
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_dirty_tree_policy_invalid_rejected(self, mock_parse):
         """Invalid --dirty-tree-policy value is rejected."""
         import click
 
-        from specflow.cli import _run_workflow
+        from spec.cli import _run_workflow
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -578,12 +578,12 @@ class TestDirtyTreePolicy:
 class TestAuggieInstallFlow:
     """Tests for Auggie installation flow."""
 
-    @patch("specflow.cli.show_banner")
-    @patch("specflow.cli.ConfigManager")
-    @patch("specflow.cli.is_git_repo")
-    @patch("specflow.cli.check_auggie_installed")
-    @patch("specflow.ui.prompts.prompt_confirm")
-    @patch("specflow.cli.install_auggie")
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli.is_git_repo")
+    @patch("spec.cli.check_auggie_installed")
+    @patch("spec.ui.prompts.prompt_confirm")
+    @patch("spec.cli.install_auggie")
     def test_installs_auggie_when_user_accepts(
         self, mock_install, mock_confirm, mock_check, mock_git, mock_config_class, mock_banner
     ):
@@ -604,13 +604,13 @@ class TestAuggieInstallFlow:
 class TestEffectiveValueOverrides:
     """Tests for effective value computation and override semantics in _run_workflow."""
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_max_parallel_override_cli_beats_config(
         self, mock_parse, mock_run_workflow
     ):
         """CLI --max-parallel 3 overrides config max_parallel_tasks=5."""
-        from specflow.cli import _run_workflow
+        from spec.cli import _run_workflow
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -634,13 +634,13 @@ class TestEffectiveValueOverrides:
         call_kwargs = mock_run_workflow.call_args[1]
         assert call_kwargs["max_parallel_tasks"] == 3  # CLI wins over config=5
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_max_parallel_none_uses_config(
         self, mock_parse, mock_run_workflow
     ):
         """When CLI max_parallel is None, uses config.settings.max_parallel_tasks."""
-        from specflow.cli import _run_workflow
+        from spec.cli import _run_workflow
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -664,13 +664,13 @@ class TestEffectiveValueOverrides:
         call_kwargs = mock_run_workflow.call_args[1]
         assert call_kwargs["max_parallel_tasks"] == 5  # Uses config value
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_no_fail_fast_overrides_config_true(
         self, mock_parse, mock_run_workflow
     ):
         """CLI --no-fail-fast (False) overrides config fail_fast=True."""
-        from specflow.cli import _run_workflow
+        from spec.cli import _run_workflow
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -694,13 +694,13 @@ class TestEffectiveValueOverrides:
         call_kwargs = mock_run_workflow.call_args[1]
         assert call_kwargs["fail_fast"] is False  # CLI wins
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_fail_fast_none_uses_config(
         self, mock_parse, mock_run_workflow
     ):
         """When CLI fail_fast is None, uses config.settings.fail_fast."""
-        from specflow.cli import _run_workflow
+        from spec.cli import _run_workflow
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -724,13 +724,13 @@ class TestEffectiveValueOverrides:
         call_kwargs = mock_run_workflow.call_args[1]
         assert call_kwargs["fail_fast"] is True  # Uses config value
 
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_invalid_config_max_parallel_rejected(self, mock_parse):
         """Invalid config max_parallel_tasks (e.g., 10) is rejected via effective validation."""
         import click
 
-        from specflow.cli import _run_workflow
-        from specflow.utils.errors import ExitCode
+        from spec.cli import _run_workflow
+        from spec.utils.errors import ExitCode
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -753,13 +753,13 @@ class TestEffectiveValueOverrides:
             )
         assert exc_info.value.exit_code == ExitCode.GENERAL_ERROR
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_auto_update_docs_override_cli_beats_config(
         self, mock_parse, mock_run_workflow
     ):
         """CLI --no-auto-update-docs overrides config auto_update_docs=True."""
-        from specflow.cli import _run_workflow
+        from spec.cli import _run_workflow
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()
@@ -783,13 +783,13 @@ class TestEffectiveValueOverrides:
         call_kwargs = mock_run_workflow.call_args[1]
         assert call_kwargs["auto_update_docs"] is False  # CLI wins
 
-    @patch("specflow.workflow.runner.run_spec_driven_workflow")
-    @patch("specflow.integrations.jira.parse_jira_ticket")
+    @patch("spec.workflow.runner.run_spec_driven_workflow")
+    @patch("spec.integrations.jira.parse_jira_ticket")
     def test_auto_update_docs_none_uses_config(
         self, mock_parse, mock_run_workflow
     ):
         """When CLI auto_update_docs is None, uses config.settings.auto_update_docs."""
-        from specflow.cli import _run_workflow
+        from spec.cli import _run_workflow
 
         mock_parse.return_value = MagicMock()
         mock_config = MagicMock()

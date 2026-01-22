@@ -11,9 +11,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specflow.integrations.jira import JiraTicket
-from specflow.workflow.autofix import _run_auto_fix, run_auto_fix
-from specflow.workflow.state import WorkflowState
+from spec.integrations.jira import JiraTicket
+from spec.workflow.autofix import _run_auto_fix, run_auto_fix
+from spec.workflow.state import WorkflowState
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ def log_dir(tmp_path):
 class TestRunAutoFix:
     """Tests for run_auto_fix function."""
 
-    @patch("specflow.workflow.autofix.AuggieClient")
+    @patch("spec.workflow.autofix.AuggieClient")
     def test_returns_true_on_success(self, mock_client_class, workflow_state, log_dir):
         """Returns True when agent completes successfully."""
         mock_client = MagicMock()
@@ -63,7 +63,7 @@ class TestRunAutoFix:
         assert result is True
         mock_client.run_print_with_output.assert_called_once()
 
-    @patch("specflow.workflow.autofix.AuggieClient")
+    @patch("spec.workflow.autofix.AuggieClient")
     def test_returns_false_on_agent_failure(self, mock_client_class, workflow_state, log_dir):
         """Returns False when agent reports failure."""
         mock_client = MagicMock()
@@ -74,7 +74,7 @@ class TestRunAutoFix:
 
         assert result is False
 
-    @patch("specflow.workflow.autofix.AuggieClient")
+    @patch("spec.workflow.autofix.AuggieClient")
     def test_returns_false_on_exception(self, mock_client_class, workflow_state, log_dir):
         """Returns False when exception occurs."""
         mock_client = MagicMock()
@@ -85,7 +85,7 @@ class TestRunAutoFix:
 
         assert result is False
 
-    @patch("specflow.workflow.autofix.AuggieClient")
+    @patch("spec.workflow.autofix.AuggieClient")
     def test_prompt_contains_review_feedback(self, mock_client_class, workflow_state, log_dir):
         """Prompt includes the review feedback."""
         mock_client = MagicMock()
@@ -99,7 +99,7 @@ class TestRunAutoFix:
         prompt = call_args[0][0]
         assert feedback in prompt
 
-    @patch("specflow.workflow.autofix.AuggieClient")
+    @patch("spec.workflow.autofix.AuggieClient")
     def test_prompt_contains_plan_path(self, mock_client_class, workflow_state, log_dir):
         """Prompt includes the plan path for context."""
         mock_client = MagicMock()
@@ -112,7 +112,7 @@ class TestRunAutoFix:
         prompt = call_args[0][0]
         assert str(workflow_state.get_plan_path()) in prompt
 
-    @patch("specflow.workflow.autofix.AuggieClient")
+    @patch("spec.workflow.autofix.AuggieClient")
     def test_uses_implementer_agent(self, mock_client_class, workflow_state, log_dir):
         """Uses the implementer agent from subagent_names."""
         mock_client = MagicMock()
@@ -125,7 +125,7 @@ class TestRunAutoFix:
         assert call_args[1]["agent"] == workflow_state.subagent_names["implementer"]
         assert call_args[1]["dont_save_session"] is True
 
-    @patch("specflow.workflow.autofix.AuggieClient")
+    @patch("spec.workflow.autofix.AuggieClient")
     def test_prompt_includes_no_commit_instruction(self, mock_client_class, workflow_state, log_dir):
         """Prompt explicitly tells agent not to commit."""
         mock_client = MagicMock()
