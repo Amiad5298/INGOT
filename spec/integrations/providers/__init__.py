@@ -5,12 +5,14 @@ This package provides:
 - Platform-agnostic data models (GenericTicket)
 - Custom exceptions for issue tracker operations
 - User interaction abstraction for testable providers
+- Platform detection for URL and ticket ID pattern matching
 
 Example usage:
     from spec.integrations.providers import (
         GenericTicket,
         Platform,
         IssueTrackerProvider,
+        PlatformDetector,
     )
 """
 
@@ -22,6 +24,11 @@ from spec.integrations.providers.base import (
     TicketStatus,
     TicketType,
     sanitize_title_for_branch,
+)
+from spec.integrations.providers.detector import (
+    PLATFORM_PATTERNS,
+    PlatformDetector,
+    PlatformPattern,
 )
 from spec.integrations.providers.exceptions import (
     AuthenticationError,
@@ -45,8 +52,12 @@ __all__ = [
     # Data Models
     "GenericTicket",
     "PlatformMetadata",
+    "PlatformPattern",
     # Utility Functions
     "sanitize_title_for_branch",
+    # Platform Detection
+    "PlatformDetector",
+    "PLATFORM_PATTERNS",
     # Abstract Base Classes
     "IssueTrackerProvider",
     "UserInteractionInterface",
@@ -61,4 +72,3 @@ __all__ = [
     "RateLimitError",
     "PlatformNotSupportedError",
 ]
-
