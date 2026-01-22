@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "specflow"
+name = "spec"
 version = "2.0.0"
 description = "SPEC - Spec-driven development workflow using Auggie CLI"
 readme = "README.md"
@@ -12,7 +12,7 @@ requires-python = ">=3.11"
 authors = [
     { name = "Development Team" }
 ]
-keywords = ["spec", "specflow", "workflow", "auggie", "cli", "development"]
+keywords = ["spec", "workflow", "auggie", "cli", "development"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -41,7 +41,7 @@ dev = [
 ]
 
 [project.scripts]
-spec = "specflow.cli:app"
+spec = "spec.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/Amiad5298/Spec"
@@ -49,7 +49,7 @@ Documentation = "https://github.com/Amiad5298/Spec#readme"
 Repository = "https://github.com/Amiad5298/Spec"
 
 [tool.hatch.build.targets.wheel]
-packages = ["specflow"]
+packages = ["spec"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -57,14 +57,14 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = [
     "-v",
-    "--cov=specflow",
+    "--cov=spec",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-fail-under=80",
 ]
 
 [tool.coverage.run]
-source = ["specflow"]
+source = ["spec"]
 branch = true
 
 [tool.coverage.report]
@@ -104,5 +104,5 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["specflow"]
+known-first-party = ["spec"]
 

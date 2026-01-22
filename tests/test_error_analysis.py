@@ -2,8 +2,8 @@
 
 import pytest
 
-from specflow.utils.error_analysis import ErrorAnalysis, analyze_error_output
-from specflow.workflow.tasks import Task, TaskStatus
+from spec.utils.error_analysis import ErrorAnalysis, analyze_error_output
+from spec.workflow.tasks import Task, TaskStatus
 
 
 @pytest.fixture

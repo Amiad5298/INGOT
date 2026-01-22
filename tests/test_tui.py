@@ -7,15 +7,15 @@ from unittest.mock import patch
 import pytest
 from rich.console import Console
 
-from specflow.ui.keyboard import _CHAR_MAPPINGS, _ESCAPE_SEQUENCES, Key, KeyboardReader
-from specflow.ui.tui import (
+from spec.ui.keyboard import _CHAR_MAPPINGS, _ESCAPE_SEQUENCES, Key, KeyboardReader
+from spec.ui.tui import (
     TaskRunnerUI,
     TaskRunRecord,
     TaskRunStatus,
     render_status_bar,
     render_task_list,
 )
-from specflow.workflow.events import (
+from spec.workflow.events import (
     create_task_finished_event,
     create_task_output_event,
     create_task_started_event,
@@ -643,14 +643,14 @@ class TestKeyboardReader:
     def test_start_on_non_unix_does_nothing(self):
         """start() does nothing on non-Unix systems."""
         reader = KeyboardReader()
-        with patch("specflow.ui.keyboard._IS_UNIX", False):
+        with patch("spec.ui.keyboard._IS_UNIX", False):
             reader.start()
             assert reader._is_started is False
 
     def test_stop_on_non_unix_does_nothing(self):
         """stop() does nothing on non-Unix systems."""
         reader = KeyboardReader()
-        with patch("specflow.ui.keyboard._IS_UNIX", False):
+        with patch("spec.ui.keyboard._IS_UNIX", False):
             reader.stop()
             assert reader._is_started is False
 
@@ -663,14 +663,14 @@ class TestKeyboardReader:
         """read_key() returns None on non-Unix systems."""
         reader = KeyboardReader()
         reader._is_started = True
-        with patch("specflow.ui.keyboard._IS_UNIX", False):
+        with patch("spec.ui.keyboard._IS_UNIX", False):
             assert reader.read_key() is None
 
     def test_start_already_started_does_nothing(self):
         """start() does nothing if already started."""
         reader = KeyboardReader()
         reader._is_started = True
-        with patch("specflow.ui.keyboard._IS_UNIX", True):
+        with patch("spec.ui.keyboard._IS_UNIX", True):
             reader.start()  # Should not raise or change state
             assert reader._is_started is True
 
@@ -679,13 +679,13 @@ class TestKeyboardReader:
         reader = KeyboardReader()
         reader._is_started = True
         reader._old_settings = None
-        with patch("specflow.ui.keyboard._IS_UNIX", True):
+        with patch("spec.ui.keyboard._IS_UNIX", True):
             reader.stop()
             assert reader._is_started is False
 
-    @patch("specflow.ui.keyboard._IS_UNIX", True)
-    @patch("specflow.ui.keyboard.select")
-    @patch("specflow.ui.keyboard.sys")
+    @patch("spec.ui.keyboard._IS_UNIX", True)
+    @patch("spec.ui.keyboard.select")
+    @patch("spec.ui.keyboard.sys")
     def test_read_key_returns_mapped_key(self, mock_sys, mock_select):
         """read_key() returns mapped key for known characters."""
         reader = KeyboardReader()
@@ -700,9 +700,9 @@ class TestKeyboardReader:
 
         assert result == Key.Q
 
-    @patch("specflow.ui.keyboard._IS_UNIX", True)
-    @patch("specflow.ui.keyboard.select")
-    @patch("specflow.ui.keyboard.sys")
+    @patch("spec.ui.keyboard._IS_UNIX", True)
+    @patch("spec.ui.keyboard.select")
+    @patch("spec.ui.keyboard.sys")
     def test_read_key_returns_unknown_for_unmapped(self, mock_sys, mock_select):
         """read_key() returns UNKNOWN for unmapped characters."""
         reader = KeyboardReader()
@@ -715,9 +715,9 @@ class TestKeyboardReader:
 
         assert result == Key.UNKNOWN
 
-    @patch("specflow.ui.keyboard._IS_UNIX", True)
-    @patch("specflow.ui.keyboard.select")
-    @patch("specflow.ui.keyboard.sys")
+    @patch("spec.ui.keyboard._IS_UNIX", True)
+    @patch("spec.ui.keyboard.select")
+    @patch("spec.ui.keyboard.sys")
     def test_read_key_returns_none_when_no_input(self, mock_sys, mock_select):
         """read_key() returns None when no input available."""
         reader = KeyboardReader()
@@ -730,9 +730,9 @@ class TestKeyboardReader:
 
         assert result is None
 
-    @patch("specflow.ui.keyboard._IS_UNIX", True)
-    @patch("specflow.ui.keyboard.select")
-    @patch("specflow.ui.keyboard.sys")
+    @patch("spec.ui.keyboard._IS_UNIX", True)
+    @patch("spec.ui.keyboard.select")
+    @patch("spec.ui.keyboard.sys")
     def test_read_key_returns_none_on_empty_read(self, mock_sys, mock_select):
         """read_key() returns None when read returns empty string."""
         reader = KeyboardReader()
@@ -745,9 +745,9 @@ class TestKeyboardReader:
 
         assert result is None
 
-    @patch("specflow.ui.keyboard._IS_UNIX", True)
-    @patch("specflow.ui.keyboard.select")
-    @patch("specflow.ui.keyboard.sys")
+    @patch("spec.ui.keyboard._IS_UNIX", True)
+    @patch("spec.ui.keyboard.select")
+    @patch("spec.ui.keyboard.sys")
     def test_read_key_handles_escape_sequence(self, mock_sys, mock_select):
         """read_key() handles escape sequences for arrow keys."""
         reader = KeyboardReader()
@@ -767,9 +767,9 @@ class TestKeyboardReader:
 
         assert result == Key.UP
 
-    @patch("specflow.ui.keyboard._IS_UNIX", True)
-    @patch("specflow.ui.keyboard.select")
-    @patch("specflow.ui.keyboard.sys")
+    @patch("spec.ui.keyboard._IS_UNIX", True)
+    @patch("spec.ui.keyboard.select")
+    @patch("spec.ui.keyboard.sys")
     def test_read_key_returns_escape_when_alone(self, mock_sys, mock_select):
         """read_key() returns ESCAPE when escape key pressed alone."""
         reader = KeyboardReader()
@@ -785,7 +785,7 @@ class TestKeyboardReader:
 
         assert result == Key.ESCAPE
 
-    @patch("specflow.ui.keyboard._IS_UNIX", True)
+    @patch("spec.ui.keyboard._IS_UNIX", True)
     def test_read_key_handles_os_error(self):
         """read_key() returns None on OSError."""
         import select as real_select
@@ -793,7 +793,7 @@ class TestKeyboardReader:
         reader = KeyboardReader()
         reader._is_started = True
 
-        with patch("specflow.ui.keyboard.select") as mock_select:
+        with patch("spec.ui.keyboard.select") as mock_select:
             # Keep the real error class
             mock_select.error = real_select.error
             mock_select.select.side_effect = OSError("Terminal error")

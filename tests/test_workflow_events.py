@@ -2,7 +2,7 @@
 
 import time
 
-from specflow.workflow.events import (
+from spec.workflow.events import (
     TaskEvent,
     TaskEventType,
     TaskRunRecord,

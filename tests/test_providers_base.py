@@ -1,4 +1,4 @@
-"""Tests for specflow.integrations.providers.base module.
+"""Tests for spec.integrations.providers.base module.
 
 Tests cover:
 - Platform, TicketStatus, TicketType enums
@@ -16,7 +16,7 @@ from enum import Enum
 
 import pytest
 
-from specflow.integrations.providers.base import (
+from spec.integrations.providers.base import (
     GenericTicket,
     IssueTrackerProvider,
     Platform,

@@ -1,7 +1,7 @@
 """Tests for spec.utils.errors module."""
 
 
-from specflow.utils.errors import (
+from spec.utils.errors import (
     AuggieNotInstalledError,
     ExitCode,
     GitOperationError,

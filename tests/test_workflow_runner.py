@@ -4,17 +4,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specflow.integrations.jira import JiraTicket
-from specflow.utils.errors import SpecError, UserCancelledError
-from specflow.workflow.runner import (
+from spec.integrations.jira import JiraTicket
+from spec.utils.errors import SpecError, UserCancelledError
+from spec.workflow.runner import (
     _offer_cleanup,
     _setup_branch,
     _show_completion,
     run_spec_driven_workflow,
     workflow_cleanup,
 )
-from specflow.workflow.state import WorkflowState
-from specflow.workflow.step4_update_docs import Step4Result
+from spec.workflow.state import WorkflowState
+from spec.workflow.step4_update_docs import Step4Result
 
 
 @pytest.fixture
@@ -72,9 +72,9 @@ def mock_config():
 class TestSetupBranchNameGeneration:
     """Tests for _setup_branch branch name generation."""
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.create_branch")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.create_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_generates_branch_name_with_summary(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
@@ -88,9 +88,9 @@ class TestSetupBranchNameGeneration:
         assert result is True
         assert workflow_state.branch_name == "test-123-test-feature-summary"
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.create_branch")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.create_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_generates_fallback_branch_name_without_summary(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket_no_summary
     ):
@@ -116,7 +116,7 @@ class TestSetupBranchNameGeneration:
 class TestSetupBranchAlreadyOnFeature:
     """Tests for _setup_branch when already on feature branch."""
 
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_stays_on_current_branch_if_already_on_feature_branch(
         self, mock_get_branch, workflow_state, ticket
     ):
@@ -129,7 +129,7 @@ class TestSetupBranchAlreadyOnFeature:
         assert result is True
         assert workflow_state.branch_name == expected_branch
 
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_updates_state_branch_name_correctly(
         self, mock_get_branch, workflow_state, ticket
     ):
@@ -150,9 +150,9 @@ class TestSetupBranchAlreadyOnFeature:
 class TestSetupBranchCreateNew:
     """Tests for _setup_branch creating new branch."""
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.create_branch")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.create_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_creates_new_branch_when_user_confirms(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
@@ -166,9 +166,9 @@ class TestSetupBranchCreateNew:
         assert result is True
         mock_create.assert_called_once_with("test-123-test-feature-summary")
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.create_branch")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.create_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_returns_true_on_successful_branch_creation(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
@@ -181,9 +181,9 @@ class TestSetupBranchCreateNew:
 
         assert result is True
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.create_branch")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.create_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_returns_false_on_branch_creation_failure(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
@@ -205,8 +205,8 @@ class TestSetupBranchCreateNew:
 class TestSetupBranchUserDeclines:
     """Tests for _setup_branch when user declines branch creation."""
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_stays_on_current_branch_when_user_declines(
         self, mock_get_branch, mock_confirm, workflow_state, ticket
     ):
@@ -218,8 +218,8 @@ class TestSetupBranchUserDeclines:
 
         assert result is True
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_updates_state_branch_name_to_current_branch(
         self, mock_get_branch, mock_confirm, workflow_state, ticket
     ):
@@ -240,7 +240,7 @@ class TestSetupBranchUserDeclines:
 class TestShowCompletion:
     """Tests for _show_completion function."""
 
-    @patch("specflow.workflow.runner.console")
+    @patch("spec.workflow.runner.console")
     def test_displays_ticket_id(self, mock_console, workflow_state):
         """Displays ticket ID."""
         _show_completion(workflow_state)
@@ -248,7 +248,7 @@ class TestShowCompletion:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("TEST-123" in c for c in calls)
 
-    @patch("specflow.workflow.runner.console")
+    @patch("spec.workflow.runner.console")
     def test_displays_branch_name(self, mock_console, workflow_state):
         """Displays branch name."""
         workflow_state.branch_name = "feature/test-branch"
@@ -258,7 +258,7 @@ class TestShowCompletion:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("feature/test-branch" in c for c in calls)
 
-    @patch("specflow.workflow.runner.console")
+    @patch("spec.workflow.runner.console")
     def test_displays_completed_task_count(self, mock_console, workflow_state):
         """Displays completed task count."""
         workflow_state.completed_tasks = ["Task 1", "Task 2", "Task 3"]
@@ -268,7 +268,7 @@ class TestShowCompletion:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("3" in c for c in calls)
 
-    @patch("specflow.workflow.runner.console")
+    @patch("spec.workflow.runner.console")
     def test_displays_plan_file_if_exists(self, mock_console, workflow_state, tmp_path):
         """Displays plan file if exists."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
@@ -279,7 +279,7 @@ class TestShowCompletion:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("Plan" in c for c in calls)
 
-    @patch("specflow.workflow.runner.console")
+    @patch("spec.workflow.runner.console")
     def test_displays_tasklist_file_if_exists(self, mock_console, workflow_state, tmp_path):
         """Displays tasklist file if exists."""
         tasklist_path = tmp_path / "specs" / "TEST-123-tasklist.md"
@@ -290,8 +290,8 @@ class TestShowCompletion:
         calls = [str(c) for c in mock_console.print.call_args_list]
         assert any("Tasks" in c for c in calls)
 
-    @patch("specflow.workflow.runner.print_info")
-    @patch("specflow.workflow.runner.console")
+    @patch("spec.workflow.runner.print_info")
+    @patch("spec.workflow.runner.console")
     def test_prints_next_steps(self, mock_console, mock_print_info, workflow_state):
         """Prints next steps."""
         _show_completion(workflow_state)
@@ -310,7 +310,7 @@ class TestShowCompletion:
 class TestWorkflowCleanupNormal:
     """Tests for workflow_cleanup context manager normal execution."""
 
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_yields_normally_on_success(self, mock_get_branch, workflow_state):
         """Yields normally and completes without error on success path."""
         mock_get_branch.return_value = "main"
@@ -330,9 +330,9 @@ class TestWorkflowCleanupNormal:
 class TestWorkflowCleanupUserCancelled:
     """Tests for workflow_cleanup handling UserCancelledError."""
 
-    @patch("specflow.workflow.runner._offer_cleanup")
-    @patch("specflow.workflow.runner.print_info")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner._offer_cleanup")
+    @patch("spec.workflow.runner.print_info")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_catches_user_cancelled_error(
         self, mock_get_branch, mock_print_info, mock_offer_cleanup, workflow_state
     ):
@@ -355,9 +355,9 @@ class TestWorkflowCleanupUserCancelled:
 class TestWorkflowCleanupSpecError:
     """Tests for workflow_cleanup handling SpecError."""
 
-    @patch("specflow.workflow.runner._offer_cleanup")
-    @patch("specflow.workflow.runner.print_error")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner._offer_cleanup")
+    @patch("spec.workflow.runner.print_error")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_catches_spec_error(
         self, mock_get_branch, mock_print_error, mock_offer_cleanup, workflow_state
     ):
@@ -380,9 +380,9 @@ class TestWorkflowCleanupSpecError:
 class TestWorkflowCleanupGenericException:
     """Tests for workflow_cleanup handling generic exceptions."""
 
-    @patch("specflow.workflow.runner._offer_cleanup")
-    @patch("specflow.workflow.runner.print_error")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner._offer_cleanup")
+    @patch("spec.workflow.runner.print_error")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_catches_generic_exceptions(
         self, mock_get_branch, mock_print_error, mock_offer_cleanup, workflow_state
     ):
@@ -405,9 +405,9 @@ class TestWorkflowCleanupGenericException:
 class TestOfferCleanupCheckpointCommits:
     """Tests for _offer_cleanup checkpoint commits display."""
 
-    @patch("specflow.workflow.runner.console")
-    @patch("specflow.workflow.runner.print_info")
-    @patch("specflow.workflow.runner.print_warning")
+    @patch("spec.workflow.runner.console")
+    @patch("spec.workflow.runner.print_info")
+    @patch("spec.workflow.runner.print_warning")
     def test_prints_checkpoint_commit_count(
         self, mock_warning, mock_info, mock_console, workflow_state
     ):
@@ -428,9 +428,9 @@ class TestOfferCleanupCheckpointCommits:
 class TestOfferCleanupBranchInfo:
     """Tests for _offer_cleanup branch information display."""
 
-    @patch("specflow.workflow.runner.console")
-    @patch("specflow.workflow.runner.print_info")
-    @patch("specflow.workflow.runner.print_warning")
+    @patch("spec.workflow.runner.console")
+    @patch("spec.workflow.runner.print_info")
+    @patch("spec.workflow.runner.print_warning")
     def test_prints_branch_info_when_different(
         self, mock_warning, mock_info, mock_console, workflow_state
     ):
@@ -443,9 +443,9 @@ class TestOfferCleanupBranchInfo:
         assert any("feature/test-branch" in c for c in calls)
         assert any("main" in c for c in calls)
 
-    @patch("specflow.workflow.runner.console")
-    @patch("specflow.workflow.runner.print_info")
-    @patch("specflow.workflow.runner.print_warning")
+    @patch("spec.workflow.runner.console")
+    @patch("spec.workflow.runner.print_info")
+    @patch("spec.workflow.runner.print_warning")
     def test_does_not_print_branch_info_when_same(
         self, mock_warning, mock_info, mock_console, workflow_state
     ):
@@ -467,17 +467,17 @@ class TestOfferCleanupBranchInfo:
 class TestRunSpecDrivenWorkflowInit:
     """Tests for run_spec_driven_workflow initialization."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_initializes_workflow_state_correctly(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -521,11 +521,11 @@ class TestRunSpecDrivenWorkflowInit:
 class TestRunSpecDrivenWorkflowDirtyState:
     """Tests for run_spec_driven_workflow dirty state handling."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner.handle_dirty_state")
-    @patch("specflow.workflow.runner.show_git_dirty_menu")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner.handle_dirty_state")
+    @patch("spec.workflow.runner.show_git_dirty_menu")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_handles_dirty_state_at_start(
         self, mock_get_branch, mock_is_dirty, mock_menu, mock_handle,
         mock_auggie_client, ticket, mock_config
@@ -551,17 +551,17 @@ class TestRunSpecDrivenWorkflowDirtyState:
 class TestRunSpecDrivenWorkflowFetchTicket:
     """Tests for run_spec_driven_workflow fetch ticket info."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_fetches_and_updates_ticket_info(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -589,18 +589,18 @@ class TestRunSpecDrivenWorkflowFetchTicket:
 
         mock_fetch.assert_called_once()
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner.print_warning")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner.print_warning")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_handles_fetch_ticket_info_failure_gracefully(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -632,18 +632,18 @@ class TestRunSpecDrivenWorkflowFetchTicket:
 class TestRunSpecDrivenWorkflowUserContext:
     """Tests for run_spec_driven_workflow user context prompt."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_input")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_input")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_stores_user_context_when_confirmed(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_input, mock_setup_branch, mock_commit, mock_step1, mock_step2,
@@ -678,17 +678,17 @@ class TestRunSpecDrivenWorkflowUserContext:
 class TestRunSpecDrivenWorkflowBranchSetup:
     """Tests for run_spec_driven_workflow branch setup and base commit."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_records_base_commit(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -712,12 +712,12 @@ class TestRunSpecDrivenWorkflowBranchSetup:
         state = call_args[0]
         assert state.base_commit == "abc123def456"
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_returns_false_when_branch_setup_fails(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_auggie_client, ticket, mock_config
@@ -742,17 +742,17 @@ class TestRunSpecDrivenWorkflowBranchSetup:
 class TestRunSpecDrivenWorkflowStepOrchestration:
     """Tests for run_spec_driven_workflow step orchestration."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_calls_all_steps_in_sequence(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -775,15 +775,15 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step2.assert_called_once()
         mock_step3.assert_called_once()
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_returns_false_when_step1_fails(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2,
@@ -803,16 +803,16 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         assert result is False
         mock_step2.assert_not_called()
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_returns_false_when_step2_fails(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -833,17 +833,17 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         assert result is False
         mock_step3.assert_not_called()
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_returns_true_when_all_steps_succeed(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -873,17 +873,17 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
 class TestRunSpecDrivenWorkflowCompletion:
     """Tests for run_spec_driven_workflow completion."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_shows_completion_on_success(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -913,17 +913,17 @@ class TestRunSpecDrivenWorkflowCompletion:
 class TestRunSpecDrivenWorkflowStep3Arguments:
     """Tests for run_spec_driven_workflow passing correct arguments to step_3_execute."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_passes_use_tui_and_verbose_to_step_3_execute(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -953,17 +953,17 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         assert call_kwargs["use_tui"] is True
         assert call_kwargs["verbose"] is True
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_passes_use_tui_false_and_verbose_false_to_step_3_execute(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -993,17 +993,17 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         assert call_kwargs["use_tui"] is False
         assert call_kwargs["verbose"] is False
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_passes_use_tui_none_for_auto_detection(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -1041,18 +1041,18 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
 class TestRunSpecDrivenWorkflowResumeLogic:
     """Tests for run_spec_driven_workflow resume logic based on current_step."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
-    @patch("specflow.workflow.runner.WorkflowState")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.WorkflowState")
     def test_skips_step_1_when_current_step_is_2(
         self, mock_state_class, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -1083,18 +1083,18 @@ class TestRunSpecDrivenWorkflowResumeLogic:
         mock_step2.assert_called_once()
         mock_step3.assert_called_once()
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
-    @patch("specflow.workflow.runner.WorkflowState")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.WorkflowState")
     def test_skips_step_1_and_step_2_when_current_step_is_3(
         self, mock_state_class, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -1134,9 +1134,9 @@ class TestRunSpecDrivenWorkflowResumeLogic:
 class TestSetupBranchSpecialCharacters:
     """Tests for _setup_branch with special characters in ticket summary."""
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.create_branch")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.create_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_branch_name_with_spaces_and_special_chars(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state
     ):
@@ -1164,9 +1164,9 @@ class TestSetupBranchSpecialCharacters:
         assert workflow_state.branch_name == expected_branch
         mock_create.assert_called_once_with(expected_branch)
 
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.create_branch")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.create_branch")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_branch_name_with_multiple_special_chars(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state
     ):
@@ -1201,18 +1201,18 @@ class TestSetupBranchSpecialCharacters:
 class TestRunSpecDrivenWorkflowStep4:
     """Tests for run_spec_driven_workflow Step 4 documentation updates."""
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_4_update_docs")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_4_update_docs")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_calls_step_4_when_auto_update_docs_enabled(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -1238,18 +1238,18 @@ class TestRunSpecDrivenWorkflowStep4:
 
         mock_step4.assert_called_once()
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_4_update_docs")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_4_update_docs")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_skips_step_4_when_auto_update_docs_disabled(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,
@@ -1274,18 +1274,18 @@ class TestRunSpecDrivenWorkflowStep4:
 
         mock_step4.assert_not_called()
 
-    @patch("specflow.workflow.runner.AuggieClient")
-    @patch("specflow.workflow.runner._show_completion")
-    @patch("specflow.workflow.runner.step_4_update_docs")
-    @patch("specflow.workflow.runner.step_3_execute")
-    @patch("specflow.workflow.runner.step_2_create_tasklist")
-    @patch("specflow.workflow.runner.step_1_create_plan")
-    @patch("specflow.workflow.runner.get_current_commit")
-    @patch("specflow.workflow.runner._setup_branch")
-    @patch("specflow.workflow.runner.prompt_confirm")
-    @patch("specflow.workflow.runner.fetch_ticket_info")
-    @patch("specflow.workflow.runner.is_dirty")
-    @patch("specflow.workflow.runner.get_current_branch")
+    @patch("spec.workflow.runner.AuggieClient")
+    @patch("spec.workflow.runner._show_completion")
+    @patch("spec.workflow.runner.step_4_update_docs")
+    @patch("spec.workflow.runner.step_3_execute")
+    @patch("spec.workflow.runner.step_2_create_tasklist")
+    @patch("spec.workflow.runner.step_1_create_plan")
+    @patch("spec.workflow.runner.get_current_commit")
+    @patch("spec.workflow.runner._setup_branch")
+    @patch("spec.workflow.runner.prompt_confirm")
+    @patch("spec.workflow.runner.fetch_ticket_info")
+    @patch("spec.workflow.runner.is_dirty")
+    @patch("spec.workflow.runner.get_current_branch")
     def test_step_4_failure_does_not_fail_workflow(
         self, mock_get_branch, mock_is_dirty, mock_fetch, mock_confirm,
         mock_setup_branch, mock_commit, mock_step1, mock_step2, mock_step3,

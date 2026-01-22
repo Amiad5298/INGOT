@@ -3,9 +3,9 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from specflow.integrations.jira import JiraTicket
-from specflow.workflow.state import WorkflowState
-from specflow.workflow.task_memory import (
+from spec.integrations.jira import JiraTicket
+from spec.workflow.state import WorkflowState
+from spec.workflow.task_memory import (
     TaskMemory,
     _extract_test_commands,
     _get_modified_files,
@@ -14,7 +14,7 @@ from specflow.workflow.task_memory import (
     capture_task_memory,
     find_related_task_memories,
 )
-from specflow.workflow.tasks import Task
+from spec.workflow.tasks import Task
 
 
 class TestTaskMemory:
@@ -255,9 +255,9 @@ class TestExtractTestCommands:
 class TestCaptureTaskMemory:
     """Tests for capture_task_memory function."""
 
-    @patch("specflow.workflow.task_memory._get_modified_files")
-    @patch("specflow.workflow.task_memory._identify_patterns_in_changes")
-    @patch("specflow.workflow.task_memory._extract_test_commands")
+    @patch("spec.workflow.task_memory._get_modified_files")
+    @patch("spec.workflow.task_memory._identify_patterns_in_changes")
+    @patch("spec.workflow.task_memory._extract_test_commands")
     def test_captures_task_memory(
         self, mock_extract, mock_identify, mock_get_files
     ):
@@ -277,9 +277,9 @@ class TestCaptureTaskMemory:
         assert memory.patterns_used == ["Python implementation"]
         assert memory.test_commands == ["pytest tests/test_file.py"]
 
-    @patch("specflow.workflow.task_memory._get_modified_files")
-    @patch("specflow.workflow.task_memory._identify_patterns_in_changes")
-    @patch("specflow.workflow.task_memory._extract_test_commands")
+    @patch("spec.workflow.task_memory._get_modified_files")
+    @patch("spec.workflow.task_memory._identify_patterns_in_changes")
+    @patch("spec.workflow.task_memory._extract_test_commands")
     def test_adds_memory_to_state(
         self, mock_extract, mock_identify, mock_get_files
     ):

@@ -1,13 +1,13 @@
-"""Tests for specflow.workflow.step4_update_docs module."""
+"""Tests for spec.workflow.step4_update_docs module."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specflow.integrations.git import DiffResult
-from specflow.integrations.jira import JiraTicket
-from specflow.workflow.state import WorkflowState
-from specflow.workflow.step4_update_docs import (
+from spec.integrations.git import DiffResult
+from spec.integrations.jira import JiraTicket
+from spec.workflow.state import WorkflowState
+from spec.workflow.step4_update_docs import (
     MAX_DIFF_SIZE,
     NonDocSnapshot,
     Step4Result,
@@ -160,9 +160,9 @@ class TestMaxDiffSize:
 class TestStep4NoChanges:
     """Tests for step_4_update_docs when there are no changes."""
 
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_skips_when_no_changes_and_no_base_commit(
         self, mock_has_any_changes, mock_print_info, mock_print_header, ticket
     ):
@@ -177,10 +177,10 @@ class TestStep4NoChanges:
         assert result.success
         mock_print_info.assert_called()
 
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_skips_when_diff_has_no_changes(
         self, mock_has_any_changes, mock_get_diff, mock_print_info, mock_print_header,
         workflow_state
@@ -195,10 +195,10 @@ class TestStep4NoChanges:
         assert result.success
         assert not result.agent_ran
 
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_warning")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_warning")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_skips_when_diff_has_error(
         self, mock_has_any_changes, mock_get_diff, mock_print_warning, mock_print_header,
         workflow_state
@@ -225,13 +225,13 @@ class TestStep4NoChanges:
 class TestStep4WithChanges:
     """Tests for step_4_update_docs when there are changes."""
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_success")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_success")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_calls_auggie_with_diff(
         self, mock_has_any_changes, mock_get_diff, mock_print_success,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -276,13 +276,13 @@ class TestStep4WithChanges:
 class TestStep4AgentFailure:
     """Tests for step_4_update_docs when agent fails."""
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_warning")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_warning")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_returns_success_when_agent_returns_failure_non_blocking(
         self, mock_has_any_changes, mock_get_diff, mock_print_warning,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -314,13 +314,13 @@ class TestStep4AgentFailure:
         assert not result.docs_updated
         mock_print_warning.assert_called()
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_error")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_error")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_returns_success_when_agent_raises_exception(
         self, mock_has_any_changes, mock_get_diff, mock_print_error,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -360,15 +360,15 @@ class TestStep4AgentFailure:
 class TestStep4NonDocEnforcement:
     """Tests for non-documentation file change enforcement."""
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_success")
-    @patch("specflow.workflow.step4_update_docs.print_warning")
-    @patch("specflow.workflow.step4_update_docs.print_error")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_success")
+    @patch("spec.workflow.step4_update_docs.print_warning")
+    @patch("spec.workflow.step4_update_docs.print_error")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_reverts_non_doc_changes_made_by_agent(
         self, mock_has_any_changes, mock_get_diff, mock_print_error, mock_print_warning,
         mock_print_success, mock_print_info, mock_print_header, mock_snapshot_class,
@@ -404,13 +404,13 @@ class TestStep4NonDocEnforcement:
         # Violations should trigger error messages
         mock_print_error.assert_called()
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_success")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_success")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_no_revert_when_only_doc_files_changed(
         self, mock_has_any_changes, mock_get_diff, mock_print_success,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -523,13 +523,13 @@ class TestBuildDocUpdatePrompt:
 class TestStep4UntrackedOnly:
     """Tests for Step 4 with only untracked files (no staged/unstaged)."""
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_success")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_success")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_runs_when_only_untracked_files_exist(
         self, mock_has_changes, mock_get_diff, mock_print_success,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -564,9 +564,9 @@ class TestStep4UntrackedOnly:
         assert result.agent_ran  # Agent should run!
         mock_auggie_client.run_with_callback.assert_called_once()
 
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_skips_when_no_changes_at_all(
         self, mock_has_changes, mock_print_info, mock_print_header, ticket
     ):
@@ -591,13 +591,13 @@ class TestStep4UntrackedOnly:
 class TestStep4MissingBaseCommit:
     """Tests for Step 4 when base_commit is missing but repo is dirty."""
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_success")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_success")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_falls_back_to_staged_unstaged_when_no_base_commit(
         self, mock_has_changes, mock_get_diff, mock_print_success,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -642,14 +642,14 @@ class TestStep4MissingBaseCommit:
 class TestStep4ViolationTracking:
     """Tests for non-doc violation tracking and visibility."""
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_warning")
-    @patch("specflow.workflow.step4_update_docs.print_error")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_warning")
+    @patch("spec.workflow.step4_update_docs.print_error")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_tracks_violations_in_result(
         self, mock_has_changes, mock_get_diff, mock_print_error, mock_print_warning,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -679,14 +679,14 @@ class TestStep4ViolationTracking:
         assert result.had_violations is True
         assert "src/code.py" in result.non_doc_reverted
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_warning")
-    @patch("specflow.workflow.step4_update_docs.print_error")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_warning")
+    @patch("spec.workflow.step4_update_docs.print_error")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_tracks_failed_reverts(
         self, mock_has_changes, mock_get_diff, mock_print_error, mock_print_warning,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -716,14 +716,14 @@ class TestStep4ViolationTracking:
         assert "src/code.py" in result.non_doc_reverted
         assert "src/other.py" in result.non_doc_revert_failed
 
-    @patch("specflow.ui.plan_tui.StreamingOperationUI")
-    @patch("specflow.workflow.step4_update_docs.NonDocSnapshot")
-    @patch("specflow.workflow.step4_update_docs.print_header")
-    @patch("specflow.workflow.step4_update_docs.print_info")
-    @patch("specflow.workflow.step4_update_docs.print_warning")
-    @patch("specflow.workflow.step4_update_docs.print_error")
-    @patch("specflow.workflow.step4_update_docs.get_diff_from_baseline")
-    @patch("specflow.workflow.step4_update_docs.has_any_changes")
+    @patch("spec.ui.plan_tui.StreamingOperationUI")
+    @patch("spec.workflow.step4_update_docs.NonDocSnapshot")
+    @patch("spec.workflow.step4_update_docs.print_header")
+    @patch("spec.workflow.step4_update_docs.print_info")
+    @patch("spec.workflow.step4_update_docs.print_warning")
+    @patch("spec.workflow.step4_update_docs.print_error")
+    @patch("spec.workflow.step4_update_docs.get_diff_from_baseline")
+    @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_prints_error_banner_on_violations(
         self, mock_has_changes, mock_get_diff, mock_print_error, mock_print_warning,
         mock_print_info, mock_print_header, mock_snapshot_class, mock_ui_class,
@@ -811,7 +811,7 @@ class TestNonDocSnapshotGuardrailFixes:
         snapshot = NonDocSnapshot()
 
         # Mock subprocess.run for detect_changes() - reports new untracked file
-        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+        with patch("spec.workflow.step4_update_docs.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout="?? new_code.py\0"
@@ -843,7 +843,7 @@ class TestNonDocSnapshotGuardrailFixes:
         scratch_file.write_text("ORIGINAL")
 
         # Mock for capture_non_doc_state - file is untracked
-        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+        with patch("spec.workflow.step4_update_docs.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout="?? scratch.py\0"
@@ -860,7 +860,7 @@ class TestNonDocSnapshotGuardrailFixes:
         scratch_file.write_text("MODIFIED")
 
         # Mock for detect_changes - file still shows as untracked
-        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+        with patch("spec.workflow.step4_update_docs.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout="?? scratch.py\0"
@@ -885,7 +885,7 @@ class TestNonDocSnapshotGuardrailFixes:
         # Simulate by creating snapshot where file didn't exist (deleted state)
 
         # Mock for capture_non_doc_state - file shows as deleted ("D " or " D")
-        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+        with patch("spec.workflow.step4_update_docs.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout=" D src/foo.py\0"  # Deleted in worktree
@@ -905,7 +905,7 @@ class TestNonDocSnapshotGuardrailFixes:
         recreated_file.write_text("agent recreated this")
 
         # Mock for detect_changes
-        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+        with patch("spec.workflow.step4_update_docs.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout=""  # File might show as modified or nothing
@@ -916,7 +916,7 @@ class TestNonDocSnapshotGuardrailFixes:
         assert "src/foo.py" in changed
 
         # Mock _git_restore_file and verify it's NOT called
-        with patch("specflow.workflow.step4_update_docs._git_restore_file") as mock_restore:
+        with patch("spec.workflow.step4_update_docs._git_restore_file") as mock_restore:
             reverted = snapshot.revert_changes(["src/foo.py"])
 
             # Should NOT call git restore (A3 fix)
@@ -951,7 +951,7 @@ class TestNonDocSnapshotGuardrailFixes:
 
         # Mock subprocess.run for detect_changes() - reports modified tracked file
         # " M" = modified in worktree (unstaged modification of tracked file)
-        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+        with patch("spec.workflow.step4_update_docs.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout=" M src/code.py\0"
@@ -971,7 +971,7 @@ class TestNonDocSnapshotGuardrailFixes:
         assert file_snap.existed is True
 
         # Revert should call git restore (not delete the file)
-        with patch("specflow.workflow.step4_update_docs._git_restore_file") as mock_restore:
+        with patch("spec.workflow.step4_update_docs._git_restore_file") as mock_restore:
             mock_restore.return_value = True  # git restore succeeds
 
             reverted = snapshot.revert_changes(["src/code.py"])
@@ -991,7 +991,7 @@ class TestNonDocSnapshotGuardrailFixes:
         snapshot = NonDocSnapshot()
 
         # Mock subprocess.run for detect_changes() - reports renamed file
-        with patch("specflow.workflow.step4_update_docs.subprocess.run") as mock_run:
+        with patch("spec.workflow.step4_update_docs.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout="R  old_name.py\0new_name.py\0"

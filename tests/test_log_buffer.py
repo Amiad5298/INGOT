@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from specflow.ui.log_buffer import TaskLogBuffer
+from spec.ui.log_buffer import TaskLogBuffer
 
 
 class TestTaskLogBufferCreation:
