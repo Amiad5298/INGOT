@@ -46,12 +46,14 @@ def workflow_state(ticket, tmp_path):
     specs_dir.mkdir(parents=True)
 
     tasklist_path = specs_dir / "TEST-123-tasklist.md"
-    tasklist_path.write_text("""# Task List: TEST-123
+    tasklist_path.write_text(
+        """# Task List: TEST-123
 
 - [ ] Task 1
 - [ ] Task 2
 - [ ] Task 3
-""")
+"""
+    )
     state.tasklist_file = tasklist_path
 
     # Create plan file
@@ -389,7 +391,9 @@ class TestExecuteTaskWithCallback:
         callback.assert_any_call("Line 2")
 
     @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_callback_receives_error_on_exception(self, mock_auggie_class, workflow_state, sample_task):
+    def test_callback_receives_error_on_exception(
+        self, mock_auggie_class, workflow_state, sample_task
+    ):
         """Callback receives error message on exception."""
         mock_client = MagicMock()
         mock_client.run_with_callback.side_effect = RuntimeError("Connection failed")
@@ -545,7 +549,7 @@ class TestRunPostImplementationTests:
         mock_ui_class.return_value = mock_ui
         mock_ui.__enter__ = MagicMock(return_value=mock_ui)
         mock_ui.__exit__ = MagicMock(return_value=None)
-        mock_ui.quit_requested = False
+        mock_ui.check_quit_requested.return_value = False
 
         _run_post_implementation_tests(workflow_state)
 
@@ -570,7 +574,7 @@ class TestRunPostImplementationTests:
         mock_ui_class.return_value = mock_ui
         mock_ui.__enter__ = MagicMock(return_value=mock_ui)
         mock_ui.__exit__ = MagicMock(return_value=None)
-        mock_ui.quit_requested = False
+        mock_ui.check_quit_requested.return_value = False
 
         # Should not raise exception
         _run_post_implementation_tests(workflow_state)
@@ -599,7 +603,9 @@ class TestOfferCommitInstructions:
     @patch("spec.workflow.step3_execute.console")
     @patch("spec.workflow.step3_execute.prompt_confirm")
     @patch("spec.workflow.step3_execute.is_dirty")
-    def test_prompts_user_for_instructions(self, mock_is_dirty, mock_confirm, mock_console, workflow_state):
+    def test_prompts_user_for_instructions(
+        self, mock_is_dirty, mock_confirm, mock_console, workflow_state
+    ):
         """Prompts user for instructions."""
         mock_is_dirty.return_value = True
         mock_confirm.return_value = False
@@ -611,7 +617,9 @@ class TestOfferCommitInstructions:
     @patch("spec.workflow.step3_execute.console")
     @patch("spec.workflow.step3_execute.prompt_confirm")
     @patch("spec.workflow.step3_execute.is_dirty")
-    def test_does_nothing_when_user_declines(self, mock_is_dirty, mock_confirm, mock_console, workflow_state):
+    def test_does_nothing_when_user_declines(
+        self, mock_is_dirty, mock_confirm, mock_console, workflow_state
+    ):
         """Does nothing when user declines."""
         mock_is_dirty.return_value = True
         mock_confirm.return_value = False
@@ -624,7 +632,9 @@ class TestOfferCommitInstructions:
     @patch("spec.workflow.step3_execute.console")
     @patch("spec.workflow.step3_execute.prompt_confirm")
     @patch("spec.workflow.step3_execute.is_dirty")
-    def test_prints_commit_commands_when_accepted(self, mock_is_dirty, mock_confirm, mock_console, workflow_state):
+    def test_prints_commit_commands_when_accepted(
+        self, mock_is_dirty, mock_confirm, mock_console, workflow_state
+    ):
         """Prints commit commands when accepted."""
         mock_is_dirty.return_value = True
         mock_confirm.return_value = True
@@ -661,8 +671,11 @@ class TestExecuteFallback:
         log_dir.mkdir()
 
         _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         assert mock_execute.call_count == 2
@@ -681,8 +694,11 @@ class TestExecuteFallback:
         log_dir.mkdir()
 
         _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         mock_mark.assert_called_once()
@@ -706,8 +722,11 @@ class TestExecuteFallback:
         log_dir.mkdir()
 
         failed = _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         assert failed == ["Task 2"]
@@ -726,8 +745,11 @@ class TestExecuteFallback:
         log_dir.mkdir()
 
         _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         mock_capture.assert_called_once()
@@ -748,8 +770,11 @@ class TestExecuteFallback:
 
         # Should not raise
         failed = _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         assert failed == []  # Task still counts as success
@@ -773,8 +798,11 @@ class TestExecuteFallback:
         log_dir.mkdir()
 
         failed = _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Should stop after Task 2 fails
@@ -799,8 +827,11 @@ class TestExecuteFallback:
         log_dir.mkdir()
 
         failed = _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         assert failed == ["Failed 1", "Failed 2"]
@@ -823,7 +854,7 @@ class TestExecuteWithTui:
     ):
         """Initializes TUI correctly."""
         mock_tui = MagicMock()
-        mock_tui.quit_requested = False
+        mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
         mock_tui_class.return_value = mock_tui
         mock_execute.return_value = True
@@ -833,13 +864,14 @@ class TestExecuteWithTui:
         log_dir.mkdir()
 
         _execute_with_tui(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
-        mock_tui_class.assert_called_once_with(
-            ticket_id="TEST-123", verbose_mode=False
-        )
+        mock_tui_class.assert_called_once_with(ticket_id="TEST-123", verbose_mode=False)
         mock_tui.initialize_records.assert_called_once_with(["Task 1"])
 
     @patch("spec.workflow.step3_execute.capture_task_memory")
@@ -851,7 +883,7 @@ class TestExecuteWithTui:
     ):
         """Marks tasks complete on success."""
         mock_tui = MagicMock()
-        mock_tui.quit_requested = False
+        mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
         mock_tui_class.return_value = mock_tui
         mock_execute.return_value = True
@@ -861,8 +893,11 @@ class TestExecuteWithTui:
         log_dir.mkdir()
 
         _execute_with_tui(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         mock_mark.assert_called_once()
@@ -877,7 +912,7 @@ class TestExecuteWithTui:
     ):
         """Tracks failed tasks."""
         mock_tui = MagicMock()
-        mock_tui.quit_requested = False
+        mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
         mock_tui_class.return_value = mock_tui
         mock_execute.side_effect = [True, False]
@@ -890,8 +925,11 @@ class TestExecuteWithTui:
         log_dir.mkdir()
 
         failed = _execute_with_tui(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         assert failed == ["Task 2"]
@@ -905,7 +943,7 @@ class TestExecuteWithTui:
     ):
         """Respects fail_fast option."""
         mock_tui = MagicMock()
-        mock_tui.quit_requested = False
+        mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
         mock_tui_class.return_value = mock_tui
         mock_execute.side_effect = [True, False, True]
@@ -920,8 +958,11 @@ class TestExecuteWithTui:
         log_dir.mkdir()
 
         _execute_with_tui(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Should stop after Task 2 fails
@@ -937,7 +978,7 @@ class TestExecuteWithTui:
     ):
         """Handles capture_task_memory exceptions gracefully."""
         mock_tui = MagicMock()
-        mock_tui.quit_requested = False
+        mock_tui.check_quit_requested.return_value = False
         mock_record = MagicMock(elapsed_time=1.0)
         mock_record.log_buffer = MagicMock()
         mock_tui.get_record.return_value = mock_record
@@ -951,8 +992,11 @@ class TestExecuteWithTui:
 
         # Should not raise
         failed = _execute_with_tui(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         assert failed == []  # Task still counts as success
@@ -987,10 +1031,12 @@ class TestStep3Execute:
         mock_baseline.return_value = True
         # Create tasklist with all completed tasks
         tasklist = tmp_path / "specs" / "TEST-123-tasklist.md"
-        tasklist.write_text("""# Task List
+        tasklist.write_text(
+            """# Task List
 - [x] Completed Task 1
 - [x] Completed Task 2
-""")
+"""
+        )
         workflow_state.tasklist_file = tasklist
 
         result = step_3_execute(workflow_state, use_tui=False)
@@ -1006,8 +1052,17 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_execute_with_tui_when_tui_mode(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_tui,
-        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute_tui,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Calls _execute_with_tui when TUI mode."""
         mock_baseline.return_value = True
@@ -1028,8 +1083,17 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_execute_fallback_when_non_tui_mode(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
-        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute_fallback,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Calls _execute_fallback when non-TUI mode."""
         mock_baseline.return_value = True
@@ -1051,8 +1115,18 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_prompts_user_on_task_failures(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
-        mock_confirm, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute,
+        mock_confirm,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Prompts user on task failures."""
         mock_baseline.return_value = True
@@ -1074,8 +1148,17 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_returns_true_when_all_tasks_succeed(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
-        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Returns True when all tasks succeed."""
         mock_baseline.return_value = True
@@ -1096,8 +1179,17 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._cleanup_old_runs")
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     def test_returns_false_when_user_declines_after_failures(
-        self, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
-        mock_confirm, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute,
+        mock_confirm,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Returns False when user declines after task failures."""
         mock_log_dir.return_value = tmp_path / "logs"
@@ -1118,8 +1210,17 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_show_summary(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
-        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Calls _show_summary."""
         mock_baseline.return_value = True
@@ -1140,8 +1241,17 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_run_post_implementation_tests(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
-        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Calls _run_post_implementation_tests."""
         mock_baseline.return_value = True
@@ -1162,8 +1272,17 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_calls_offer_commit_instructions(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute,
-        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Calls _offer_commit_instructions."""
         mock_baseline.return_value = True
@@ -1181,13 +1300,20 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_stops_execution_when_quit_requested(
-        self, mock_tui_class, mock_execute, mock_mark, mock_capture, mock_confirm, workflow_state, tmp_path
+        self,
+        mock_tui_class,
+        mock_execute,
+        mock_mark,
+        mock_capture,
+        mock_confirm,
+        workflow_state,
+        tmp_path,
     ):
         """Stops execution when user requests quit via TUI."""
         # Setup
         mock_tui = MagicMock()
         # Simulate quit requested before the second task
-        mock_tui.quit_requested = True
+        mock_tui.check_quit_requested.return_value = True
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0)
         mock_tui_class.return_value = mock_tui
 
@@ -1203,8 +1329,11 @@ class TestStep3Execute:
 
         # Execute
         _execute_with_tui(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Assertions
@@ -1234,8 +1363,18 @@ class TestTwoPhaseExecution:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_executes_fundamental_tasks_first(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
-        mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute_fallback,
+        mock_execute_parallel,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Fundamental tasks run before independent tasks."""
         mock_baseline.return_value = True
@@ -1248,12 +1387,14 @@ class TestTwoPhaseExecution:
         # Create tasklist with both fundamental and independent tasks
         tasklist = workflow_state.get_tasklist_path()
         tasklist.parent.mkdir(parents=True, exist_ok=True)
-        tasklist.write_text("""
+        tasklist.write_text(
+            """
 <!-- category: fundamental, order: 1 -->
 - [ ] Fundamental task
 <!-- category: independent, group: ui -->
 - [ ] Independent task
-""")
+"""
+        )
 
         step_3_execute(workflow_state)
 
@@ -1274,8 +1415,17 @@ class TestTwoPhaseExecution:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_fundamental_tasks_run_sequentially(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
-        mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute_fallback,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Fundamental tasks execute one at a time (not in parallel)."""
         mock_baseline.return_value = True
@@ -1287,12 +1437,14 @@ class TestTwoPhaseExecution:
         # Create tasklist with only fundamental tasks
         tasklist = workflow_state.get_tasklist_path()
         tasklist.parent.mkdir(parents=True, exist_ok=True)
-        tasklist.write_text("""
+        tasklist.write_text(
+            """
 <!-- category: fundamental, order: 1 -->
 - [ ] First fundamental
 <!-- category: fundamental, order: 2 -->
 - [ ] Second fundamental
-""")
+"""
+        )
 
         step_3_execute(workflow_state)
 
@@ -1313,8 +1465,18 @@ class TestTwoPhaseExecution:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_independent_tasks_run_in_parallel(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
-        mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute_fallback,
+        mock_execute_parallel,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Independent tasks execute concurrently."""
         mock_baseline.return_value = True
@@ -1330,12 +1492,14 @@ class TestTwoPhaseExecution:
         # Create tasklist with only independent tasks
         tasklist = workflow_state.get_tasklist_path()
         tasklist.parent.mkdir(parents=True, exist_ok=True)
-        tasklist.write_text("""
+        tasklist.write_text(
+            """
 <!-- category: independent, group: ui -->
 - [ ] UI Component
 <!-- category: independent, group: api -->
 - [ ] API Endpoint
-""")
+"""
+        )
 
         step_3_execute(workflow_state)
 
@@ -1352,8 +1516,18 @@ class TestTwoPhaseExecution:
     @patch("spec.workflow.step3_execute._create_run_log_dir")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_skips_parallel_phase_when_disabled(
-        self, mock_baseline, mock_log_dir, mock_cleanup, mock_should_tui, mock_execute_fallback,
-        mock_execute_parallel, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_log_dir,
+        mock_cleanup,
+        mock_should_tui,
+        mock_execute_fallback,
+        mock_execute_parallel,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        workflow_state,
+        tmp_path,
     ):
         """Respects parallel_execution_enabled=False."""
         mock_baseline.return_value = True
@@ -1368,12 +1542,14 @@ class TestTwoPhaseExecution:
         # Create tasklist with independent tasks
         tasklist = workflow_state.get_tasklist_path()
         tasklist.parent.mkdir(parents=True, exist_ok=True)
-        tasklist.write_text("""
+        tasklist.write_text(
+            """
 <!-- category: independent, group: ui -->
 - [ ] UI Component
 <!-- category: independent, group: api -->
 - [ ] API Endpoint
-""")
+"""
+        )
 
         step_3_execute(workflow_state)
 
@@ -1410,8 +1586,11 @@ class TestParallelExecution:
         log_dir.mkdir()
 
         failed = _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # All tasks should succeed
@@ -1431,16 +1610,16 @@ class TestParallelExecution:
         mock_execute_retry.return_value = True
         workflow_state.max_parallel_tasks = 2
 
-        tasks = [
-            Task(name=f"Task {i}", category=TaskCategory.INDEPENDENT)
-            for i in range(5)
-        ]
+        tasks = [Task(name=f"Task {i}", category=TaskCategory.INDEPENDENT) for i in range(5)]
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
 
         failed = _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # All tasks should complete
@@ -1467,8 +1646,11 @@ class TestParallelExecution:
         log_dir.mkdir()
 
         failed = _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Should have one failed task
@@ -1493,8 +1675,11 @@ class TestParallelExecution:
         log_dir.mkdir()
 
         _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Should mark task complete
@@ -1510,9 +1695,7 @@ class TestTaskRetry:
     """Tests for task retry with rate limit handling."""
 
     @patch("spec.workflow.step3_execute._execute_task")
-    def test_skips_retry_when_disabled(
-        self, mock_execute, workflow_state, tmp_path
-    ):
+    def test_skips_retry_when_disabled(self, mock_execute, workflow_state, tmp_path):
         """Skips retry wrapper when max_retries=0."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1521,17 +1704,13 @@ class TestTaskRetry:
         workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
 
         task = Task(name="Test Task")
-        result = _execute_task_with_retry(
-            workflow_state, task, workflow_state.get_plan_path()
-        )
+        result = _execute_task_with_retry(workflow_state, task, workflow_state.get_plan_path())
 
         assert result is True
         mock_execute.assert_called_once()
 
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
-    def test_uses_callback_when_provided(
-        self, mock_execute_callback, workflow_state, tmp_path
-    ):
+    def test_uses_callback_when_provided(self, mock_execute_callback, workflow_state, tmp_path):
         """Uses callback version when callback provided."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1549,9 +1728,7 @@ class TestTaskRetry:
         mock_execute_callback.assert_called_once()
 
     @patch("spec.workflow.step3_execute._execute_task")
-    def test_returns_false_on_failure(
-        self, mock_execute, workflow_state, tmp_path
-    ):
+    def test_returns_false_on_failure(self, mock_execute, workflow_state, tmp_path):
         """Returns False when task execution fails."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1560,16 +1737,12 @@ class TestTaskRetry:
         workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
 
         task = Task(name="Failing Task")
-        result = _execute_task_with_retry(
-            workflow_state, task, workflow_state.get_plan_path()
-        )
+        result = _execute_task_with_retry(workflow_state, task, workflow_state.get_plan_path())
 
         assert result is False
 
     @patch("spec.workflow.step3_execute._execute_task")
-    def test_retries_on_rate_limit_error(
-        self, mock_execute, workflow_state, tmp_path
-    ):
+    def test_retries_on_rate_limit_error(self, mock_execute, workflow_state, tmp_path):
         """Retries execution on rate limit errors."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1581,9 +1754,7 @@ class TestTaskRetry:
         )
 
         task = Task(name="Retry Task")
-        result = _execute_task_with_retry(
-            workflow_state, task, workflow_state.get_plan_path()
-        )
+        result = _execute_task_with_retry(workflow_state, task, workflow_state.get_plan_path())
 
         assert result is True
         assert mock_execute.call_count == 2
@@ -1613,8 +1784,11 @@ class TestParallelTaskMemorySkipped:
         log_dir.mkdir()
 
         _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Memory capture should NOT be called for parallel tasks
@@ -1634,8 +1808,11 @@ class TestParallelTaskMemorySkipped:
         log_dir.mkdir()
 
         _execute_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Memory capture SHOULD be called for sequential tasks
@@ -1668,8 +1845,11 @@ class TestParallelFailFast:
         log_dir.mkdir()
 
         failed = _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Task 1 should fail, others should be skipped
@@ -1697,8 +1877,11 @@ class TestParallelFailFast:
         log_dir.mkdir()
 
         failed = _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # All tasks should execute
@@ -1756,8 +1939,11 @@ class TestParallelFailFast:
         log_dir.mkdir()
 
         failed = _execute_parallel_fallback(
-            workflow_state, tasks, workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(), log_dir
+            workflow_state,
+            tasks,
+            workflow_state.get_plan_path(),
+            workflow_state.get_tasklist_path(),
+            log_dir,
         )
 
         # Verify that only the first task was actually "executed" (added to our list)
@@ -1779,17 +1965,14 @@ class TestExecuteTaskWithCallbackRateLimit:
 
         mock_client = MagicMock()
         # Simulate rate limit in output
-        mock_client.run_with_callback.return_value = (
-            False, "Error: HTTP 429 Too Many Requests"
-        )
+        mock_client.run_with_callback.return_value = (False, "Error: HTTP 429 Too Many Requests")
         mock_auggie_class.return_value = mock_client
 
         callback = MagicMock()
 
         with pytest.raises(AuggieRateLimitError):
             _execute_task_with_callback(
-                workflow_state, sample_task, workflow_state.get_plan_path(),
-                callback=callback
+                workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
             )
 
     @patch("spec.workflow.step3_execute.AuggieClient")
@@ -1803,8 +1986,7 @@ class TestExecuteTaskWithCallbackRateLimit:
 
         callback = MagicMock()
         result = _execute_task_with_callback(
-            workflow_state, sample_task, workflow_state.get_plan_path(),
-            callback=callback
+            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
         )
 
         assert result is False

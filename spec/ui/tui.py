@@ -301,7 +301,8 @@ class TaskRunnerUI:
     # Lock for thread-safe refresh operations
     _refresh_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     # Lock for thread-safe state access (selected_index, _running_task_indices, etc.)
-    _state_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    # Uses RLock to support reentrant locking (e.g., methods that call other locked methods)
+    _state_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
     # Cache for spinner objects to maintain animation state across renders
     _spinners: dict[int, Spinner] = field(default_factory=dict, init=False, repr=False)
 
@@ -427,18 +428,28 @@ class TaskRunnerUI:
         Returns:
             Rich Group containing all panels.
         """
-        # Snapshot ALL state under lock once to avoid races and lock bouncing
+        # Snapshot ALL state under lock once to avoid races and redundant locking
         with self._state_lock:
             selected_idx = self.selected_index
             current_task_idx = self._current_task_index
             parallel_mode_snapshot = self.parallel_mode
             follow_mode_snapshot = self.follow_mode
             verbose_mode_snapshot = self.verbose_mode
+
             # Calculate running_count directly here to avoid re-locking
             if self.parallel_mode:
                 running_count = len(self._running_task_indices)
             else:
                 running_count = 1 if self._current_task_index >= 0 else 0
+
+            # Snapshot log buffer and task name here to avoid redundant lock acquisition
+            # (get_current_log_buffer and get_current_task_name also acquire _state_lock)
+            display_index = selected_idx if selected_idx >= 0 else current_task_idx
+            if display_index < 0 and self.parallel_mode and self._running_task_indices:
+                display_index = min(self._running_task_indices)
+            display_record = self.get_record(display_index)
+            current_log_buffer = display_record.log_buffer if display_record else None
+            current_task_name = display_record.task_name if display_record else ""
 
         task_panel = render_task_list(
             self.records,
@@ -449,8 +460,8 @@ class TaskRunnerUI:
         )
 
         log_panel = render_log_panel(
-            self.get_current_log_buffer(),
-            task_name=self.get_current_task_name(),
+            current_log_buffer,
+            task_name=current_task_name,
             follow_mode=follow_mode_snapshot,
         )
 
