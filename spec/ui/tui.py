@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 DEFAULT_LOG_TAIL_LINES = 15
 
 # Refresh rate for the TUI (times per second)
-REFRESH_RATE = 4
+REFRESH_RATE = 10
 
 # Default number of log lines to display in verbose mode (single-operation mode)
 DEFAULT_VERBOSE_LINES = 10
@@ -140,10 +140,10 @@ def render_task_list(
         if record.status == TaskRunStatus.RUNNING:
             if spinners is not None:
                 if i not in spinners:
-                    spinners[i] = Spinner("dots", style=color)
+                    spinners[i] = Spinner("line", style=color)
                 status_cell = spinners[i]
             else:
-                status_cell = Spinner("dots", style=color)
+                status_cell = Spinner("line", style=color)
         else:
             # Remove from spinner cache when task is no longer running
             if spinners is not None and i in spinners:
@@ -346,6 +346,7 @@ class TaskRunnerUI:
         self.records = [
             TaskRunRecord(task_index=i, task_name=name) for i, name in enumerate(task_names)
         ]
+        self._spinners = {}  # Explicit initialization
 
     def set_log_dir(self, log_dir: Path) -> None:
         """Set the log directory for this run (multi-task mode).
@@ -734,10 +735,11 @@ class TaskRunnerUI:
         self._live = Live(
             self._render_layout(),
             console=console,
+            auto_refresh=False,  # We rely entirely on manual background refresh
             refresh_per_second=REFRESH_RATE,
             vertical_overflow="visible",
         )
-        self._live.start()
+        self._live.start(refresh=True)
 
         # Start background refresh thread for smooth spinner animation.
         # This ensures the spinner keeps animating even when the main thread
@@ -797,7 +799,7 @@ class TaskRunnerUI:
         with self._refresh_lock:
             self._drain_event_queue()
             if self._live is not None:
-                self._live.update(self._render_layout())
+                self._live.update(self._render_layout(), refresh=True)
 
     def post_event(self, event: TaskEvent) -> None:
         """Thread-safe: push event to queue (called from worker threads).
@@ -953,7 +955,7 @@ class TaskRunnerUI:
             finally:
                 # Restart the TUI
                 if self._live is not None:
-                    self._live.start()
+                    self._live.start(refresh=True)
 
     def _handle_quit(self) -> None:
         """Handle quit request."""
