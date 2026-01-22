@@ -34,7 +34,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=specflow --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+          pytest --cov=spec --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
@@ -64,9 +64,9 @@ jobs:
 
       - name: Run Ruff linter
         run: |
-          ruff check specflow tests
+          ruff check spec tests
 
       - name: Run MyPy type checker
         run: |
-          mypy specflow --ignore-missing-imports
+          mypy spec --ignore-missing-imports
 
