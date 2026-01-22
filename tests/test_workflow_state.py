@@ -281,3 +281,34 @@ class TestWorkflowStateParallelFields:
         assert state.subagent_names["implementer"] == "custom-implementer"
         assert state.subagent_names["doc_updater"] == "custom-doc-updater"
 
+
+class TestWorkflowStateConflictDetectionFields:
+    """Tests for WorkflowState conflict detection fields."""
+
+    def test_conflict_detected_default_false(self, state):
+        """conflict_detected defaults to False."""
+        assert state.conflict_detected is False
+
+    def test_conflict_detected_can_be_set(self, state):
+        """conflict_detected can be set to True."""
+        state.conflict_detected = True
+        assert state.conflict_detected is True
+
+    def test_conflict_summary_default_empty(self, state):
+        """conflict_summary defaults to empty string."""
+        assert state.conflict_summary == ""
+
+    def test_conflict_summary_can_be_set(self, state):
+        """conflict_summary can be set."""
+        state.conflict_summary = "Ticket says add X but user says remove X."
+        assert state.conflict_summary == "Ticket says add X but user says remove X."
+
+    def test_conflict_fields_initialized_via_constructor(self, ticket):
+        """conflict fields can be set via constructor."""
+        state = WorkflowState(
+            ticket=ticket,
+            conflict_detected=True,
+            conflict_summary="Test conflict summary",
+        )
+        assert state.conflict_detected is True
+        assert state.conflict_summary == "Test conflict summary"

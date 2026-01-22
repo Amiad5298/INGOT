@@ -31,6 +31,10 @@ from spec.utils.console import (
 )
 from spec.utils.errors import SpecError, UserCancelledError
 from spec.utils.logging import log_message
+from spec.workflow.conflict_detection import (
+    _detect_context_conflict,
+    detect_context_conflict,
+)
 from spec.workflow.git_utils import DirtyTreePolicy
 from spec.workflow.state import RateLimitConfig, WorkflowState
 from spec.workflow.step1_plan import step_1_create_plan
@@ -139,7 +143,9 @@ def run_spec_driven_workflow(
             print_warning("Could not fetch ticket details. Continuing with ticket ID only.")
 
         # Ask user for additional context
-        if prompt_confirm("Would you like to add additional context about this ticket?", default=False):
+        if prompt_confirm(
+            "Would you like to add additional context about this ticket?", default=False
+        ):
             user_context = prompt_input(
                 "Enter additional context (press Enter twice when done):",
                 multiline=True,
@@ -147,6 +153,29 @@ def run_spec_driven_workflow(
             state.user_context = user_context.strip()
             if state.user_context:
                 print_success("Additional context saved")
+
+                # Fail-Fast Semantic Check: Detect conflicts between ticket and user context
+                print_step("Checking for conflicts between ticket and your context...")
+                conflict_detected, conflict_summary = _detect_context_conflict(
+                    state.ticket, state.user_context, auggie, state
+                )
+                state.conflict_detected = conflict_detected
+                state.conflict_summary = conflict_summary
+
+                if conflict_detected:
+                    console.print()
+                    print_warning(
+                        "⚠️  Potential conflict detected between ticket description and your additional context"
+                    )
+                    console.print(f"[yellow]   {conflict_summary}[/yellow]")
+                    console.print()
+                    print_info(
+                        "💡 Running the clarification step is strongly recommended to resolve this conflict."
+                    )
+                    print_info(
+                        "   You'll be prompted about clarification after the initial plan is generated."
+                    )
+                    console.print()
 
         # Create feature branch (now with ticket summary available)
         # Use state.ticket which has the updated summary from fetch_ticket_info
@@ -311,5 +340,7 @@ def _offer_cleanup(state: WorkflowState, original_branch: str) -> None:
 __all__ = [
     "run_spec_driven_workflow",
     "workflow_cleanup",
+    # Re-exported from conflict_detection module for backward compatibility
+    "_detect_context_conflict",
+    "detect_context_conflict",
 ]
-

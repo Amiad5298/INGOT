@@ -467,66 +467,54 @@ class TestRunClarification:
         assert result is True
         mock_auggie_class.assert_not_called()
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.workflow.step1_plan.prompt_confirm")
-    def test_runs_auggie_with_clarification_prompt(
-        self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
-    ):
+    def test_runs_auggie_with_clarification_prompt(self, mock_confirm, workflow_state, tmp_path):
         """Runs Auggie with correct clarification prompt."""
         mock_confirm.return_value = True  # User accepts
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = True
-        mock_auggie_class.return_value = mock_client
+        mock_auggie = MagicMock()
+        mock_auggie.run_print.return_value = True
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
-        mock_auggie = MagicMock()
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        mock_client.run_print.assert_called_once()
-        prompt = mock_client.run_print.call_args[0][0]
+        mock_auggie.run_print.assert_called_once()
+        prompt = mock_auggie.run_print.call_args[0][0]
         assert str(plan_path) in prompt
         assert "clarif" in prompt.lower()
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.workflow.step1_plan.prompt_confirm")
     def test_always_returns_true_even_on_auggie_failure(
-        self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
+        self, mock_confirm, workflow_state, tmp_path
     ):
         """Always returns True (even on Auggie failure)."""
         mock_confirm.return_value = True
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = False  # Auggie fails
-        mock_auggie_class.return_value = mock_client
+        mock_auggie = MagicMock()
+        mock_auggie.run_print.return_value = False  # Auggie fails
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
-        mock_auggie = MagicMock()
 
         result = _run_clarification(workflow_state, mock_auggie, plan_path)
 
         assert result is True  # Should still return True
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.workflow.step1_plan.prompt_confirm")
-    def test_uses_planner_subagent(self, mock_confirm, mock_auggie_class, workflow_state, tmp_path):
+    def test_uses_planner_subagent(self, mock_confirm, workflow_state, tmp_path):
         """Uses spec-planner subagent for clarification."""
         mock_confirm.return_value = True
-        mock_client = MagicMock()
-        mock_client.run_print.return_value = True
-        mock_auggie_class.return_value = mock_client
+        mock_auggie = MagicMock()
+        mock_auggie.run_print.return_value = True
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
-        mock_auggie = MagicMock()
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        # Verify AuggieClient is created without model (uses agent instead)
-        mock_auggie_class.assert_called_once_with()
         # Verify run_print is called with the planner subagent
-        call_kwargs = mock_client.run_print.call_args.kwargs
+        mock_auggie.run_print.assert_called_once()
+        call_kwargs = mock_auggie.run_print.call_args.kwargs
         assert "agent" in call_kwargs
         assert call_kwargs["agent"] == workflow_state.subagent_names["planner"]
 
@@ -936,3 +924,87 @@ class TestStep1CreatePlanConfirmation:
         step_1_create_plan(workflow_state, MagicMock())
 
         assert workflow_state.current_step == 1  # Unchanged
+
+
+# =============================================================================
+# Tests for _run_clarification() with conflict detection
+# =============================================================================
+
+
+class TestRunClarificationWithConflict:
+    """Tests for _run_clarification conflict-aware behavior."""
+
+    @patch("spec.workflow.step1_plan.prompt_confirm")
+    def test_includes_conflict_summary_in_prompt_when_conflict_detected(
+        self, mock_confirm, workflow_state, tmp_path
+    ):
+        """Prompt includes conflict summary when state.conflict_detected is True."""
+        mock_confirm.return_value = True
+        mock_auggie = MagicMock()
+        mock_auggie.run_print.return_value = True
+
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan content")
+
+        # Set conflict fields
+        workflow_state.conflict_detected = True
+        workflow_state.conflict_summary = "Ticket says add X but user says remove X."
+
+        _run_clarification(workflow_state, mock_auggie, plan_path)
+
+        mock_auggie.run_print.assert_called_once()
+        prompt = mock_auggie.run_print.call_args[0][0]
+
+        # Verify conflict context is in prompt
+        assert "conflict" in prompt.lower()
+        assert "Ticket says add X but user says remove X" in prompt
+        assert "FIRST priority" in prompt
+
+    @patch("spec.workflow.step1_plan.prompt_confirm")
+    def test_no_conflict_context_when_conflict_not_detected(
+        self, mock_confirm, workflow_state, tmp_path
+    ):
+        """Prompt does not include conflict context when state.conflict_detected is False."""
+        mock_confirm.return_value = True
+        mock_auggie = MagicMock()
+        mock_auggie.run_print.return_value = True
+
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan content")
+
+        # Ensure no conflict
+        workflow_state.conflict_detected = False
+        workflow_state.conflict_summary = ""
+
+        _run_clarification(workflow_state, mock_auggie, plan_path)
+
+        mock_auggie.run_print.assert_called_once()
+        prompt = mock_auggie.run_print.call_args[0][0]
+
+        # Verify conflict-specific context is NOT in prompt
+        assert "FIRST priority" not in prompt
+        assert "IMPORTANT: A conflict was detected" not in prompt
+
+    @patch("spec.workflow.step1_plan.prompt_confirm")
+    def test_no_conflict_context_when_detected_but_no_summary(
+        self, mock_confirm, workflow_state, tmp_path
+    ):
+        """Prompt does not include conflict context when conflict_detected but summary is empty."""
+        mock_confirm.return_value = True
+        mock_auggie = MagicMock()
+        mock_auggie.run_print.return_value = True
+
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan content")
+
+        # conflict_detected but empty summary
+        workflow_state.conflict_detected = True
+        workflow_state.conflict_summary = ""
+
+        _run_clarification(workflow_state, mock_auggie, plan_path)
+
+        mock_auggie.run_print.assert_called_once()
+        prompt = mock_auggie.run_print.call_args[0][0]
+
+        # Verify conflict-specific context is NOT in prompt (empty summary)
+        assert "FIRST priority" not in prompt

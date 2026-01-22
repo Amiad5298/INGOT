@@ -105,6 +105,11 @@ class WorkflowState:
     # User-provided additional context
     user_context: str = ""
 
+    # Conflict detection (Fail-Fast Semantic Check)
+    # Detects semantic conflicts between ticket description and user context
+    conflict_detected: bool = False
+    conflict_summary: str = ""
+
     # File paths
     plan_file: Path | None = None
     tasklist_file: Path | None = None
@@ -136,14 +141,16 @@ class WorkflowState:
 
     # Subagent configuration (names loaded from settings)
     # Defaults from auggie.py constants - the single source of truth
-    subagent_names: dict[str, str] = field(default_factory=lambda: {
-        "planner": SPECFLOW_AGENT_PLANNER,
-        "tasklist": SPECFLOW_AGENT_TASKLIST,
-        "tasklist_refiner": SPECFLOW_AGENT_TASKLIST_REFINER,
-        "implementer": SPECFLOW_AGENT_IMPLEMENTER,
-        "reviewer": SPECFLOW_AGENT_REVIEWER,
-        "doc_updater": SPECFLOW_AGENT_DOC_UPDATER,
-    })
+    subagent_names: dict[str, str] = field(
+        default_factory=lambda: {
+            "planner": SPECFLOW_AGENT_PLANNER,
+            "tasklist": SPECFLOW_AGENT_TASKLIST,
+            "tasklist_refiner": SPECFLOW_AGENT_TASKLIST_REFINER,
+            "implementer": SPECFLOW_AGENT_IMPLEMENTER,
+            "reviewer": SPECFLOW_AGENT_REVIEWER,
+            "doc_updater": SPECFLOW_AGENT_DOC_UPDATER,
+        }
+    )
 
     @property
     def specs_dir(self) -> Path:
@@ -207,4 +214,3 @@ __all__ = [
     "RateLimitConfig",
     "WorkflowState",
 ]
-
