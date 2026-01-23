@@ -566,126 +566,102 @@ class TestAutoSwitchOnTaskFinish:
 
 
 class TestSpinnerCaching:
-    """Tests for spinner caching to maintain animation state."""
+    """Tests for spinner caching to maintain animation state.
 
-    def test_spinner_reuse_for_running_task(self, records):
+    Spinners are now managed via events:
+    - Created in _handle_task_started
+    - Removed in _handle_task_finished
+    - render_task_list is read-only (retrieves from cache, doesn't create/remove)
+    """
+
+    def test_spinner_reuse_for_running_task(self, tui):
         """Spinner objects are reused for running tasks across renders."""
-        spinners = {}
 
-        # First render - creates spinner for task 1 (index 1, RUNNING)
-        render_task_list(records, spinners=spinners)
-        assert 1 in spinners
-        first_spinner = spinners[1]
+        # Start task via event - this creates the spinner
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        assert 1 in tui._spinners
+        first_spinner = tui._spinners[1]
 
-        # Second render - should reuse the same spinner object
-        render_task_list(records, spinners=spinners)
-        assert 1 in spinners
-        second_spinner = spinners[1]
+        # Render multiple times - spinner should be the same object
+        tui._render_layout()
+        tui._render_layout()
+        assert 1 in tui._spinners
+        second_spinner = tui._spinners[1]
 
         # Verify it's the EXACT same object (identity check)
         assert first_spinner is second_spinner
 
-    def test_spinner_cleanup_when_task_finishes(self, records):
-        """Spinner is removed from cache when task status changes from RUNNING."""
-        spinners = {}
+    def test_spinner_cleanup_when_task_finishes(self, tui):
+        """Spinner is removed from cache when task finishes via event handler."""
+        # Start task - creates spinner
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        assert 1 in tui._spinners
 
-        # First render - task 1 is RUNNING
-        render_task_list(records, spinners=spinners)
-        assert 1 in spinners
+        # Finish task via event - removes spinner
+        tui._apply_event(create_task_finished_event(1, "Task 2", status="success", duration=1.0))
+        assert 1 not in tui._spinners
 
-        # Change task 1 to SUCCESS
-        records[1].status = TaskRunStatus.SUCCESS
+    def test_spinner_cleanup_on_failed_task(self, tui):
+        """Spinner is removed when task fails via event handler."""
+        # Start task - creates spinner
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        assert 0 in tui._spinners
 
-        # Second render - spinner should be removed
-        render_task_list(records, spinners=spinners)
-        assert 1 not in spinners
+        # Task fails via event - removes spinner
+        tui._apply_event(create_task_finished_event(0, "Task 1", status="failed", duration=1.0))
+        assert 0 not in tui._spinners
 
-    def test_spinner_cleanup_on_failed_task(self):
-        """Spinner is removed when task fails."""
-        records = [
-            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
-        ]
-        spinners = {}
+    def test_spinner_cleanup_on_skipped_task(self, tui):
+        """Spinner is removed when task is skipped via event handler."""
+        # Start task - creates spinner
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        assert 0 in tui._spinners
 
-        # First render - task is RUNNING
-        render_task_list(records, spinners=spinners)
-        assert 0 in spinners
+        # Task is skipped via event - removes spinner
+        tui._apply_event(create_task_finished_event(0, "Task 1", status="skipped", duration=0.0))
+        assert 0 not in tui._spinners
 
-        # Task fails
-        records[0].status = TaskRunStatus.FAILED
-
-        # Second render - spinner removed
-        render_task_list(records, spinners=spinners)
-        assert 0 not in spinners
-
-    def test_spinner_cleanup_on_skipped_task(self):
-        """Spinner is removed when task is skipped."""
-        records = [
-            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
-        ]
-        spinners = {}
-
-        # First render - task is RUNNING
-        render_task_list(records, spinners=spinners)
-        assert 0 in spinners
-
-        # Task is skipped
-        records[0].status = TaskRunStatus.SKIPPED
-
-        # Second render - spinner removed
-        render_task_list(records, spinners=spinners)
-        assert 0 not in spinners
-
-    def test_multiple_spinners_tracked_in_parallel_mode(self):
+    def test_multiple_spinners_tracked_in_parallel_mode(self, tui):
         """Multiple running tasks each have their own cached spinner."""
-        records = [
-            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
-            TaskRunRecord(task_index=1, task_name="Task 2", status=TaskRunStatus.RUNNING),
-            TaskRunRecord(task_index=2, task_name="Task 3", status=TaskRunStatus.RUNNING),
-        ]
-        spinners = {}
+        tui.set_parallel_mode(True)
 
-        # Render with all tasks running
-        render_task_list(records, parallel_mode=True, spinners=spinners)
+        # Start all three tasks via events
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        tui._apply_event(create_task_started_event(2, "Task 3"))
 
         # All three should have spinners
-        assert 0 in spinners
-        assert 1 in spinners
-        assert 2 in spinners
-        assert len(spinners) == 3
+        assert 0 in tui._spinners
+        assert 1 in tui._spinners
+        assert 2 in tui._spinners
+        assert len(tui._spinners) == 3
 
         # Verify they're different objects
-        assert spinners[0] is not spinners[1]
-        assert spinners[1] is not spinners[2]
+        assert tui._spinners[0] is not tui._spinners[1]
+        assert tui._spinners[1] is not tui._spinners[2]
 
-    def test_spinner_cache_partial_cleanup(self):
+    def test_spinner_cache_partial_cleanup(self, tui):
         """Only finished tasks are removed from spinner cache."""
-        records = [
-            TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
-            TaskRunRecord(task_index=1, task_name="Task 2", status=TaskRunStatus.RUNNING),
-            TaskRunRecord(task_index=2, task_name="Task 3", status=TaskRunStatus.RUNNING),
-        ]
-        spinners = {}
+        tui.set_parallel_mode(True)
 
-        # First render - all running
-        render_task_list(records, spinners=spinners)
-        assert len(spinners) == 3
-        spinner_1 = spinners[1]
+        # Start all three tasks via events
+        tui._apply_event(create_task_started_event(0, "Task 1"))
+        tui._apply_event(create_task_started_event(1, "Task 2"))
+        tui._apply_event(create_task_started_event(2, "Task 3"))
+        assert len(tui._spinners) == 3
+        spinner_1 = tui._spinners[1]
 
-        # Task 0 finishes
-        records[0].status = TaskRunStatus.SUCCESS
-
-        # Second render
-        render_task_list(records, spinners=spinners)
+        # Task 0 finishes via event
+        tui._apply_event(create_task_finished_event(0, "Task 1", status="success", duration=1.0))
 
         # Task 0 removed, but 1 and 2 still cached
-        assert 0 not in spinners
-        assert 1 in spinners
-        assert 2 in spinners
-        assert len(spinners) == 2
+        assert 0 not in tui._spinners
+        assert 1 in tui._spinners
+        assert 2 in tui._spinners
+        assert len(tui._spinners) == 2
 
         # Spinner for task 1 should be the same object
-        assert spinners[1] is spinner_1
+        assert tui._spinners[1] is spinner_1
 
     def test_spinner_cache_none_creates_new_spinners(self, records):
         """When spinners=None, new spinners are created each render (no caching)."""
@@ -703,18 +679,18 @@ class TestSpinnerCaching:
         """TaskRunnerUI maintains spinner cache across refreshes."""
         tui.set_parallel_mode(True)
 
-        # Start two tasks
+        # Start two tasks via events - this creates the spinners
         tui._apply_event(create_task_started_event(0, "Task 1"))
         tui._apply_event(create_task_started_event(1, "Task 2"))
 
-        # First render (via _render_layout)
-        tui._render_layout()
-
-        # Spinners should be cached
+        # Spinners should be cached after events
         assert 0 in tui._spinners
         assert 1 in tui._spinners
         spinner_0 = tui._spinners[0]
         spinner_1 = tui._spinners[1]
+
+        # Render (via _render_layout) - spinners should still be same objects
+        tui._render_layout()
 
         # Second render
         tui._render_layout()
