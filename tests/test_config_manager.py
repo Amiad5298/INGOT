@@ -44,11 +44,13 @@ class TestConfigManagerLoad:
     def test_load_ignores_comments(self, tmp_path):
         """Skips lines starting with #."""
         config_file = tmp_path / "config"
-        config_file.write_text('''# This is a comment
+        config_file.write_text(
+            """# This is a comment
 DEFAULT_MODEL="test"
 # Another comment
 PLANNING_MODEL="test2"
-''')
+"""
+        )
         manager = ConfigManager(config_file)
 
         settings = manager.load()
@@ -59,11 +61,13 @@ PLANNING_MODEL="test2"
     def test_load_ignores_empty_lines(self, tmp_path):
         """Skips empty lines."""
         config_file = tmp_path / "config"
-        config_file.write_text('''DEFAULT_MODEL="test"
+        config_file.write_text(
+            """DEFAULT_MODEL="test"
 
 PLANNING_MODEL="test2"
 
-''')
+"""
+        )
         manager = ConfigManager(config_file)
 
         settings = manager.load()
@@ -104,7 +108,7 @@ PLANNING_MODEL="test2"
     def test_load_handles_unquoted_values(self, tmp_path):
         """Handles values without quotes."""
         config_file = tmp_path / "config"
-        config_file.write_text('DEFAULT_MODEL=test-model\n')
+        config_file.write_text("DEFAULT_MODEL=test-model\n")
         manager = ConfigManager(config_file)
 
         settings = manager.load()
@@ -124,10 +128,12 @@ PLANNING_MODEL="test2"
     def test_load_extracts_model_id_from_full_format(self, tmp_path):
         """Extracts model ID from 'Name [id]' format for model keys."""
         config_file = tmp_path / "config"
-        config_file.write_text('''DEFAULT_MODEL="Claude Opus 4.5 [opus4.5]"
+        config_file.write_text(
+            """DEFAULT_MODEL="Claude Opus 4.5 [opus4.5]"
 PLANNING_MODEL="Haiku 4.5 [haiku4.5]"
 IMPLEMENTATION_MODEL="Sonnet 4.5 [sonnet4.5]"
-''')
+"""
+        )
         manager = ConfigManager(config_file)
 
         settings = manager.load()
@@ -139,9 +145,11 @@ IMPLEMENTATION_MODEL="Sonnet 4.5 [sonnet4.5]"
     def test_load_keeps_model_id_format_unchanged(self, tmp_path):
         """Keeps model ID format unchanged if already in ID-only format."""
         config_file = tmp_path / "config"
-        config_file.write_text('''DEFAULT_MODEL="opus4.5"
+        config_file.write_text(
+            """DEFAULT_MODEL="opus4.5"
 PLANNING_MODEL="haiku4.5"
-''')
+"""
+        )
         manager = ConfigManager(config_file)
 
         settings = manager.load()
@@ -345,10 +353,12 @@ class TestCascadingConfigHierarchy:
         """Different keys can come from different sources."""
         # Global has multiple keys
         global_config = tmp_path / ".spec-config"
-        global_config.write_text('''DEFAULT_MODEL="global-model"
+        global_config.write_text(
+            """DEFAULT_MODEL="global-model"
 PLANNING_MODEL="global-planning"
 DEFAULT_JIRA_PROJECT="GLOBAL"
-''')
+"""
+        )
 
         # Local overrides one key
         project_dir = tmp_path / "project"
@@ -1098,3 +1108,536 @@ class TestConfigManagerRepoRootDetection:
         expected_path = project / ".spec"
         assert expected_path.exists()
         assert manager.local_config_path == expected_path
+
+
+class TestFetchConfigEnums:
+    """Tests for FetchStrategy and AgentPlatform enums."""
+
+    def test_fetch_strategy_values(self):
+        """FetchStrategy enum has correct values."""
+        from spec.config.fetch_config import FetchStrategy
+
+        assert FetchStrategy.AGENT.value == "agent"
+        assert FetchStrategy.DIRECT.value == "direct"
+        assert FetchStrategy.AUTO.value == "auto"
+
+    def test_fetch_strategy_from_string(self):
+        """FetchStrategy can be created from string value."""
+        from spec.config.fetch_config import FetchStrategy
+
+        assert FetchStrategy("agent") == FetchStrategy.AGENT
+        assert FetchStrategy("direct") == FetchStrategy.DIRECT
+        assert FetchStrategy("auto") == FetchStrategy.AUTO
+
+    def test_fetch_strategy_invalid_value(self):
+        """FetchStrategy raises ValueError for invalid value."""
+        from spec.config.fetch_config import FetchStrategy
+
+        with pytest.raises(ValueError):
+            FetchStrategy("invalid")
+
+    def test_agent_platform_values(self):
+        """AgentPlatform enum has correct values."""
+        from spec.config.fetch_config import AgentPlatform
+
+        assert AgentPlatform.AUGGIE.value == "auggie"
+        assert AgentPlatform.CLAUDE_DESKTOP.value == "claude_desktop"
+        assert AgentPlatform.CURSOR.value == "cursor"
+        assert AgentPlatform.AIDER.value == "aider"
+        assert AgentPlatform.MANUAL.value == "manual"
+
+    def test_agent_platform_from_string(self):
+        """AgentPlatform can be created from string value."""
+        from spec.config.fetch_config import AgentPlatform
+
+        assert AgentPlatform("auggie") == AgentPlatform.AUGGIE
+        assert AgentPlatform("cursor") == AgentPlatform.CURSOR
+
+    def test_agent_platform_invalid_value(self):
+        """AgentPlatform raises ValueError for invalid value."""
+        from spec.config.fetch_config import AgentPlatform
+
+        with pytest.raises(ValueError):
+            AgentPlatform("unknown")
+
+
+class TestFetchConfigDataclasses:
+    """Tests for fetch config dataclasses."""
+
+    def test_agent_config_defaults(self):
+        """AgentConfig has correct defaults."""
+        from spec.config.fetch_config import AgentConfig, AgentPlatform
+
+        config = AgentConfig()
+        assert config.platform == AgentPlatform.AUGGIE
+        assert config.integrations == {}
+
+    def test_agent_config_supports_platform(self):
+        """AgentConfig.supports_platform() works correctly."""
+        from spec.config.fetch_config import AgentConfig
+
+        config = AgentConfig(integrations={"jira": True, "linear": True, "github": False})
+        assert config.supports_platform("jira") is True
+        assert config.supports_platform("JIRA") is True  # Case insensitive
+        assert config.supports_platform("linear") is True
+        assert config.supports_platform("github") is False
+        assert config.supports_platform("unknown") is False
+
+    def test_fetch_strategy_config_defaults(self):
+        """FetchStrategyConfig has correct defaults."""
+        from spec.config.fetch_config import FetchStrategy, FetchStrategyConfig
+
+        config = FetchStrategyConfig()
+        assert config.default == FetchStrategy.AUTO
+        assert config.per_platform == {}
+
+    def test_fetch_strategy_config_get_strategy_default(self):
+        """FetchStrategyConfig.get_strategy() returns default for unknown platforms."""
+        from spec.config.fetch_config import FetchStrategy, FetchStrategyConfig
+
+        config = FetchStrategyConfig(default=FetchStrategy.AGENT)
+        assert config.get_strategy("jira") == FetchStrategy.AGENT
+        assert config.get_strategy("unknown") == FetchStrategy.AGENT
+
+    def test_fetch_strategy_config_get_strategy_override(self):
+        """FetchStrategyConfig.get_strategy() returns per-platform override."""
+        from spec.config.fetch_config import FetchStrategy, FetchStrategyConfig
+
+        config = FetchStrategyConfig(
+            default=FetchStrategy.AUTO,
+            per_platform={"azure_devops": FetchStrategy.DIRECT, "jira": FetchStrategy.AGENT},
+        )
+        assert config.get_strategy("azure_devops") == FetchStrategy.DIRECT
+        assert (
+            config.get_strategy("AZURE_DEVOPS") == FetchStrategy.DIRECT
+        )  # Case insensitive lookup
+        assert config.get_strategy("jira") == FetchStrategy.AGENT
+        assert config.get_strategy("linear") == FetchStrategy.AUTO  # Falls back to default
+
+    def test_fetch_performance_config_defaults(self):
+        """FetchPerformanceConfig has correct defaults."""
+        from spec.config.fetch_config import FetchPerformanceConfig
+
+        config = FetchPerformanceConfig()
+        assert config.cache_duration_hours == 24
+        assert config.timeout_seconds == 30
+        assert config.max_retries == 3
+        assert config.retry_delay_seconds == 1.0
+
+    def test_fetch_performance_config_custom_values(self):
+        """FetchPerformanceConfig accepts custom values."""
+        from spec.config.fetch_config import FetchPerformanceConfig
+
+        config = FetchPerformanceConfig(
+            cache_duration_hours=48,
+            timeout_seconds=60,
+            max_retries=5,
+            retry_delay_seconds=2.5,
+        )
+        assert config.cache_duration_hours == 48
+        assert config.timeout_seconds == 60
+        assert config.max_retries == 5
+        assert config.retry_delay_seconds == 2.5
+
+
+class TestConfigManagerEnvVarExpansion:
+    """Tests for _expand_env_vars method."""
+
+    def test_expand_env_vars_string(self, tmp_path, monkeypatch):
+        """Expands ${VAR} in strings."""
+        monkeypatch.setenv("TEST_VAR", "expanded_value")
+        manager = ConfigManager(tmp_path / "config")
+
+        result = manager._expand_env_vars("prefix_${TEST_VAR}_suffix")
+        assert result == "prefix_expanded_value_suffix"
+
+    def test_expand_env_vars_missing_var(self, tmp_path):
+        """Preserves ${VAR} when variable not set."""
+        manager = ConfigManager(tmp_path / "config")
+
+        result = manager._expand_env_vars("${MISSING_VAR}")
+        assert result == "${MISSING_VAR}"
+
+    def test_expand_env_vars_dict(self, tmp_path, monkeypatch):
+        """Recursively expands in dicts."""
+        monkeypatch.setenv("VAR1", "value1")
+        monkeypatch.setenv("VAR2", "value2")
+        manager = ConfigManager(tmp_path / "config")
+
+        result = manager._expand_env_vars({"key1": "${VAR1}", "key2": "${VAR2}"})
+        assert result == {"key1": "value1", "key2": "value2"}
+
+    def test_expand_env_vars_list(self, tmp_path, monkeypatch):
+        """Recursively expands in lists."""
+        monkeypatch.setenv("ITEM", "expanded")
+        manager = ConfigManager(tmp_path / "config")
+
+        result = manager._expand_env_vars(["${ITEM}", "static"])
+        assert result == ["expanded", "static"]
+
+    def test_expand_env_vars_nested(self, tmp_path, monkeypatch):
+        """Recursively expands in nested structures."""
+        monkeypatch.setenv("NESTED", "deep_value")
+        manager = ConfigManager(tmp_path / "config")
+
+        result = manager._expand_env_vars({"outer": {"inner": "${NESTED}"}})
+        assert result == {"outer": {"inner": "deep_value"}}
+
+    def test_expand_env_vars_non_string(self, tmp_path):
+        """Returns non-string/dict/list values unchanged."""
+        manager = ConfigManager(tmp_path / "config")
+
+        assert manager._expand_env_vars(42) == 42
+        assert manager._expand_env_vars(True) is True
+        assert manager._expand_env_vars(None) is None
+
+
+class TestConfigManagerGetAgentConfig:
+    """Tests for get_agent_config method."""
+
+    def test_get_agent_config_defaults(self, tmp_path):
+        """Returns defaults when no config set."""
+        from spec.config.fetch_config import AgentPlatform
+
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_agent_config()
+        assert config.platform == AgentPlatform.AUGGIE
+        assert config.integrations == {}
+
+    def test_get_agent_config_custom_platform(self, tmp_path):
+        """Parses AGENT_PLATFORM from config."""
+        from spec.config.fetch_config import AgentPlatform
+
+        config_path = tmp_path / "config"
+        config_path.write_text('AGENT_PLATFORM="cursor"\n')
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_agent_config()
+        assert config.platform == AgentPlatform.CURSOR
+
+    def test_get_agent_config_invalid_platform_falls_back(self, tmp_path):
+        """Falls back to AUGGIE for invalid platform."""
+        from spec.config.fetch_config import AgentPlatform
+
+        config_path = tmp_path / "config"
+        config_path.write_text('AGENT_PLATFORM="invalid_platform"\n')
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_agent_config()
+        assert config.platform == AgentPlatform.AUGGIE
+
+    def test_get_agent_config_integrations(self, tmp_path):
+        """Parses AGENT_INTEGRATION_* keys."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """AGENT_INTEGRATION_JIRA=true
+AGENT_INTEGRATION_LINEAR=true
+AGENT_INTEGRATION_GITHUB=false
+AGENT_INTEGRATION_AZURE_DEVOPS=1
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_agent_config()
+        assert config.integrations["jira"] is True
+        assert config.integrations["linear"] is True
+        assert config.integrations["github"] is False
+        assert config.integrations["azure_devops"] is True
+
+
+class TestConfigManagerGetFetchStrategyConfig:
+    """Tests for get_fetch_strategy_config method."""
+
+    def test_get_fetch_strategy_config_defaults(self, tmp_path):
+        """Returns defaults when no config set."""
+        from spec.config.fetch_config import FetchStrategy
+
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_strategy_config()
+        assert config.default == FetchStrategy.AUTO
+        assert config.per_platform == {}
+
+    def test_get_fetch_strategy_config_custom_default(self, tmp_path):
+        """Parses FETCH_STRATEGY_DEFAULT from config."""
+        from spec.config.fetch_config import FetchStrategy
+
+        config_path = tmp_path / "config"
+        config_path.write_text('FETCH_STRATEGY_DEFAULT="agent"\n')
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_strategy_config()
+        assert config.default == FetchStrategy.AGENT
+
+    def test_get_fetch_strategy_config_invalid_default_falls_back(self, tmp_path):
+        """Falls back to AUTO for invalid default strategy."""
+        from spec.config.fetch_config import FetchStrategy
+
+        config_path = tmp_path / "config"
+        config_path.write_text('FETCH_STRATEGY_DEFAULT="invalid"\n')
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_strategy_config()
+        assert config.default == FetchStrategy.AUTO
+
+    def test_get_fetch_strategy_config_per_platform(self, tmp_path):
+        """Parses FETCH_STRATEGY_* keys for per-platform overrides."""
+        from spec.config.fetch_config import FetchStrategy
+
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FETCH_STRATEGY_DEFAULT=auto
+FETCH_STRATEGY_AZURE_DEVOPS=direct
+FETCH_STRATEGY_TRELLO=direct
+FETCH_STRATEGY_JIRA=agent
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_strategy_config()
+        assert config.default == FetchStrategy.AUTO
+        assert config.per_platform["azure_devops"] == FetchStrategy.DIRECT
+        assert config.per_platform["trello"] == FetchStrategy.DIRECT
+        assert config.per_platform["jira"] == FetchStrategy.AGENT
+
+    def test_get_fetch_strategy_config_skips_invalid_overrides(self, tmp_path):
+        """Skips per-platform overrides with invalid strategy values."""
+        from spec.config.fetch_config import FetchStrategy
+
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FETCH_STRATEGY_VALID=direct
+FETCH_STRATEGY_INVALID=not_a_strategy
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_strategy_config()
+        assert config.per_platform["valid"] == FetchStrategy.DIRECT
+        assert "invalid" not in config.per_platform
+
+
+class TestConfigManagerGetFetchPerformanceConfig:
+    """Tests for get_fetch_performance_config method."""
+
+    def test_get_fetch_performance_config_defaults(self, tmp_path):
+        """Returns defaults when no config set."""
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_performance_config()
+        assert config.cache_duration_hours == 24
+        assert config.timeout_seconds == 30
+        assert config.max_retries == 3
+        assert config.retry_delay_seconds == 1.0
+
+    def test_get_fetch_performance_config_custom_values(self, tmp_path):
+        """Parses performance settings from config."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FETCH_CACHE_DURATION_HOURS=48
+FETCH_TIMEOUT_SECONDS=60
+FETCH_MAX_RETRIES=5
+FETCH_RETRY_DELAY_SECONDS=2.5
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_performance_config()
+        assert config.cache_duration_hours == 48
+        assert config.timeout_seconds == 60
+        assert config.max_retries == 5
+        assert config.retry_delay_seconds == 2.5
+
+    def test_get_fetch_performance_config_invalid_values_use_defaults(self, tmp_path):
+        """Invalid values are ignored, keeping defaults."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FETCH_CACHE_DURATION_HOURS=not_a_number
+FETCH_TIMEOUT_SECONDS=60
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_performance_config()
+        assert config.cache_duration_hours == 24  # Default kept
+        assert config.timeout_seconds == 60  # Valid value used
+
+    def test_get_fetch_performance_config_negative_values_use_defaults(self, tmp_path):
+        """Negative values are rejected, keeping defaults."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FETCH_CACHE_DURATION_HOURS=-1
+FETCH_TIMEOUT_SECONDS=-10
+FETCH_MAX_RETRIES=-5
+FETCH_RETRY_DELAY_SECONDS=-2.5
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_performance_config()
+        assert config.cache_duration_hours == 24  # Default kept (negative rejected)
+        assert config.timeout_seconds == 30  # Default kept (negative rejected)
+        assert config.max_retries == 3  # Default kept (negative rejected)
+        assert config.retry_delay_seconds == 1.0  # Default kept (negative rejected)
+
+    def test_get_fetch_performance_config_zero_values(self, tmp_path):
+        """Zero is valid for some fields but not timeout."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FETCH_CACHE_DURATION_HOURS=0
+FETCH_TIMEOUT_SECONDS=0
+FETCH_MAX_RETRIES=0
+FETCH_RETRY_DELAY_SECONDS=0
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        config = manager.get_fetch_performance_config()
+        assert config.cache_duration_hours == 0  # Zero is valid (no caching)
+        assert config.timeout_seconds == 30  # Default kept (zero not valid for timeout)
+        assert config.max_retries == 0  # Zero is valid (no retries)
+        assert config.retry_delay_seconds == 0.0  # Zero is valid
+
+
+class TestConfigManagerGetFallbackCredentials:
+    """Tests for get_fallback_credentials method."""
+
+    def test_get_fallback_credentials_none_when_missing(self, tmp_path):
+        """Returns None when no credentials configured."""
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("azure_devops")
+        assert creds is None
+
+    def test_get_fallback_credentials_returns_dict(self, tmp_path):
+        """Returns dict of credentials for platform."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FALLBACK_AZURE_DEVOPS_ORGANIZATION=myorg
+FALLBACK_AZURE_DEVOPS_PROJECT=myproject
+FALLBACK_AZURE_DEVOPS_PAT=secret123
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("azure_devops")
+        assert creds is not None
+        assert creds["organization"] == "myorg"
+        assert creds["project"] == "myproject"
+        assert creds["pat"] == "secret123"
+
+    def test_get_fallback_credentials_case_insensitive_platform(self, tmp_path):
+        """Platform name is case insensitive."""
+        config_path = tmp_path / "config"
+        config_path.write_text("FALLBACK_JIRA_TOKEN=token123\n")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("JIRA")
+        assert creds is not None
+        assert creds["token"] == "token123"
+
+    def test_get_fallback_credentials_expands_env_vars(self, tmp_path, monkeypatch):
+        """Expands ${VAR} in credential values."""
+        monkeypatch.setenv("SECRET_PAT", "actual_secret_value")
+        config_path = tmp_path / "config"
+        config_path.write_text("FALLBACK_AZURE_DEVOPS_PAT=${SECRET_PAT}\n")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("azure_devops")
+        assert creds is not None
+        assert creds["pat"] == "actual_secret_value"
+
+    def test_get_fallback_credentials_preserves_unset_env_vars(self, tmp_path):
+        """Preserves ${VAR} when env var not set."""
+        config_path = tmp_path / "config"
+        config_path.write_text("FALLBACK_TEST_TOKEN=${UNSET_VAR}\n")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("test")
+        assert creds is not None
+        assert creds["token"] == "${UNSET_VAR}"
+
+
+class TestFetchConfigEndToEnd:
+    """End-to-end tests for fetch configuration loading."""
+
+    def test_full_fetch_config_from_file(self, tmp_path, monkeypatch):
+        """Loads complete fetch configuration from file."""
+        from spec.config.fetch_config import AgentPlatform, FetchStrategy
+
+        monkeypatch.setenv("MY_PAT", "secret_pat_value")
+
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """# Agent configuration
+AGENT_PLATFORM=cursor
+AGENT_INTEGRATION_JIRA=true
+AGENT_INTEGRATION_LINEAR=true
+AGENT_INTEGRATION_GITHUB=false
+
+# Fetch strategy
+FETCH_STRATEGY_DEFAULT=auto
+FETCH_STRATEGY_AZURE_DEVOPS=direct
+
+# Performance
+FETCH_CACHE_DURATION_HOURS=12
+FETCH_TIMEOUT_SECONDS=45
+
+# Fallback credentials
+FALLBACK_AZURE_DEVOPS_ORG=myorg
+FALLBACK_AZURE_DEVOPS_PAT=${MY_PAT}
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        # Check agent config
+        agent_config = manager.get_agent_config()
+        assert agent_config.platform == AgentPlatform.CURSOR
+        assert agent_config.supports_platform("jira") is True
+        assert agent_config.supports_platform("github") is False
+
+        # Check fetch strategy config
+        strategy_config = manager.get_fetch_strategy_config()
+        assert strategy_config.default == FetchStrategy.AUTO
+        assert strategy_config.get_strategy("azure_devops") == FetchStrategy.DIRECT
+        assert strategy_config.get_strategy("jira") == FetchStrategy.AUTO
+
+        # Check performance config
+        perf_config = manager.get_fetch_performance_config()
+        assert perf_config.cache_duration_hours == 12
+        assert perf_config.timeout_seconds == 45
+
+        # Check fallback credentials with env var expansion
+        creds = manager.get_fallback_credentials("azure_devops")
+        assert creds is not None
+        assert creds["org"] == "myorg"
+        assert creds["pat"] == "secret_pat_value"

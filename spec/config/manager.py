@@ -12,14 +12,23 @@ This enables developers working on multiple projects with different
 trackers to have project-specific settings while maintaining global defaults.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from spec.config.settings import CONFIG_FILE, Settings
 from spec.integrations.git import find_repo_root
+
+if TYPE_CHECKING:
+    from spec.config.fetch_config import (
+        AgentConfig,
+        FetchPerformanceConfig,
+        FetchStrategyConfig,
+    )
 from spec.utils.logging import log_message
 
 # Keys containing these substrings are considered sensitive and should not be logged
@@ -215,6 +224,7 @@ class ConfigManager:
             # String values - extract model ID for model-related keys
             if key in ("DEFAULT_MODEL", "PLANNING_MODEL", "IMPLEMENTATION_MODEL"):
                 from spec.integrations.auggie import extract_model_id
+
                 value = extract_model_id(value)
             setattr(self.settings, attr, value)
 
@@ -525,6 +535,233 @@ class ConfigManager:
         """
         return self._raw_values.get(key, default)
 
+    def _expand_env_vars(self, value: Any) -> Any:
+        """Recursively expand ${VAR} references to environment variables.
+
+        Supports nested structures (dicts, lists) and preserves unmatched
+        patterns for debugging purposes.
+
+        Args:
+            value: The value to expand (string, dict, list, or other)
+
+        Returns:
+            The value with ${VAR} references replaced with environment values
+        """
+        if isinstance(value, str):
+            pattern = r"\$\{([^}]+)\}"
+
+            def replace(match: re.Match[str]) -> str:
+                var_name = match.group(1)
+                # Return original pattern if env var not set (for debugging)
+                return os.environ.get(var_name, match.group(0))
+
+            return re.sub(pattern, replace, value)
+        elif isinstance(value, dict):
+            return {k: self._expand_env_vars(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self._expand_env_vars(v) for v in value]
+        return value
+
+    def get_agent_config(self) -> AgentConfig:
+        """Get AI agent configuration.
+
+        Parses AGENT_PLATFORM and AGENT_INTEGRATION_* keys from config.
+
+        Returns:
+            AgentConfig instance with platform and integrations
+        """
+        import logging
+
+        from spec.config.fetch_config import AgentConfig, AgentPlatform
+
+        logger = logging.getLogger(__name__)
+        platform_str = self._raw_values.get("AGENT_PLATFORM", "auggie")
+        integrations: dict[str, bool] = {}
+
+        # Parse AGENT_INTEGRATION_* keys
+        for key, value in self._raw_values.items():
+            if key.startswith("AGENT_INTEGRATION_"):
+                platform_name = key.replace("AGENT_INTEGRATION_", "").lower()
+                integrations[platform_name] = value.lower() in ("true", "1", "yes")
+
+        try:
+            platform = AgentPlatform(platform_str.lower())
+        except ValueError:
+            logger.warning(
+                f"Invalid AGENT_PLATFORM value '{platform_str}', " f"falling back to 'auggie'"
+            )
+            platform = AgentPlatform.AUGGIE
+
+        return AgentConfig(
+            platform=platform,
+            integrations=integrations,
+        )
+
+    def get_fetch_strategy_config(self) -> FetchStrategyConfig:
+        """Get fetch strategy configuration.
+
+        Parses FETCH_STRATEGY_DEFAULT and FETCH_STRATEGY_* keys from config.
+
+        Returns:
+            FetchStrategyConfig instance with default and per-platform strategies
+        """
+        import logging
+
+        from spec.config.fetch_config import FetchStrategy, FetchStrategyConfig
+
+        logger = logging.getLogger(__name__)
+        default_str = self._raw_values.get("FETCH_STRATEGY_DEFAULT", "auto")
+        per_platform: dict[str, FetchStrategy] = {}
+
+        # Parse FETCH_STRATEGY_* keys (excluding DEFAULT)
+        for key, value in self._raw_values.items():
+            if key.startswith("FETCH_STRATEGY_") and key != "FETCH_STRATEGY_DEFAULT":
+                platform_name = key.replace("FETCH_STRATEGY_", "").lower()
+                try:
+                    per_platform[platform_name] = FetchStrategy(value.lower())
+                except ValueError:
+                    logger.warning(
+                        f"Invalid fetch strategy '{value}' for platform "
+                        f"'{platform_name}', ignoring"
+                    )
+
+        try:
+            default = FetchStrategy(default_str.lower())
+        except ValueError:
+            logger.warning(
+                f"Invalid FETCH_STRATEGY_DEFAULT value '{default_str}', " f"falling back to 'auto'"
+            )
+            default = FetchStrategy.AUTO
+
+        return FetchStrategyConfig(
+            default=default,
+            per_platform=per_platform,
+        )
+
+    def get_fetch_performance_config(self) -> FetchPerformanceConfig:
+        """Get fetch performance configuration.
+
+        Parses FETCH_CACHE_DURATION_HOURS, FETCH_TIMEOUT_SECONDS,
+        FETCH_MAX_RETRIES, and FETCH_RETRY_DELAY_SECONDS from config.
+
+        Values are validated to ensure they are within reasonable bounds:
+        - cache_duration_hours: >= 0
+        - timeout_seconds: > 0
+        - max_retries: >= 0
+        - retry_delay_seconds: >= 0
+
+        Returns:
+            FetchPerformanceConfig instance with performance settings
+        """
+        import logging
+
+        from spec.config.fetch_config import FetchPerformanceConfig
+
+        logger = logging.getLogger(__name__)
+
+        # Default values
+        cache_duration_hours = 24
+        timeout_seconds = 30
+        max_retries = 3
+        retry_delay_seconds = 1.0
+
+        # Parse each performance setting with type conversion and validation
+        if "FETCH_CACHE_DURATION_HOURS" in self._raw_values:
+            try:
+                cache_value = int(self._raw_values["FETCH_CACHE_DURATION_HOURS"])
+                if cache_value >= 0:
+                    cache_duration_hours = cache_value
+                else:
+                    logger.warning(
+                        f"FETCH_CACHE_DURATION_HOURS must be >= 0, got {cache_value}, "
+                        f"using default {cache_duration_hours}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_CACHE_DURATION_HOURS value "
+                    f"'{self._raw_values['FETCH_CACHE_DURATION_HOURS']}', "
+                    f"using default {cache_duration_hours}"
+                )
+
+        if "FETCH_TIMEOUT_SECONDS" in self._raw_values:
+            try:
+                timeout_value = int(self._raw_values["FETCH_TIMEOUT_SECONDS"])
+                if timeout_value > 0:
+                    timeout_seconds = timeout_value
+                else:
+                    logger.warning(
+                        f"FETCH_TIMEOUT_SECONDS must be > 0, got {timeout_value}, "
+                        f"using default {timeout_seconds}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_TIMEOUT_SECONDS value "
+                    f"'{self._raw_values['FETCH_TIMEOUT_SECONDS']}', "
+                    f"using default {timeout_seconds}"
+                )
+
+        if "FETCH_MAX_RETRIES" in self._raw_values:
+            try:
+                retries_value = int(self._raw_values["FETCH_MAX_RETRIES"])
+                if retries_value >= 0:
+                    max_retries = retries_value
+                else:
+                    logger.warning(
+                        f"FETCH_MAX_RETRIES must be >= 0, got {retries_value}, "
+                        f"using default {max_retries}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_MAX_RETRIES value "
+                    f"'{self._raw_values['FETCH_MAX_RETRIES']}', "
+                    f"using default {max_retries}"
+                )
+
+        if "FETCH_RETRY_DELAY_SECONDS" in self._raw_values:
+            try:
+                delay_value = float(self._raw_values["FETCH_RETRY_DELAY_SECONDS"])
+                if delay_value >= 0:
+                    retry_delay_seconds = delay_value
+                else:
+                    logger.warning(
+                        f"FETCH_RETRY_DELAY_SECONDS must be >= 0, got {delay_value}, "
+                        f"using default {retry_delay_seconds}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_RETRY_DELAY_SECONDS value "
+                    f"'{self._raw_values['FETCH_RETRY_DELAY_SECONDS']}', "
+                    f"using default {retry_delay_seconds}"
+                )
+
+        return FetchPerformanceConfig(
+            cache_duration_hours=cache_duration_hours,
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            retry_delay_seconds=retry_delay_seconds,
+        )
+
+    def get_fallback_credentials(self, platform: str) -> dict[str, str] | None:
+        """Get fallback credentials for a platform.
+
+        Parses FALLBACK_{PLATFORM}_* keys and expands environment variables.
+
+        Args:
+            platform: Platform name (e.g., 'azure_devops', 'trello')
+
+        Returns:
+            Dictionary of credential key-value pairs, or None if no credentials
+        """
+        prefix = f"FALLBACK_{platform.upper()}_"
+        credentials: dict[str, str] = {}
+
+        for key, value in self._raw_values.items():
+            if key.startswith(prefix):
+                cred_name = key.replace(prefix, "").lower()
+                credentials[cred_name] = self._expand_env_vars(value)
+
+        return credentials if credentials else None
+
     def show(self) -> None:
         """Display current configuration using Rich formatting."""
         from spec.utils.console import console, print_header, print_info
@@ -565,4 +802,3 @@ class ConfigManager:
 __all__ = [
     "ConfigManager",
 ]
-
