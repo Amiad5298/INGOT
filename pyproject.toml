@@ -38,6 +38,7 @@ dev = [
     "pytest-mock>=3.0.0",
     "pytest-xdist>=3.5.0",      # Parallel test execution
     "pytest-timeout>=2.2.0",    # Timeout for hanging tests
+    "pytest-asyncio>=1.0.0",    # Async test support
     "mypy>=1.0.0",
     "ruff>=0.1.0",
     "pre-commit>=3.6.0",        # Git hook management
