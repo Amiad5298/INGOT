@@ -1,0 +1,112 @@
+# SPECFLOW Fetch Strategy Configuration Template
+# ================================================
+#
+# This file configures how SPECFLOW fetches ticket information from
+# ticket tracking platforms (Jira, Linear, Azure DevOps, etc.)
+#
+# Configuration Precedence (highest to lowest):
+#   1. Environment Variables - CI/CD, temporary overrides
+#   2. Local Config (.spec) - Project-specific settings
+#   3. Global Config (~/.spec-config) - User defaults
+#   4. Built-in Defaults - Fallback values
+#
+# Environment Variable Expansion:
+#   Use ${VAR_NAME} syntax to reference environment variables.
+#   In strict mode, missing variables will cause an error.
+#   Example: FALLBACK_JIRA_TOKEN=${JIRA_API_TOKEN}
+
+# ============================================================
+# AGENT CONFIGURATION
+# ============================================================
+# Configure which AI agent platform is being used and which
+# ticket platforms it has integrations for.
+
+# Agent platform: auggie, claude_desktop, cursor, aider, manual
+AGENT_PLATFORM=auggie
+
+# Agent integrations - set to true for platforms the agent can access
+# These determine whether "agent" fetch strategy is viable per platform
+AGENT_INTEGRATION_JIRA=true
+AGENT_INTEGRATION_LINEAR=true
+AGENT_INTEGRATION_GITHUB=true
+AGENT_INTEGRATION_AZURE_DEVOPS=false
+AGENT_INTEGRATION_TRELLO=false
+AGENT_INTEGRATION_MONDAY=false
+
+# ============================================================
+# FETCH STRATEGY
+# ============================================================
+# Configure how tickets are fetched from each platform.
+#
+# Strategies:
+#   agent  - Use agent-mediated fetch (requires agent integration)
+#   direct - Use direct API calls (requires fallback credentials)
+#   auto   - Try agent first, fall back to direct API
+#
+# Validation Rules:
+#   - "agent" strategy requires AGENT_INTEGRATION_<platform>=true
+#   - "direct" strategy requires FALLBACK_<platform>_* credentials
+#   - "auto" strategy requires either integration OR credentials
+
+# Default strategy for all platforms (agent, direct, auto)
+FETCH_STRATEGY_DEFAULT=auto
+
+# Per-platform strategy overrides
+# Use for platforms without agent integration that need direct API
+FETCH_STRATEGY_AZURE_DEVOPS=direct
+FETCH_STRATEGY_TRELLO=direct
+
+# ============================================================
+# PERFORMANCE SETTINGS
+# ============================================================
+# Configure timeouts, retries, and caching to prevent hangs.
+# All values have safe upper bounds that are enforced.
+
+# Cache duration in hours (0 = no caching, max: 168 hours / 1 week)
+FETCH_CACHE_DURATION_HOURS=24
+
+# HTTP request timeout in seconds (min: 1, max: 300 / 5 minutes)
+FETCH_TIMEOUT_SECONDS=30
+
+# Maximum retry attempts (min: 0, max: 10)
+FETCH_MAX_RETRIES=3
+
+# Delay between retries in seconds (min: 0, max: 60)
+FETCH_RETRY_DELAY_SECONDS=1.0
+
+# ============================================================
+# FALLBACK CREDENTIALS
+# ============================================================
+# Direct API credentials for platforms without agent integration.
+# Use ${ENV_VAR} syntax for secrets - never hardcode credentials!
+#
+# Required fields per platform:
+#   jira:        url, email, token
+#   linear:      api_key
+#   github:      token
+#   azure_devops: organization, pat
+#   trello:      api_key, token
+#   monday:      api_key
+
+# Jira credentials
+# FALLBACK_JIRA_URL=https://company.atlassian.net
+# FALLBACK_JIRA_EMAIL=user@example.com
+# FALLBACK_JIRA_TOKEN=${JIRA_API_TOKEN}
+
+# Azure DevOps credentials
+# FALLBACK_AZURE_DEVOPS_ORGANIZATION=myorg
+# FALLBACK_AZURE_DEVOPS_PROJECT=myproject
+# FALLBACK_AZURE_DEVOPS_PAT=${AZURE_DEVOPS_PAT}
+
+# Trello credentials
+# FALLBACK_TRELLO_API_KEY=${TRELLO_API_KEY}
+# FALLBACK_TRELLO_TOKEN=${TRELLO_TOKEN}
+
+# Linear credentials
+# FALLBACK_LINEAR_API_KEY=${LINEAR_API_KEY}
+
+# GitHub credentials (for GitHub Issues)
+# FALLBACK_GITHUB_TOKEN=${GITHUB_TOKEN}
+
+# Monday.com credentials
+# FALLBACK_MONDAY_API_KEY=${MONDAY_API_KEY}

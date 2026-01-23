@@ -1641,3 +1641,348 @@ FALLBACK_AZURE_DEVOPS_PAT=${MY_PAT}
         assert creds is not None
         assert creds["org"] == "myorg"
         assert creds["pat"] == "secret_pat_value"
+
+
+class TestEnvVarExpansionStrict:
+    """Tests for strict mode environment variable expansion."""
+
+    def test_expand_env_vars_strict_mode_raises_on_missing(self, tmp_path, monkeypatch):
+        """Strict mode raises EnvVarExpansionError for missing env vars."""
+        from spec.config.manager import EnvVarExpansionError
+
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        with pytest.raises(EnvVarExpansionError) as exc_info:
+            manager.expand_env_vars_strict("${MISSING_VAR}", context="test_key")
+
+        assert "MISSING_VAR" in str(exc_info.value)
+        assert "test_key" in str(exc_info.value)
+
+    def test_expand_env_vars_strict_mode_succeeds_when_set(self, tmp_path, monkeypatch):
+        """Strict mode expands when env var is set."""
+        monkeypatch.setenv("MY_SECRET", "secret_value")
+
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        result = manager.expand_env_vars_strict("token=${MY_SECRET}", context="test_key")
+        assert result == "token=secret_value"
+
+    def test_expand_env_vars_nested_dict(self, tmp_path, monkeypatch):
+        """Expands env vars in nested dict structures."""
+        monkeypatch.setenv("NESTED_VAR", "nested_value")
+
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        data = {"level1": {"level2": {"value": "${NESTED_VAR}"}}}
+        result = manager._expand_env_vars(data)
+        assert result["level1"]["level2"]["value"] == "nested_value"
+
+    def test_expand_env_vars_nested_list(self, tmp_path, monkeypatch):
+        """Expands env vars in list structures."""
+        monkeypatch.setenv("LIST_VAR", "list_value")
+
+        config_path = tmp_path / "config"
+        config_path.write_text("")
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        data = ["${LIST_VAR}", "plain", "${LIST_VAR}"]
+        result = manager._expand_env_vars(data)
+        assert result == ["list_value", "plain", "list_value"]
+
+
+class TestValidationFailures:
+    """Tests for configuration validation failures."""
+
+    def test_validate_strategy_agent_without_integration(self, tmp_path):
+        """Agent strategy fails validation when agent lacks integration."""
+        from spec.config.fetch_config import (
+            AgentConfig,
+            AgentPlatform,
+            ConfigValidationError,
+            FetchStrategy,
+            validate_strategy_for_platform,
+        )
+
+        agent_config = AgentConfig(
+            platform=AgentPlatform.AUGGIE,
+            integrations={"jira": False},  # No Jira integration
+        )
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_strategy_for_platform(
+                platform="jira",
+                strategy=FetchStrategy.AGENT,
+                agent_config=agent_config,
+                has_credentials=False,
+                strict=True,
+            )
+
+        assert "agent" in str(exc_info.value).lower()
+        assert "jira" in str(exc_info.value).lower()
+
+    def test_validate_strategy_direct_without_credentials(self, tmp_path):
+        """Direct strategy fails validation when no credentials exist."""
+        from spec.config.fetch_config import (
+            AgentConfig,
+            AgentPlatform,
+            ConfigValidationError,
+            FetchStrategy,
+            validate_strategy_for_platform,
+        )
+
+        agent_config = AgentConfig(platform=AgentPlatform.AUGGIE, integrations={})
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_strategy_for_platform(
+                platform="azure_devops",
+                strategy=FetchStrategy.DIRECT,
+                agent_config=agent_config,
+                has_credentials=False,
+                strict=True,
+            )
+
+        assert "direct" in str(exc_info.value).lower()
+        assert "credentials" in str(exc_info.value).lower()
+
+    def test_validate_strategy_auto_without_either(self, tmp_path):
+        """Auto strategy fails validation when neither integration nor creds exist."""
+        from spec.config.fetch_config import (
+            AgentConfig,
+            AgentPlatform,
+            ConfigValidationError,
+            FetchStrategy,
+            validate_strategy_for_platform,
+        )
+
+        agent_config = AgentConfig(platform=AgentPlatform.MANUAL, integrations={})
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_strategy_for_platform(
+                platform="trello",
+                strategy=FetchStrategy.AUTO,
+                agent_config=agent_config,
+                has_credentials=False,
+                strict=True,
+            )
+
+        assert "auto" in str(exc_info.value).lower()
+        assert "trello" in str(exc_info.value).lower()
+
+    def test_validate_credentials_missing_required_fields(self):
+        """Credential validation fails when required fields are missing."""
+        from spec.config.fetch_config import ConfigValidationError, validate_credentials
+
+        # Jira requires url, email, token
+        incomplete_creds = {"url": "https://example.atlassian.net"}
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_credentials("jira", incomplete_creds, strict=True)
+
+        assert "email" in str(exc_info.value) or "token" in str(exc_info.value)
+
+    def test_validate_credentials_unexpanded_env_var(self):
+        """Credential validation warns about unexpanded env vars."""
+        from spec.config.fetch_config import validate_credentials
+
+        creds = {
+            "url": "https://example.atlassian.net",
+            "email": "user@example.com",
+            "token": "${UNSET_TOKEN}",  # Not expanded
+        }
+
+        errors = validate_credentials("jira", creds, strict=False)
+        assert any("unexpanded" in e.lower() for e in errors)
+
+
+class TestPerformanceGuardrails:
+    """Tests for performance config upper bounds."""
+
+    def test_performance_config_clamps_to_max(self):
+        """Performance config clamps values to upper bounds."""
+        from spec.config.fetch_config import (
+            MAX_CACHE_DURATION_HOURS,
+            MAX_RETRIES,
+            MAX_RETRY_DELAY_SECONDS,
+            MAX_TIMEOUT_SECONDS,
+            FetchPerformanceConfig,
+        )
+
+        config = FetchPerformanceConfig(
+            cache_duration_hours=1000,  # Exceeds max
+            timeout_seconds=1000,  # Exceeds max
+            max_retries=100,  # Exceeds max
+            retry_delay_seconds=1000,  # Exceeds max
+        )
+
+        assert config.cache_duration_hours == MAX_CACHE_DURATION_HOURS
+        assert config.timeout_seconds == MAX_TIMEOUT_SECONDS
+        assert config.max_retries == MAX_RETRIES
+        assert config.retry_delay_seconds == MAX_RETRY_DELAY_SECONDS
+
+    def test_performance_config_accepts_valid_values(self):
+        """Performance config accepts values within bounds."""
+        from spec.config.fetch_config import FetchPerformanceConfig
+
+        config = FetchPerformanceConfig(
+            cache_duration_hours=48,
+            timeout_seconds=60,
+            max_retries=5,
+            retry_delay_seconds=2.5,
+        )
+
+        assert config.cache_duration_hours == 48
+        assert config.timeout_seconds == 60
+        assert config.max_retries == 5
+        assert config.retry_delay_seconds == 2.5
+
+
+class TestNoSecretLeakage:
+    """Tests to ensure secrets are never logged."""
+
+    def test_sensitive_key_detection(self):
+        """Sensitive key patterns are correctly detected."""
+        from spec.config.manager import ConfigManager
+
+        assert ConfigManager._is_sensitive_key("JIRA_TOKEN") is True
+        assert ConfigManager._is_sensitive_key("AZURE_PAT") is True
+        assert ConfigManager._is_sensitive_key("API_KEY") is True
+        assert ConfigManager._is_sensitive_key("SECRET_VALUE") is True
+        assert ConfigManager._is_sensitive_key("MY_PASSWORD") is True
+        assert ConfigManager._is_sensitive_key("CREDENTIAL_DATA") is True
+        assert ConfigManager._is_sensitive_key("DEFAULT_MODEL") is False
+        assert ConfigManager._is_sensitive_key("AGENT_PLATFORM") is False
+
+    def test_fallback_credentials_not_in_settings(self, tmp_path):
+        """Fallback credentials are not exposed in settings attributes."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FALLBACK_JIRA_TOKEN=super_secret
+FALLBACK_AZURE_DEVOPS_PAT=another_secret
+"""
+        )
+        manager = ConfigManager(config_path)
+        settings = manager.load()
+
+        # Settings should not have these as attributes
+        assert not hasattr(settings, "fallback_jira_token")
+        assert not hasattr(settings, "fallback_azure_devops_pat")
+
+        # But they should be retrievable via get_fallback_credentials
+        jira_creds = manager.get_fallback_credentials("jira")
+        assert jira_creds is not None
+        assert jira_creds["token"] == "super_secret"
+
+
+class TestPlatformOverrideValidation:
+    """Tests for per-platform override validation."""
+
+    def test_unknown_platform_warning(self):
+        """Unknown platforms in per_platform generate warnings."""
+        from spec.config.fetch_config import FetchStrategy, FetchStrategyConfig
+
+        config = FetchStrategyConfig(
+            default=FetchStrategy.AUTO,
+            per_platform={
+                "jira": FetchStrategy.AGENT,
+                "unknown_platform": FetchStrategy.DIRECT,
+            },
+        )
+
+        warnings = config.validate_platform_overrides(strict=False)
+        assert len(warnings) == 1
+        assert "unknown_platform" in warnings[0]
+
+    def test_unknown_platform_strict_raises(self):
+        """Unknown platforms in strict mode raise ConfigValidationError."""
+        from spec.config.fetch_config import (
+            ConfigValidationError,
+            FetchStrategy,
+            FetchStrategyConfig,
+        )
+
+        config = FetchStrategyConfig(
+            default=FetchStrategy.AUTO,
+            per_platform={"not_a_real_platform": FetchStrategy.DIRECT},
+        )
+
+        with pytest.raises(ConfigValidationError):
+            config.validate_platform_overrides(strict=True)
+
+
+class TestSchemaValidation:
+    """Tests for JSON Schema validation."""
+
+    def test_valid_config_passes_schema(self):
+        """Valid configuration passes schema validation."""
+        from spec.config.schema import validate_config_dict
+
+        config = {
+            "agent": {"platform": "auggie", "integrations": {"jira": True}},
+            "fetch_strategy": {"default": "auto", "per_platform": {"azure_devops": "direct"}},
+            "performance": {"cache_duration_hours": 24, "timeout_seconds": 30},
+        }
+
+        errors = validate_config_dict(config)
+        assert len(errors) == 0
+
+    def test_invalid_strategy_fails_schema(self):
+        """Invalid strategy value fails schema validation."""
+        from spec.config.schema import validate_config_dict
+
+        config = {"fetch_strategy": {"default": "invalid_strategy"}}
+
+        errors = validate_config_dict(config)
+        # Should have at least one error about invalid strategy
+        assert len(errors) > 0
+
+
+class TestValidateFetchConfig:
+    """Tests for ConfigManager.validate_fetch_config method."""
+
+    def test_validate_fetch_config_with_working_setup(self, tmp_path, monkeypatch):
+        """Valid configuration passes full validation."""
+        monkeypatch.setenv("JIRA_TOKEN", "test_token")
+
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """AGENT_PLATFORM=auggie
+AGENT_INTEGRATION_JIRA=true
+FETCH_STRATEGY_DEFAULT=auto
+FALLBACK_JIRA_URL=https://example.atlassian.net
+FALLBACK_JIRA_EMAIL=user@example.com
+FALLBACK_JIRA_TOKEN=${JIRA_TOKEN}
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        # Should not raise
+        errors = manager.validate_fetch_config(strict=False)
+        # May have warnings for platforms without config, but no critical errors
+        assert not any("jira" in e.lower() and "missing" in e.lower() for e in errors)
+
+    def test_validate_fetch_config_collects_all_errors(self, tmp_path):
+        """Non-strict mode collects all validation errors."""
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """AGENT_PLATFORM=manual
+FETCH_STRATEGY_DEFAULT=agent
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        # Agent strategy with manual platform and no integrations
+        errors = manager.validate_fetch_config(strict=False)
+        # Should have errors for each platform that can't use agent strategy
+        assert len(errors) > 0

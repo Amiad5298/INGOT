@@ -32,7 +32,13 @@ if TYPE_CHECKING:
 from spec.utils.logging import log_message
 
 # Keys containing these substrings are considered sensitive and should not be logged
-SENSITIVE_KEY_PATTERNS = ("TOKEN", "KEY", "SECRET", "PASSWORD", "PAT")
+SENSITIVE_KEY_PATTERNS = ("TOKEN", "KEY", "SECRET", "PASSWORD", "PAT", "CREDENTIAL")
+
+
+class EnvVarExpansionError(Exception):
+    """Raised when environment variable expansion fails in strict mode."""
+
+    pass
 
 
 class ConfigManager:
@@ -535,32 +541,94 @@ class ConfigManager:
         """
         return self._raw_values.get(key, default)
 
-    def _expand_env_vars(self, value: Any) -> Any:
+    def _expand_env_vars(
+        self,
+        value: Any,
+        strict: bool = False,
+        context: str = "",
+    ) -> Any:
         """Recursively expand ${VAR} references to environment variables.
 
-        Supports nested structures (dicts, lists) and preserves unmatched
-        patterns for debugging purposes.
+        Supports nested structures (dicts, lists) and can operate in strict mode
+        where missing environment variables cause an error.
 
         Args:
             value: The value to expand (string, dict, list, or other)
+            strict: If True, raises EnvVarExpansionError for missing env vars.
+                    If False, preserves the ${VAR} pattern for debugging.
+            context: Context string for error messages (e.g., key name)
 
         Returns:
             The value with ${VAR} references replaced with environment values
+
+        Raises:
+            EnvVarExpansionError: If strict=True and an env var is not set
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         if isinstance(value, str):
             pattern = r"\$\{([^}]+)\}"
+            missing_vars: list[str] = []
 
             def replace(match: re.Match[str]) -> str:
                 var_name = match.group(1)
-                # Return original pattern if env var not set (for debugging)
-                return os.environ.get(var_name, match.group(0))
+                env_value = os.environ.get(var_name)
+                if env_value is None:
+                    missing_vars.append(var_name)
+                    if strict:
+                        return match.group(0)  # Will error after
+                    else:
+                        # Warn about missing var but preserve pattern
+                        logger.warning(
+                            f"Environment variable '{var_name}' not set"
+                            + (f" in {context}" if context else "")
+                        )
+                        return match.group(0)
+                return env_value
 
-            return re.sub(pattern, replace, value)
+            result = re.sub(pattern, replace, value)
+
+            if strict and missing_vars:
+                raise EnvVarExpansionError(
+                    f"Missing environment variable(s): {', '.join(missing_vars)}"
+                    + (f" in {context}" if context else "")
+                )
+
+            return result
         elif isinstance(value, dict):
-            return {k: self._expand_env_vars(v) for k, v in value.items()}
+            return {
+                k: self._expand_env_vars(
+                    v, strict=strict, context=f"{context}.{k}" if context else k
+                )
+                for k, v in value.items()
+            }
         elif isinstance(value, list):
-            return [self._expand_env_vars(v) for v in value]
+            return [
+                self._expand_env_vars(
+                    v, strict=strict, context=f"{context}[{i}]" if context else f"[{i}]"
+                )
+                for i, v in enumerate(value)
+            ]
         return value
+
+    def expand_env_vars_strict(self, value: Any, context: str = "") -> Any:
+        """Expand environment variables in strict mode (errors on missing vars).
+
+        Use this for credential expansion where missing vars indicate misconfiguration.
+
+        Args:
+            value: The value to expand
+            context: Context string for error messages
+
+        Returns:
+            The expanded value
+
+        Raises:
+            EnvVarExpansionError: If any referenced env var is not set
+        """
+        return self._expand_env_vars(value, strict=True, context=context)
 
     def get_agent_config(self) -> AgentConfig:
         """Get AI agent configuration.
@@ -741,26 +809,108 @@ class ConfigManager:
             retry_delay_seconds=retry_delay_seconds,
         )
 
-    def get_fallback_credentials(self, platform: str) -> dict[str, str] | None:
+    def get_fallback_credentials(
+        self,
+        platform: str,
+        strict: bool = False,
+        validate: bool = False,
+    ) -> dict[str, str] | None:
         """Get fallback credentials for a platform.
 
         Parses FALLBACK_{PLATFORM}_* keys and expands environment variables.
 
         Args:
             platform: Platform name (e.g., 'azure_devops', 'trello')
+            strict: If True, raises EnvVarExpansionError for missing env vars
+            validate: If True, validates credentials have required fields
 
         Returns:
             Dictionary of credential key-value pairs, or None if no credentials
+
+        Raises:
+            EnvVarExpansionError: If strict=True and env var expansion fails
+            ConfigValidationError: If validate=True and required fields missing
         """
+        from spec.config.fetch_config import validate_credentials
+
         prefix = f"FALLBACK_{platform.upper()}_"
         credentials: dict[str, str] = {}
 
         for key, value in self._raw_values.items():
             if key.startswith(prefix):
                 cred_name = key.replace(prefix, "").lower()
-                credentials[cred_name] = self._expand_env_vars(value)
+                context = f"credential {key}"
+                credentials[cred_name] = self._expand_env_vars(
+                    value, strict=strict, context=context
+                )
 
-        return credentials if credentials else None
+        if not credentials:
+            return None
+
+        if validate:
+            validate_credentials(platform, credentials, strict=True)
+
+        return credentials
+
+    def validate_fetch_config(self, strict: bool = True) -> list[str]:
+        """Validate the complete fetch configuration.
+
+        Performs comprehensive validation:
+        - Strategy/platform compatibility
+        - Credential availability and completeness
+        - Per-platform override references
+
+        Args:
+            strict: If True, raises ConfigValidationError on first error.
+                    If False, collects and returns all warnings/errors.
+
+        Returns:
+            List of validation messages (warnings/errors)
+
+        Raises:
+            ConfigValidationError: If strict=True and validation fails
+        """
+        from spec.config.fetch_config import (
+            KNOWN_PLATFORMS,
+            ConfigValidationError,
+            validate_credentials,
+            validate_strategy_for_platform,
+        )
+
+        errors: list[str] = []
+        agent_config = self.get_agent_config()
+        strategy_config = self.get_fetch_strategy_config()
+
+        # Validate per-platform overrides reference known platforms
+        override_warnings = strategy_config.validate_platform_overrides(strict=False)
+        errors.extend(override_warnings)
+
+        # Validate each known platform's strategy is viable
+        for platform in KNOWN_PLATFORMS:
+            strategy = strategy_config.get_strategy(platform)
+            credentials = self.get_fallback_credentials(platform, strict=False)
+            has_credentials = credentials is not None and len(credentials) > 0
+
+            platform_errors = validate_strategy_for_platform(
+                platform=platform,
+                strategy=strategy,
+                agent_config=agent_config,
+                has_credentials=has_credentials,
+                strict=False,
+            )
+            errors.extend(platform_errors)
+
+            # If direct or auto strategy with credentials, validate credential fields
+            if has_credentials and strategy.value in ("direct", "auto"):
+                cred_errors = validate_credentials(platform, credentials, strict=False)
+                errors.extend(cred_errors)
+
+        if strict and errors:
+            raise ConfigValidationError(
+                "Fetch configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            )
+
+        return errors
 
     def show(self) -> None:
         """Display current configuration using Rich formatting."""
@@ -801,4 +951,6 @@ class ConfigManager:
 
 __all__ = [
     "ConfigManager",
+    "EnvVarExpansionError",
+    "SENSITIVE_KEY_PATTERNS",
 ]
