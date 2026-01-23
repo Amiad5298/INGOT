@@ -17,8 +17,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
-from spec.integrations.providers.base import Platform
-
+from ..providers.base import Platform
 from .exceptions import AgentIntegrationError, PlatformNotSupportedError
 
 logger = logging.getLogger(__name__)
@@ -30,8 +29,9 @@ _JSON_CODE_BLOCK_PATTERN = re.compile(
 )
 
 # Regex pattern to extract any markdown code blocks (``` ... ```)
+# More permissive to catch blocks like ```jsonc, ```text, etc.
 _ANY_CODE_BLOCK_PATTERN = re.compile(
-    r"```(?:\w*)?\s*\n?(.*?)\n?```",
+    r"```(?:[^\n]*)?\s*\n?(.*?)\n?```",
     re.DOTALL,
 )
 
@@ -252,6 +252,11 @@ class AgentMediatedFetcher(TicketFetcher):
             result = json.loads(text)
             if isinstance(result, dict):
                 return result
+            else:
+                logger.warning(
+                    "Parsed valid JSON but expected dict, got %s",
+                    type(result).__name__,
+                )
         except json.JSONDecodeError:
             pass
         return None
@@ -259,9 +264,9 @@ class AgentMediatedFetcher(TicketFetcher):
     def _extract_first_json_object(self, text: str) -> dict[str, Any] | None:
         """Extract the first valid JSON object from text.
 
-        Finds the first '{' and attempts to parse progressively longer
-        substrings until a valid JSON object is found or all possibilities
-        are exhausted.
+        Uses a while loop to search for '{' characters and attempts to parse
+        balanced brace sequences as JSON objects. If parsing fails, continues
+        searching from the next '{'.
 
         Args:
             text: Raw text that may contain JSON
@@ -269,28 +274,29 @@ class AgentMediatedFetcher(TicketFetcher):
         Returns:
             Parsed dict if a valid JSON object is found, None otherwise
         """
-        start_idx = text.find("{")
-        if start_idx == -1:
-            return None
+        search_start_idx = 0
 
-        # Try to find matching closing braces by tracking nesting depth
-        # This is more robust than using rfind which is too greedy
-        depth = 0
-        for i, char in enumerate(text[start_idx:], start=start_idx):
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    # Found a potential complete JSON object
-                    candidate = text[start_idx : i + 1]
-                    result = self._try_parse_json(candidate)
-                    if result is not None:
-                        return result
-                    # If parsing failed, reset and continue looking for the next '{'
-                    next_start = text.find("{", start_idx + 1)
-                    if next_start == -1:
-                        return None
-                    start_idx = next_start
-                    depth = 1  # We're now inside this new brace
-        return None
+        while True:
+            start_idx = text.find("{", search_start_idx)
+            if start_idx == -1:
+                return None
+
+            # Try to find matching closing brace by tracking nesting depth
+            depth = 0
+            for i in range(start_idx, len(text)):
+                char = text[i]
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        # Found a potential complete JSON object
+                        candidate = text[start_idx : i + 1]
+                        result = self._try_parse_json(candidate)
+                        if result is not None:
+                            return result
+                        # Parsing failed, search for next '{' after current start
+                        break
+
+            # Move search position forward to find the next '{'
+            search_start_idx = start_idx + 1
