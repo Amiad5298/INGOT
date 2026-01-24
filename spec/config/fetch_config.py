@@ -13,6 +13,7 @@ Validation:
     - Credential validation ensures required fields per platform
 """
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -179,6 +180,7 @@ class FetchPerformanceConfig:
         retry_delay_seconds: Delay between retry attempts (max: 60s)
 
     Upper bounds are enforced to prevent configurations that can block or hang.
+    Values are clamped in __post_init__ using simple assignment (not frozen).
     """
 
     cache_duration_hours: int = 24
@@ -188,44 +190,58 @@ class FetchPerformanceConfig:
 
     def __post_init__(self) -> None:
         """Validate and clamp values to safe upper bounds."""
-        self._validate_and_clamp()
-
-    def _validate_and_clamp(self) -> None:
-        """Validate values and clamp to upper bounds."""
         import logging
 
         logger = logging.getLogger(__name__)
 
-        # Cache duration
+        # Cache duration - clamp to max using simple assignment
         if self.cache_duration_hours > MAX_CACHE_DURATION_HOURS:
             logger.warning(
                 f"cache_duration_hours ({self.cache_duration_hours}) exceeds max "
                 f"({MAX_CACHE_DURATION_HOURS}), clamping to max"
             )
-            object.__setattr__(self, "cache_duration_hours", MAX_CACHE_DURATION_HOURS)
+            self.cache_duration_hours = MAX_CACHE_DURATION_HOURS
 
-        # Timeout
+        # Timeout - clamp to max
         if self.timeout_seconds > MAX_TIMEOUT_SECONDS:
             logger.warning(
                 f"timeout_seconds ({self.timeout_seconds}) exceeds max "
                 f"({MAX_TIMEOUT_SECONDS}), clamping to max"
             )
-            object.__setattr__(self, "timeout_seconds", MAX_TIMEOUT_SECONDS)
+            self.timeout_seconds = MAX_TIMEOUT_SECONDS
 
-        # Retries
+        # Retries - clamp to max
         if self.max_retries > MAX_RETRIES:
             logger.warning(
                 f"max_retries ({self.max_retries}) exceeds max ({MAX_RETRIES}), clamping to max"
             )
-            object.__setattr__(self, "max_retries", MAX_RETRIES)
+            self.max_retries = MAX_RETRIES
 
-        # Retry delay
+        # Retry delay - clamp to max
         if self.retry_delay_seconds > MAX_RETRY_DELAY_SECONDS:
             logger.warning(
                 f"retry_delay_seconds ({self.retry_delay_seconds}) exceeds max "
                 f"({MAX_RETRY_DELAY_SECONDS}), clamping to max"
             )
-            object.__setattr__(self, "retry_delay_seconds", MAX_RETRY_DELAY_SECONDS)
+            self.retry_delay_seconds = MAX_RETRY_DELAY_SECONDS
+
+
+# Regex pattern for unexpanded environment variables like ${VAR}, prefix_${VAR}, ${VAR}_suffix
+_UNEXPANDED_ENV_VAR_PATTERN = re.compile(r"\$\{[^}]+\}")
+
+
+def _contains_unexpanded_env_var(value: str) -> bool:
+    """Check if a string contains unexpanded environment variable patterns.
+
+    Detects patterns like: ${VAR}, prefix_${VAR}, ${VAR}_suffix, prefix_${VAR}_suffix
+
+    Args:
+        value: The string to check
+
+    Returns:
+        True if the string contains unexpanded ${VAR} patterns
+    """
+    return bool(_UNEXPANDED_ENV_VAR_PATTERN.search(value))
 
 
 def validate_credentials(
@@ -280,7 +296,8 @@ def validate_credentials(
             if not value or (isinstance(value, str) and not value.strip()):
                 errors.append(f"Credential field '{field_name}' for '{platform}' is empty")
             # Check for unexpanded env vars (indicates missing environment variable)
-            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            # Handles patterns like: ${VAR}, prefix_${VAR}, ${VAR}_suffix, prefix_${VAR}_suffix
+            if isinstance(value, str) and _contains_unexpanded_env_var(value):
                 errors.append(
                     f"Credential field '{field_name}' for '{platform}' contains "
                     f"unexpanded environment variable: {value}"

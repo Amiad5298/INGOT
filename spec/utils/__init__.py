@@ -2,6 +2,7 @@
 
 This package contains:
 - console: Rich-based terminal output utilities
+- env_utils: Environment variable expansion utilities
 - errors: Custom exceptions and exit codes
 - error_analysis: Structured error parsing for better retry prompts
 - logging: Logging configuration
@@ -17,6 +18,13 @@ from spec.utils.console import (
     print_success,
     print_warning,
     show_banner,
+)
+from spec.utils.env_utils import (
+    SENSITIVE_KEY_PATTERNS,
+    EnvVarExpansionError,
+    expand_env_vars,
+    expand_env_vars_strict,
+    is_sensitive_key,
 )
 from spec.utils.error_analysis import ErrorAnalysis, analyze_error_output
 from spec.utils.errors import (
@@ -44,6 +52,12 @@ __all__ = [
     "print_header",
     "print_step",
     "show_banner",
+    # Env Utils
+    "EnvVarExpansionError",
+    "SENSITIVE_KEY_PATTERNS",
+    "expand_env_vars",
+    "expand_env_vars_strict",
+    "is_sensitive_key",
     # Errors
     "ExitCode",
     "SpecError",
@@ -63,4 +77,3 @@ __all__ = [
     "calculate_backoff_delay",
     "with_rate_limit_retry",
 ]
-

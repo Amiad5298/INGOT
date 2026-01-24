@@ -14,22 +14,32 @@ trackers to have project-specific settings while maintaining global defaults.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
+from spec.config.fetch_config import (
+    KNOWN_PLATFORMS,
+    AgentConfig,
+    AgentPlatform,
+    ConfigValidationError,
+    FetchPerformanceConfig,
+    FetchStrategy,
+    FetchStrategyConfig,
+    validate_credentials,
+    validate_strategy_for_platform,
+)
+from spec.config.schema import validate_config_dict
 from spec.config.settings import CONFIG_FILE, Settings
 from spec.integrations.git import find_repo_root
-
-if TYPE_CHECKING:
-    from spec.config.fetch_config import (
-        AgentConfig,
-        FetchPerformanceConfig,
-        FetchStrategyConfig,
-    )
+from spec.utils.console import console, print_header, print_info
 from spec.utils.logging import log_message
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 # Keys containing these substrings are considered sensitive and should not be logged
 SENSITIVE_KEY_PATTERNS = ("TOKEN", "KEY", "SECRET", "PASSWORD", "PAT", "CREDENTIAL")
@@ -156,7 +166,161 @@ class ConfigManager:
 
         return None
 
+    def _is_yaml_file(self, path: Path) -> bool:
+        """Detect if a file appears to be YAML format.
+
+        Checks file extension and content to determine format.
+
+        Args:
+            path: Path to the config file
+
+        Returns:
+            True if file is YAML format, False for KEY=VALUE format
+        """
+        # Check extension first
+        if path.suffix.lower() in (".yaml", ".yml"):
+            return True
+
+        # Check content for YAML indicators
+        try:
+            with path.open() as f:
+                first_lines = []
+                for i, line in enumerate(f):
+                    if i >= 10:  # Check first 10 lines
+                        break
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        first_lines.append(line)
+
+                # KEY=VALUE format has lines with '='
+                # YAML nested format has lines with ':' but typically no '='
+                for line in first_lines:
+                    # If we see agent:, fetch_strategy:, etc. it's YAML
+                    if line.endswith(":") or ": " in line:
+                        # Could be YAML, check if it doesn't look like KEY=VALUE
+                        if "=" not in line:
+                            return True
+                    if "=" in line:
+                        return False
+        except Exception:
+            pass
+
+        return False
+
     def _load_file(self, path: Path, source: str = "file") -> None:
+        """Load configuration from a file.
+
+        Automatically detects file format (YAML or KEY=VALUE) and loads
+        appropriately.
+
+        Args:
+            path: Path to the config file
+            source: Source identifier for debugging
+        """
+        if self._is_yaml_file(path):
+            self._load_yaml_file(path, source)
+        else:
+            self._load_keyvalue_file(path, source)
+
+    def _load_yaml_file(self, path: Path, source: str = "file") -> None:
+        """Load configuration from a YAML file.
+
+        Parses the nested YAML structure (matching FETCH_CONFIG_SCHEMA) and
+        converts it to flat key-value pairs. Also validates against schema.
+
+        Args:
+            path: Path to the YAML config file
+            source: Source identifier for debugging
+        """
+        try:
+            import yaml
+        except ImportError:
+            log_message("Warning: PyYAML not installed, skipping YAML config")
+            return
+
+        try:
+            with path.open() as f:
+                config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            log_message(f"Warning: Failed to parse YAML config {path}: {e}")
+            return
+
+        if not isinstance(config, dict):
+            log_message(f"Warning: YAML config {path} is not a dictionary")
+            return
+
+        # Validate against schema
+        errors = validate_config_dict(config)
+        if errors:
+            log_message(f"Warning: YAML config validation errors: {errors}")
+            # Continue loading despite validation errors (non-strict)
+
+        # Convert nested YAML to flat key-value pairs
+        self._yaml_to_flat(config, source)
+
+    def _yaml_to_flat(self, config: dict[str, Any], source: str) -> None:
+        """Convert nested YAML config to flat KEY=VALUE pairs.
+
+        Maps YAML structure to equivalent flat keys:
+        - agent.platform -> AGENT_PLATFORM
+        - agent.integrations.jira -> AGENT_INTEGRATION_JIRA
+        - fetch_strategy.default -> FETCH_STRATEGY_DEFAULT
+        - fetch_strategy.per_platform.azure_devops -> FETCH_STRATEGY_AZURE_DEVOPS
+        - performance.cache_duration_hours -> CACHE_DURATION_HOURS
+        - fallback_credentials.jira.url -> FALLBACK_JIRA_URL
+
+        Args:
+            config: Parsed YAML configuration dictionary
+            source: Source identifier for debugging
+        """
+        # Agent configuration
+        if "agent" in config:
+            agent = config["agent"]
+            if "platform" in agent:
+                self._raw_values["AGENT_PLATFORM"] = str(agent["platform"])
+                self._config_sources["AGENT_PLATFORM"] = source
+            if "integrations" in agent:
+                for platform, enabled in agent["integrations"].items():
+                    key = f"AGENT_INTEGRATION_{platform.upper()}"
+                    self._raw_values[key] = str(enabled).lower()
+                    self._config_sources[key] = source
+
+        # Fetch strategy configuration
+        if "fetch_strategy" in config:
+            fs = config["fetch_strategy"]
+            if "default" in fs:
+                self._raw_values["FETCH_STRATEGY_DEFAULT"] = str(fs["default"])
+                self._config_sources["FETCH_STRATEGY_DEFAULT"] = source
+            if "per_platform" in fs:
+                for platform, strategy in fs["per_platform"].items():
+                    key = f"FETCH_STRATEGY_{platform.upper()}"
+                    self._raw_values[key] = str(strategy)
+                    self._config_sources[key] = source
+
+        # Performance configuration
+        if "performance" in config:
+            perf = config["performance"]
+            perf_mapping = {
+                "cache_duration_hours": "FETCH_CACHE_DURATION_HOURS",
+                "timeout_seconds": "FETCH_TIMEOUT_SECONDS",
+                "max_retries": "FETCH_MAX_RETRIES",
+                "retry_delay_seconds": "FETCH_RETRY_DELAY_SECONDS",
+            }
+            for yaml_key, flat_key in perf_mapping.items():
+                if yaml_key in perf:
+                    self._raw_values[flat_key] = str(perf[yaml_key])
+                    self._config_sources[flat_key] = source
+
+        # Fallback credentials
+        if "fallback_credentials" in config:
+            for platform, creds in config["fallback_credentials"].items():
+                if isinstance(creds, dict):
+                    for cred_key, cred_value in creds.items():
+                        key = f"FALLBACK_{platform.upper()}_{cred_key.upper()}"
+                        self._raw_values[key] = str(cred_value)
+                        self._config_sources[key] = source
+
+    def _load_keyvalue_file(self, path: Path, source: str = "file") -> None:
         """Load key=value pairs from a config file.
 
         Args:
@@ -564,10 +728,6 @@ class ConfigManager:
         Raises:
             EnvVarExpansionError: If strict=True and an env var is not set
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         if isinstance(value, str):
             pattern = r"\$\{([^}]+)\}"
             missing_vars: list[str] = []
@@ -638,11 +798,6 @@ class ConfigManager:
         Returns:
             AgentConfig instance with platform and integrations
         """
-        import logging
-
-        from spec.config.fetch_config import AgentConfig, AgentPlatform
-
-        logger = logging.getLogger(__name__)
         platform_str = self._raw_values.get("AGENT_PLATFORM", "auggie")
         integrations: dict[str, bool] = {}
 
@@ -656,7 +811,7 @@ class ConfigManager:
             platform = AgentPlatform(platform_str.lower())
         except ValueError:
             logger.warning(
-                f"Invalid AGENT_PLATFORM value '{platform_str}', " f"falling back to 'auggie'"
+                f"Invalid AGENT_PLATFORM value '{platform_str}', falling back to 'auggie'"
             )
             platform = AgentPlatform.AUGGIE
 
@@ -673,11 +828,6 @@ class ConfigManager:
         Returns:
             FetchStrategyConfig instance with default and per-platform strategies
         """
-        import logging
-
-        from spec.config.fetch_config import FetchStrategy, FetchStrategyConfig
-
-        logger = logging.getLogger(__name__)
         default_str = self._raw_values.get("FETCH_STRATEGY_DEFAULT", "auto")
         per_platform: dict[str, FetchStrategy] = {}
 
@@ -697,7 +847,7 @@ class ConfigManager:
             default = FetchStrategy(default_str.lower())
         except ValueError:
             logger.warning(
-                f"Invalid FETCH_STRATEGY_DEFAULT value '{default_str}', " f"falling back to 'auto'"
+                f"Invalid FETCH_STRATEGY_DEFAULT value '{default_str}', falling back to 'auto'"
             )
             default = FetchStrategy.AUTO
 
@@ -721,12 +871,6 @@ class ConfigManager:
         Returns:
             FetchPerformanceConfig instance with performance settings
         """
-        import logging
-
-        from spec.config.fetch_config import FetchPerformanceConfig
-
-        logger = logging.getLogger(__name__)
-
         # Default values
         cache_duration_hours = 24
         timeout_seconds = 30
@@ -809,6 +953,12 @@ class ConfigManager:
             retry_delay_seconds=retry_delay_seconds,
         )
 
+    # Credential key aliases for backward compatibility
+    # Maps alias -> canonical name for specific platforms
+    _CREDENTIAL_ALIASES: dict[str, dict[str, str]] = {
+        "azure_devops": {"org": "organization"},
+    }
+
     def get_fallback_credentials(
         self,
         platform: str,
@@ -818,6 +968,8 @@ class ConfigManager:
         """Get fallback credentials for a platform.
 
         Parses FALLBACK_{PLATFORM}_* keys and expands environment variables.
+        Supports credential key aliases for backward compatibility (e.g., 'org'
+        is treated as 'organization' for Azure DevOps).
 
         Args:
             platform: Platform name (e.g., 'azure_devops', 'trello')
@@ -831,14 +983,18 @@ class ConfigManager:
             EnvVarExpansionError: If strict=True and env var expansion fails
             ConfigValidationError: If validate=True and required fields missing
         """
-        from spec.config.fetch_config import validate_credentials
-
         prefix = f"FALLBACK_{platform.upper()}_"
         credentials: dict[str, str] = {}
+
+        # Get platform-specific aliases
+        platform_lower = platform.lower()
+        aliases = self._CREDENTIAL_ALIASES.get(platform_lower, {})
 
         for key, value in self._raw_values.items():
             if key.startswith(prefix):
                 cred_name = key.replace(prefix, "").lower()
+                # Apply alias mapping for backward compatibility
+                cred_name = aliases.get(cred_name, cred_name)
                 context = f"credential {key}"
                 credentials[cred_name] = self._expand_env_vars(
                     value, strict=strict, context=context
@@ -852,10 +1008,52 @@ class ConfigManager:
 
         return credentials
 
+    def _get_active_platforms(self) -> set[str]:
+        """Get the set of 'active' platforms that need validation.
+
+        Active platforms are those explicitly defined in:
+        - per_platform strategy overrides
+        - agent integrations
+        - fallback_credentials
+
+        Returns:
+            Set of lowercase platform names that are actively configured
+        """
+        active: set[str] = set()
+
+        # Get platforms from per_platform strategy overrides
+        strategy_config = self.get_fetch_strategy_config()
+        active.update(p.lower() for p in strategy_config.per_platform.keys())
+
+        # Get platforms from agent integrations
+        agent_config = self.get_agent_config()
+        active.update(p.lower() for p in agent_config.integrations.keys())
+
+        # Get platforms from fallback credentials (FALLBACK_{PLATFORM}_* keys)
+        for key in self._raw_values.keys():
+            if key.startswith("FALLBACK_"):
+                # Extract platform name: FALLBACK_{PLATFORM}_{CRED_KEY}
+                parts = key.split("_", 2)  # Split into at most 3 parts
+                if len(parts) >= 2:
+                    # Handle multi-word platforms like AZURE_DEVOPS
+                    # We need to find which known platform matches
+                    remaining = key.replace("FALLBACK_", "")
+                    for known in KNOWN_PLATFORMS:
+                        known_upper = known.upper()
+                        if remaining.startswith(known_upper + "_"):
+                            active.add(known)
+                            break
+
+        return active
+
     def validate_fetch_config(self, strict: bool = True) -> list[str]:
         """Validate the complete fetch configuration.
 
-        Performs comprehensive validation:
+        Performs scoped validation only on 'active' platforms that are explicitly
+        configured (defined in per_platform, integrations, or fallback_credentials).
+        This reduces noise by not checking all KNOWN_PLATFORMS by default.
+
+        Validation includes:
         - Strategy/platform compatibility
         - Credential availability and completeness
         - Per-platform override references
@@ -870,13 +1068,6 @@ class ConfigManager:
         Raises:
             ConfigValidationError: If strict=True and validation fails
         """
-        from spec.config.fetch_config import (
-            KNOWN_PLATFORMS,
-            ConfigValidationError,
-            validate_credentials,
-            validate_strategy_for_platform,
-        )
-
         errors: list[str] = []
         agent_config = self.get_agent_config()
         strategy_config = self.get_fetch_strategy_config()
@@ -885,8 +1076,11 @@ class ConfigManager:
         override_warnings = strategy_config.validate_platform_overrides(strict=False)
         errors.extend(override_warnings)
 
-        # Validate each known platform's strategy is viable
-        for platform in KNOWN_PLATFORMS:
+        # Get only the active platforms that need validation
+        active_platforms = self._get_active_platforms()
+
+        # Validate only active platforms' strategies
+        for platform in active_platforms:
             strategy = strategy_config.get_strategy(platform)
             credentials = self.get_fallback_credentials(platform, strict=False)
             has_credentials = credentials is not None and len(credentials) > 0
@@ -914,8 +1108,6 @@ class ConfigManager:
 
     def show(self) -> None:
         """Display current configuration using Rich formatting."""
-        from spec.utils.console import console, print_header, print_info
-
         print_header("Current Configuration")
 
         # Show config file locations

@@ -106,7 +106,7 @@ FETCH_CONFIG_SCHEMA: dict[str, Any] = {
             ],
         },
     },
-    "additionalProperties": False,
+    "additionalProperties": True,
 }
 
 

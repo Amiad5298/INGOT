@@ -261,9 +261,9 @@ class TestConfigManagerGet:
 class TestConfigManagerShow:
     """Tests for ConfigManager.show method."""
 
-    @patch("spec.utils.console.print_header")
-    @patch("spec.utils.console.print_info")
-    @patch("spec.utils.console.console")
+    @patch("spec.config.manager.print_header")
+    @patch("spec.config.manager.print_info")
+    @patch("spec.config.manager.console")
     def test_show_missing_file(self, mock_console, mock_info, mock_header, tmp_path):
         """Shows message when config file doesn't exist."""
         config_path = tmp_path / "missing"
@@ -274,9 +274,9 @@ class TestConfigManagerShow:
         mock_header.assert_called_once()
         assert mock_info.call_count >= 1
 
-    @patch("spec.utils.console.print_header")
-    @patch("spec.utils.console.print_info")
-    @patch("spec.utils.console.console")
+    @patch("spec.config.manager.print_header")
+    @patch("spec.config.manager.print_info")
+    @patch("spec.config.manager.console")
     def test_show_displays_settings(self, mock_console, mock_info, mock_header, temp_config_file):
         """Shows all settings from config file."""
         manager = ConfigManager(temp_config_file)
@@ -1637,9 +1637,10 @@ FALLBACK_AZURE_DEVOPS_PAT=${MY_PAT}
         assert perf_config.timeout_seconds == 45
 
         # Check fallback credentials with env var expansion
+        # Note: 'org' is aliased to 'organization' for Azure DevOps
         creds = manager.get_fallback_credentials("azure_devops")
         assert creds is not None
-        assert creds["org"] == "myorg"
+        assert creds["organization"] == "myorg"
         assert creds["pat"] == "secret_pat_value"
 
 
@@ -1974,15 +1975,294 @@ FALLBACK_JIRA_TOKEN=${JIRA_TOKEN}
     def test_validate_fetch_config_collects_all_errors(self, tmp_path):
         """Non-strict mode collects all validation errors."""
         config_path = tmp_path / "config"
+        # Configure active platforms with agent strategy but no integrations
+        # This triggers validation errors for those platforms
         config_path.write_text(
             """AGENT_PLATFORM=manual
-FETCH_STRATEGY_DEFAULT=agent
+FETCH_STRATEGY_JIRA=agent
+FETCH_STRATEGY_LINEAR=agent
 """
         )
         manager = ConfigManager(config_path)
         manager.load()
 
-        # Agent strategy with manual platform and no integrations
+        # Agent strategy for Jira/Linear with manual platform and no integrations
         errors = manager.validate_fetch_config(strict=False)
-        # Should have errors for each platform that can't use agent strategy
+        # Should have errors for active platforms that can't use agent strategy
         assert len(errors) > 0
+
+
+class TestYamlConfigLoading:
+    """Tests for YAML configuration file loading."""
+
+    def test_is_yaml_file_by_extension(self, tmp_path):
+        """Detects YAML format by .yaml extension."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("agent:\n  platform: cursor\n")
+        manager = ConfigManager(yaml_file)
+
+        assert manager._is_yaml_file(yaml_file) is True
+
+    def test_is_yaml_file_by_yml_extension(self, tmp_path):
+        """Detects YAML format by .yml extension."""
+        yml_file = tmp_path / "config.yml"
+        yml_file.write_text("agent:\n  platform: cursor\n")
+        manager = ConfigManager(yml_file)
+
+        assert manager._is_yaml_file(yml_file) is True
+
+    def test_is_yaml_file_by_content(self, tmp_path):
+        """Detects YAML format by content when no extension."""
+        config_file = tmp_path / ".spec"
+        config_file.write_text("agent:\n  platform: cursor\n")
+        manager = ConfigManager(config_file)
+
+        assert manager._is_yaml_file(config_file) is True
+
+    def test_is_keyvalue_file_by_content(self, tmp_path):
+        """Detects KEY=VALUE format by content."""
+        config_file = tmp_path / ".spec"
+        config_file.write_text('AGENT_PLATFORM="cursor"\n')
+        manager = ConfigManager(config_file)
+
+        assert manager._is_yaml_file(config_file) is False
+
+    def test_load_yaml_agent_config(self, tmp_path):
+        """Loads agent configuration from YAML."""
+        from spec.config.fetch_config import AgentPlatform
+
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            """agent:
+  platform: cursor
+  integrations:
+    jira: true
+    linear: false
+"""
+        )
+        manager = ConfigManager(yaml_file)
+        manager.load()
+
+        config = manager.get_agent_config()
+        assert config.platform == AgentPlatform.CURSOR
+        assert config.integrations["jira"] is True
+        assert config.integrations["linear"] is False
+
+    def test_load_yaml_fetch_strategy_config(self, tmp_path):
+        """Loads fetch strategy configuration from YAML."""
+        from spec.config.fetch_config import FetchStrategy
+
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            """fetch_strategy:
+  default: direct
+  per_platform:
+    azure_devops: direct
+    jira: agent
+"""
+        )
+        manager = ConfigManager(yaml_file)
+        manager.load()
+
+        config = manager.get_fetch_strategy_config()
+        assert config.default == FetchStrategy.DIRECT
+        assert config.get_strategy("azure_devops") == FetchStrategy.DIRECT
+        assert config.get_strategy("jira") == FetchStrategy.AGENT
+
+    def test_load_yaml_performance_config(self, tmp_path):
+        """Loads performance configuration from YAML."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            """performance:
+  cache_duration_hours: 48
+  timeout_seconds: 60
+  max_retries: 5
+  retry_delay_seconds: 2.0
+"""
+        )
+        manager = ConfigManager(yaml_file)
+        manager.load()
+
+        config = manager.get_fetch_performance_config()
+        assert config.cache_duration_hours == 48
+        assert config.timeout_seconds == 60
+        assert config.max_retries == 5
+        assert config.retry_delay_seconds == 2.0
+
+    def test_load_yaml_fallback_credentials(self, tmp_path):
+        """Loads fallback credentials from YAML."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            """fallback_credentials:
+  jira:
+    url: https://jira.example.com
+    token: secret123
+"""
+        )
+        manager = ConfigManager(yaml_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("jira", validate=False)
+        assert creds["url"] == "https://jira.example.com"
+        assert creds["token"] == "secret123"
+
+    def test_yaml_to_flat_conversion(self, tmp_path):
+        """Verifies YAML is converted to correct flat keys."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            """agent:
+  platform: aider
+fetch_strategy:
+  default: auto
+"""
+        )
+        manager = ConfigManager(yaml_file)
+        manager.load()
+
+        assert manager._raw_values.get("AGENT_PLATFORM") == "aider"
+        assert manager._raw_values.get("FETCH_STRATEGY_DEFAULT") == "auto"
+
+    def test_keyvalue_format_still_works(self, tmp_path):
+        """Ensures KEY=VALUE format still loads correctly."""
+        config_file = tmp_path / ".spec"
+        config_file.write_text(
+            """AGENT_PLATFORM="cursor"
+FETCH_STRATEGY_DEFAULT="direct"
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        from spec.config.fetch_config import AgentPlatform, FetchStrategy
+
+        assert manager.get_agent_config().platform == AgentPlatform.CURSOR
+        assert manager.get_fetch_strategy_config().default == FetchStrategy.DIRECT
+
+
+class TestAzureDevOpsCredentialAlias:
+    """Tests for Azure DevOps credential key aliasing."""
+
+    def test_org_alias_mapped_to_organization(self, tmp_path):
+        """The 'org' credential key is mapped to 'organization' for Azure DevOps."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_AZURE_DEVOPS_ORG=my-org
+FALLBACK_AZURE_DEVOPS_PROJECT=my-project
+FALLBACK_AZURE_DEVOPS_TOKEN=secret
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("azure_devops", validate=False)
+        # 'org' should be mapped to 'organization'
+        assert "organization" in creds
+        assert creds["organization"] == "my-org"
+        # 'org' should not be present as a separate key
+        assert "org" not in creds
+
+    def test_organization_key_works_directly(self, tmp_path):
+        """The 'organization' key works directly without aliasing."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_AZURE_DEVOPS_ORGANIZATION=direct-org
+FALLBACK_AZURE_DEVOPS_PROJECT=my-project
+FALLBACK_AZURE_DEVOPS_TOKEN=secret
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("azure_devops", validate=False)
+        assert creds["organization"] == "direct-org"
+
+    def test_jira_has_no_aliases(self, tmp_path):
+        """Jira credentials have no aliasing applied."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_JIRA_URL=https://jira.example.com
+FALLBACK_JIRA_TOKEN=secret
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("jira", validate=False)
+        assert creds["url"] == "https://jira.example.com"
+        assert creds["token"] == "secret"
+
+
+class TestScopedPlatformValidation:
+    """Tests for scoped platform validation."""
+
+    def test_get_active_platforms_from_per_platform(self, tmp_path):
+        """Active platforms are detected from per_platform overrides."""
+        config_file = tmp_path / "config"
+        config_file.write_text('FETCH_STRATEGY_AZURE_DEVOPS="direct"\n')
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        active = manager._get_active_platforms()
+        assert "azure_devops" in active
+
+    def test_get_active_platforms_from_integrations(self, tmp_path):
+        """Active platforms are detected from agent integrations."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """AGENT_INTEGRATION_JIRA=true
+AGENT_INTEGRATION_LINEAR=true
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        active = manager._get_active_platforms()
+        assert "jira" in active
+        assert "linear" in active
+
+    def test_get_active_platforms_from_fallback_credentials(self, tmp_path):
+        """Active platforms are detected from fallback credentials."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_GITHUB_TOKEN=secret
+FALLBACK_AZURE_DEVOPS_ORG=my-org
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        active = manager._get_active_platforms()
+        assert "github" in active
+        assert "azure_devops" in active
+
+    def test_validate_only_active_platforms(self, tmp_path):
+        """Validation only checks active platforms, not all known platforms."""
+        config_file = tmp_path / "config"
+        # Configure only Jira with agent strategy (requires integration)
+        config_file.write_text(
+            """AGENT_PLATFORM=auggie
+AGENT_INTEGRATION_JIRA=true
+FETCH_STRATEGY_JIRA=agent
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        errors = manager.validate_fetch_config(strict=False)
+        # Should NOT have errors about Linear, GitHub, etc. (not active)
+        # Jira is properly configured with agent integration
+        error_text = " ".join(errors)
+        assert "linear" not in error_text.lower()
+        assert "github" not in error_text.lower()
+
+    def test_validate_unconfigured_platforms_not_checked(self, tmp_path):
+        """Platforms without any configuration are not validated."""
+        config_file = tmp_path / "config"
+        # Empty config - no platforms active
+        config_file.write_text("")
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        errors = manager.validate_fetch_config(strict=False)
+        # Should have no platform-specific errors (nothing is active)
+        assert len(errors) == 0
