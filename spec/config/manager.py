@@ -36,19 +36,11 @@ from spec.config.schema import validate_config_dict
 from spec.config.settings import CONFIG_FILE, Settings
 from spec.integrations.git import find_repo_root
 from spec.utils.console import console, print_header, print_info
+from spec.utils.env_utils import SENSITIVE_KEY_PATTERNS, EnvVarExpansionError
 from spec.utils.logging import log_message
 
 # Module-level logger
 logger = logging.getLogger(__name__)
-
-# Keys containing these substrings are considered sensitive and should not be logged
-SENSITIVE_KEY_PATTERNS = ("TOKEN", "KEY", "SECRET", "PASSWORD", "PAT", "CREDENTIAL")
-
-
-class EnvVarExpansionError(Exception):
-    """Raised when environment variable expansion fails in strict mode."""
-
-    pass
 
 
 class ConfigManager:
@@ -226,11 +218,17 @@ class ConfigManager:
         """Load configuration from a YAML file.
 
         Parses the nested YAML structure (matching FETCH_CONFIG_SCHEMA) and
-        converts it to flat key-value pairs. Also validates against schema.
+        converts it to flat key-value pairs. Validates against schema and
+        raises ConfigValidationError for malformed YAML to prevent the system
+        from starting in an inconsistent state.
 
         Args:
             path: Path to the YAML config file
             source: Source identifier for debugging
+
+        Raises:
+            ConfigValidationError: If YAML parsing fails or schema validation fails.
+                This ensures fail-fast behavior for malformed configurations.
         """
         try:
             import yaml  # type: ignore[import-untyped]
@@ -242,18 +240,27 @@ class ConfigManager:
             with path.open() as f:
                 config = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            log_message(f"Warning: Failed to parse YAML config {path}: {e}")
-            return
+            # Fail-fast: YAML parsing errors indicate malformed configuration
+            raise ConfigValidationError(
+                f"Failed to parse YAML config {path}: {e}. "
+                "Please fix the YAML syntax before continuing."
+            ) from e
 
         if not isinstance(config, dict):
-            log_message(f"Warning: YAML config {path} is not a dictionary")
-            return
+            # Fail-fast: YAML must be a dictionary at the root level
+            raise ConfigValidationError(
+                f"YAML config {path} is not a dictionary (got {type(config).__name__}). "
+                "Configuration must be a YAML mapping/object at the root level."
+            )
 
-        # Validate against schema
+        # Validate against schema - fail-fast on validation errors
         errors = validate_config_dict(config)
         if errors:
-            log_message(f"Warning: YAML config validation errors: {errors}")
-            # Continue loading despite validation errors (non-strict)
+            error_list = "\n  - ".join(errors)
+            raise ConfigValidationError(
+                f"YAML config {path} failed schema validation:\n  - {error_list}\n"
+                "Please fix the configuration before continuing."
+            )
 
         # Convert nested YAML to flat key-value pairs
         self._yaml_to_flat(config, source)
@@ -955,8 +962,9 @@ class ConfigManager:
 
     # Credential key aliases for backward compatibility
     # Maps alias -> canonical name for specific platforms
+    # For azure_devops: 'org' -> 'organization', 'token' -> 'pat'
     _CREDENTIAL_ALIASES: dict[str, dict[str, str]] = {
-        "azure_devops": {"org": "organization"},
+        "azure_devops": {"org": "organization", "token": "pat"},
     }
 
     def get_fallback_credentials(

@@ -2138,6 +2138,46 @@ FETCH_STRATEGY_DEFAULT="direct"
         assert manager.get_agent_config().platform == AgentPlatform.CURSOR
         assert manager.get_fetch_strategy_config().default == FetchStrategy.DIRECT
 
+    def test_malformed_yaml_raises_error(self, tmp_path):
+        """Malformed YAML raises ConfigValidationError to fail fast."""
+        from spec.config.fetch_config import ConfigValidationError
+
+        yaml_file = tmp_path / "config.yaml"
+        # Write invalid YAML syntax (unclosed bracket)
+        yaml_file.write_text("invalid: yaml: content: [unclosed\n")
+        manager = ConfigManager(yaml_file)
+
+        with pytest.raises(ConfigValidationError, match="Failed to parse YAML"):
+            manager.load()
+
+    def test_yaml_not_dict_raises_error(self, tmp_path):
+        """YAML that is not a dictionary at root level raises ConfigValidationError."""
+        from spec.config.fetch_config import ConfigValidationError
+
+        yaml_file = tmp_path / "config.yaml"
+        # Write valid YAML but not a dictionary (list at root)
+        yaml_file.write_text("- item1\n- item2\n")
+        manager = ConfigManager(yaml_file)
+
+        with pytest.raises(ConfigValidationError, match="is not a dictionary"):
+            manager.load()
+
+    def test_yaml_invalid_strategy_raises_error(self, tmp_path):
+        """YAML with invalid strategy value raises ConfigValidationError."""
+        from spec.config.fetch_config import ConfigValidationError
+
+        yaml_file = tmp_path / "config.yaml"
+        # Write YAML with invalid strategy value
+        yaml_file.write_text(
+            """fetch_strategy:
+  default: invalid_strategy
+"""
+        )
+        manager = ConfigManager(yaml_file)
+
+        with pytest.raises(ConfigValidationError, match="schema validation"):
+            manager.load()
+
 
 class TestAzureDevOpsCredentialAlias:
     """Tests for Azure DevOps credential key aliasing."""
@@ -2148,7 +2188,7 @@ class TestAzureDevOpsCredentialAlias:
         config_file.write_text(
             """FALLBACK_AZURE_DEVOPS_ORG=my-org
 FALLBACK_AZURE_DEVOPS_PROJECT=my-project
-FALLBACK_AZURE_DEVOPS_TOKEN=secret
+FALLBACK_AZURE_DEVOPS_PAT=secret
 """
         )
         manager = ConfigManager(config_file)
@@ -2160,6 +2200,27 @@ FALLBACK_AZURE_DEVOPS_TOKEN=secret
         assert creds["organization"] == "my-org"
         # 'org' should not be present as a separate key
         assert "org" not in creds
+        # 'pat' should be present
+        assert creds["pat"] == "secret"
+
+    def test_token_alias_mapped_to_pat(self, tmp_path):
+        """The 'token' credential key is mapped to 'pat' for Azure DevOps."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_AZURE_DEVOPS_ORGANIZATION=my-org
+FALLBACK_AZURE_DEVOPS_PROJECT=my-project
+FALLBACK_AZURE_DEVOPS_TOKEN=secret-token
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("azure_devops", validate=False)
+        # 'token' should be mapped to 'pat'
+        assert "pat" in creds
+        assert creds["pat"] == "secret-token"
+        # 'token' should not be present as a separate key
+        assert "token" not in creds
 
     def test_organization_key_works_directly(self, tmp_path):
         """The 'organization' key works directly without aliasing."""
@@ -2167,7 +2228,7 @@ FALLBACK_AZURE_DEVOPS_TOKEN=secret
         config_file.write_text(
             """FALLBACK_AZURE_DEVOPS_ORGANIZATION=direct-org
 FALLBACK_AZURE_DEVOPS_PROJECT=my-project
-FALLBACK_AZURE_DEVOPS_TOKEN=secret
+FALLBACK_AZURE_DEVOPS_PAT=secret
 """
         )
         manager = ConfigManager(config_file)
@@ -2175,6 +2236,7 @@ FALLBACK_AZURE_DEVOPS_TOKEN=secret
 
         creds = manager.get_fallback_credentials("azure_devops", validate=False)
         assert creds["organization"] == "direct-org"
+        assert creds["pat"] == "secret"
 
     def test_jira_has_no_aliases(self, tmp_path):
         """Jira credentials have no aliasing applied."""
