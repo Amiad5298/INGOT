@@ -293,7 +293,7 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
                 ),
                 timeout=effective_timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise AgentFetchError(
                 message=(f"Auggie CLI execution timed out after {effective_timeout}s"),
                 agent_name=self.name,
