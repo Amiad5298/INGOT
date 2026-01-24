@@ -1,9 +1,24 @@
 """JSON Schema for SPECFLOW fetch configuration.
 
-This module provides JSON Schema validation for the fetch configuration,
-enabling validation of YAML/JSON configuration files.
+DEPRECATED / RESERVED FOR FUTURE USE
+=====================================
+This module defines a JSON Schema for nested YAML/JSON configuration.
+However, the current official configuration format is flat KEY=VALUE
+(environment variable style), as implemented by ConfigManager.
+
+The template and actual parsing use flat keys like:
+    AGENT_PLATFORM=auggie
+    FETCH_STRATEGY_DEFAULT=auto
+    FALLBACK_JIRA_TOKEN=${JIRA_API_TOKEN}
+
+This schema is retained for potential future YAML config file support.
+Do NOT rely on this schema for current configuration validation.
+Use ConfigManager.validate_fetch_config() instead.
+
+See: spec/config/templates/fetch_config.template for the official format.
 """
 
+import warnings
 from typing import Any
 
 # JSON Schema for the fetch configuration
@@ -113,14 +128,31 @@ FETCH_CONFIG_SCHEMA: dict[str, Any] = {
 def get_schema() -> dict[str, Any]:
     """Get the JSON Schema for fetch configuration.
 
+    .. deprecated::
+        This schema is for nested YAML/JSON config which is not the current
+        official format. Use ConfigManager.validate_fetch_config() for
+        validating the flat KEY=VALUE configuration format.
+
     Returns:
         The JSON Schema dictionary
     """
+    warnings.warn(
+        "get_schema() returns a schema for nested YAML/JSON format which is not "
+        "the current official config format. Use ConfigManager.validate_fetch_config() "
+        "for the flat KEY=VALUE format.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return FETCH_CONFIG_SCHEMA
 
 
 def validate_config_dict(config: dict[str, Any]) -> list[str]:
     """Validate a configuration dictionary against the schema.
+
+    .. deprecated::
+        This validates nested YAML/JSON config which is not the current
+        official format. Use ConfigManager.validate_fetch_config() for
+        validating the flat KEY=VALUE configuration format.
 
     Uses jsonschema if available, otherwise performs basic validation.
 
@@ -130,6 +162,13 @@ def validate_config_dict(config: dict[str, Any]) -> list[str]:
     Returns:
         List of validation error messages (empty if valid)
     """
+    warnings.warn(
+        "validate_config_dict() validates nested YAML/JSON format which is not "
+        "the current official config format. Use ConfigManager.validate_fetch_config() "
+        "for the flat KEY=VALUE format.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     errors: list[str] = []
 
     try:

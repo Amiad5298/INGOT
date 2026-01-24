@@ -2522,3 +2522,115 @@ FETCH_STRATEGY_JIRA=agent
         errors = manager.validate_fetch_config(strict=False)
         # Should have no platform-specific errors (nothing is active)
         assert len(errors) == 0
+
+
+class TestFailFastMissingEnvVars:
+    """Tests for fail-fast behavior when credentials have missing env vars."""
+
+    def test_direct_strategy_strict_env_expansion(self, tmp_path, monkeypatch):
+        """DIRECT strategy validates env vars strictly for credentials."""
+        # Ensure the env var is NOT set
+        monkeypatch.delenv("MISSING_TOKEN", raising=False)
+
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FETCH_STRATEGY_AZURE_DEVOPS=direct
+FALLBACK_AZURE_DEVOPS_ORG=myorg
+FALLBACK_AZURE_DEVOPS_PAT=${MISSING_TOKEN}
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        errors = manager.validate_fetch_config(strict=False)
+        # Should have error about missing env var
+        error_text = " ".join(errors).lower()
+        assert "missing" in error_text or "environment variable" in error_text
+
+    def test_direct_strategy_with_valid_env_vars(self, tmp_path, monkeypatch):
+        """DIRECT strategy passes when env vars are properly set."""
+        monkeypatch.setenv("AZURE_PAT", "valid_token")
+
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FETCH_STRATEGY_AZURE_DEVOPS=direct
+FALLBACK_AZURE_DEVOPS_ORG=myorg
+FALLBACK_AZURE_DEVOPS_PAT=${AZURE_PAT}
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        errors = manager.validate_fetch_config(strict=False)
+        # Should NOT have errors about missing env vars
+        error_text = " ".join(errors).lower()
+        assert "missing_token" not in error_text
+        assert "environment variable" not in error_text
+
+    def test_auto_strategy_without_agent_strict_env_expansion(self, tmp_path, monkeypatch):
+        """AUTO strategy without agent support validates env vars strictly."""
+        # Ensure the env var is NOT set
+        monkeypatch.delenv("TRELLO_KEY", raising=False)
+
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """AGENT_PLATFORM=auggie
+AGENT_INTEGRATION_TRELLO=false
+FETCH_STRATEGY_TRELLO=auto
+FALLBACK_TRELLO_API_KEY=${TRELLO_KEY}
+FALLBACK_TRELLO_TOKEN=some_token
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        errors = manager.validate_fetch_config(strict=False)
+        # Should have error about missing env var (since no agent support, direct is only path)
+        error_text = " ".join(errors).lower()
+        assert "missing" in error_text or "trello_key" in error_text
+
+    def test_auto_strategy_with_agent_non_strict_env_expansion(self, tmp_path, monkeypatch):
+        """AUTO strategy with agent support allows unexpanded env vars (agent is fallback)."""
+        # Ensure the env var is NOT set
+        monkeypatch.delenv("JIRA_TOKEN", raising=False)
+
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """AGENT_PLATFORM=auggie
+AGENT_INTEGRATION_JIRA=true
+FETCH_STRATEGY_JIRA=auto
+FALLBACK_JIRA_URL=https://example.atlassian.net
+FALLBACK_JIRA_EMAIL=user@example.com
+FALLBACK_JIRA_TOKEN=${JIRA_TOKEN}
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        errors = manager.validate_fetch_config(strict=False)
+        # Should NOT have errors about missing env vars (agent is available)
+        # But may have warnings about unexpanded vars in credential validation
+        error_text = " ".join(errors).lower()
+        # No EnvVarExpansionError should occur for AUTO with agent support
+        assert "environment variable" not in error_text or "unexpanded" in error_text
+
+    def test_agent_strategy_ignores_credential_env_vars(self, tmp_path, monkeypatch):
+        """AGENT strategy doesn't require env var expansion for credentials."""
+        # Ensure the env var is NOT set
+        monkeypatch.delenv("MISSING_TOKEN", raising=False)
+
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """AGENT_PLATFORM=auggie
+AGENT_INTEGRATION_LINEAR=true
+FETCH_STRATEGY_LINEAR=agent
+FALLBACK_LINEAR_API_KEY=${MISSING_TOKEN}
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        errors = manager.validate_fetch_config(strict=False)
+        # Should NOT have errors about missing env vars (using agent, not direct)
+        error_text = " ".join(errors).lower()
+        assert "missing_token" not in error_text

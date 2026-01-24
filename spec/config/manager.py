@@ -1011,7 +1011,27 @@ class ConfigManager:
         # Validate only active platforms' strategies
         for platform in active_platforms:
             strategy = strategy_config.get_strategy(platform)
-            credentials = self.get_fallback_credentials(platform, strict=False)
+            has_agent_support = agent_config.supports_platform(platform)
+
+            # Determine if credentials are required for this platform
+            # - DIRECT strategy: always requires credentials
+            # - AUTO strategy: requires credentials if no agent support (direct is only path)
+            credentials_required = strategy == FetchStrategy.DIRECT or (
+                strategy == FetchStrategy.AUTO and not has_agent_support
+            )
+
+            # Use strict mode for env var expansion when credentials are required
+            # This fail-fast behavior prevents silent 401/403 errors at runtime
+            credentials = None
+            try:
+                credentials = self.get_fallback_credentials(platform, strict=credentials_required)
+            except EnvVarExpansionError as e:
+                # Missing env vars in required credentials is a config error
+                errors.append(
+                    f"Platform '{platform}' requires credentials but has missing "
+                    f"environment variable(s): {e}"
+                )
+
             has_credentials = credentials is not None and len(credentials) > 0
 
             platform_errors = validate_strategy_for_platform(
