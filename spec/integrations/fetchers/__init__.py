@@ -9,6 +9,7 @@ HOW to normalize data (provider responsibility).
 Classes:
     TicketFetcher: Abstract base class for all fetchers
     AgentMediatedFetcher: Base class for AI agent-mediated fetching
+    AuggieMediatedFetcher: Fetcher using Auggie's MCP integrations
 
 Exceptions:
     TicketFetchError: Base exception for fetch failures
@@ -16,6 +17,7 @@ Exceptions:
     AgentIntegrationError: Agent integration failure
 """
 
+from spec.integrations.fetchers.auggie_fetcher import AuggieMediatedFetcher
 from spec.integrations.fetchers.base import (
     AgentMediatedFetcher,
     TicketFetcher,
@@ -30,6 +32,8 @@ __all__ = [
     # Base classes
     "TicketFetcher",
     "AgentMediatedFetcher",
+    # Concrete fetchers
+    "AuggieMediatedFetcher",
     # Exceptions
     "TicketFetchError",
     "PlatformNotSupportedError",
