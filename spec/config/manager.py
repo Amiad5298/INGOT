@@ -12,18 +12,42 @@ This enables developers working on multiple projects with different
 trackers to have project-specific settings while maintaining global defaults.
 """
 
+from __future__ import annotations
+
+import logging
 import os
 import re
 import tempfile
 from pathlib import Path
 from typing import Literal
 
+from spec.config.fetch_config import (
+    AgentConfig,
+    AgentPlatform,
+    ConfigValidationError,
+    FetchPerformanceConfig,
+    FetchStrategy,
+    FetchStrategyConfig,
+    canonicalize_credentials,
+    get_active_platforms,
+    parse_agent_platform,
+    parse_fetch_strategy,
+    validate_credentials,
+    validate_strategy_for_platform,
+)
 from spec.config.settings import CONFIG_FILE, Settings
 from spec.integrations.git import find_repo_root
+from spec.utils.console import console, print_header, print_info
+from spec.utils.env_utils import (
+    SENSITIVE_KEY_PATTERNS,
+    EnvVarExpansionError,
+    expand_env_vars,
+    is_sensitive_key,
+)
 from spec.utils.logging import log_message
 
-# Keys containing these substrings are considered sensitive and should not be logged
-SENSITIVE_KEY_PATTERNS = ("TOKEN", "KEY", "SECRET", "PASSWORD", "PAT")
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
@@ -215,6 +239,7 @@ class ConfigManager:
             # String values - extract model ID for model-related keys
             if key in ("DEFAULT_MODEL", "PLANNING_MODEL", "IMPLEMENTATION_MODEL"):
                 from spec.integrations.auggie import extract_model_id
+
                 value = extract_model_id(value)
             setattr(self.settings, attr, value)
 
@@ -484,19 +509,6 @@ class ConfigManager:
         result = result.replace('\\"', '"')
         return result
 
-    @staticmethod
-    def _is_sensitive_key(key: str) -> bool:
-        """Check if a configuration key contains sensitive data.
-
-        Args:
-            key: The configuration key name
-
-        Returns:
-            True if the key is considered sensitive
-        """
-        key_upper = key.upper()
-        return any(pattern in key_upper for pattern in SENSITIVE_KEY_PATTERNS)
-
     def _log_config_save(self, key: str, scope: str) -> None:
         """Log a configuration save without exposing sensitive values.
 
@@ -508,7 +520,7 @@ class ConfigManager:
             key: The configuration key that was saved
             scope: The scope (global or local) where it was saved
         """
-        if self._is_sensitive_key(key):
+        if is_sensitive_key(key):
             log_message(f"Configuration saved to {scope}: {key}=<REDACTED>")
         else:
             log_message(f"Configuration saved to {scope}: {key}")
@@ -525,10 +537,351 @@ class ConfigManager:
         """
         return self._raw_values.get(key, default)
 
+    def get_agent_config(self) -> AgentConfig:
+        """Get AI agent configuration.
+
+        Parses AGENT_PLATFORM and AGENT_INTEGRATION_* keys from config.
+
+        Returns:
+            AgentConfig instance with platform and integrations
+
+        Raises:
+            ConfigValidationError: If AGENT_PLATFORM has an invalid value
+        """
+        platform_str = self._raw_values.get("AGENT_PLATFORM")
+        integrations: dict[str, bool] = {}
+
+        # Parse AGENT_INTEGRATION_* keys
+        for key, value in self._raw_values.items():
+            if key.startswith("AGENT_INTEGRATION_"):
+                platform_name = key.replace("AGENT_INTEGRATION_", "").lower()
+                integrations[platform_name] = value.lower() in ("true", "1", "yes")
+
+        # Use safe parser - raises ConfigValidationError for invalid values
+        platform = parse_agent_platform(
+            platform_str,
+            default=AgentPlatform.AUGGIE,
+            context="AGENT_PLATFORM",
+        )
+
+        return AgentConfig(
+            platform=platform,
+            integrations=integrations,
+        )
+
+    def get_fetch_strategy_config(self) -> FetchStrategyConfig:
+        """Get fetch strategy configuration.
+
+        Parses FETCH_STRATEGY_DEFAULT and FETCH_STRATEGY_* keys from config.
+
+        Returns:
+            FetchStrategyConfig instance with default and per-platform strategies
+
+        Raises:
+            ConfigValidationError: If any strategy value is invalid
+        """
+        default_str = self._raw_values.get("FETCH_STRATEGY_DEFAULT")
+        per_platform: dict[str, FetchStrategy] = {}
+
+        # Parse FETCH_STRATEGY_* keys (excluding DEFAULT)
+        # Use safe parser - raises ConfigValidationError for invalid values
+        for key, value in self._raw_values.items():
+            if key.startswith("FETCH_STRATEGY_") and key != "FETCH_STRATEGY_DEFAULT":
+                platform_name = key.replace("FETCH_STRATEGY_", "").lower()
+                per_platform[platform_name] = parse_fetch_strategy(
+                    value,
+                    default=FetchStrategy.AUTO,
+                    context=key,
+                )
+
+        # Use safe parser - raises ConfigValidationError for invalid values
+        default = parse_fetch_strategy(
+            default_str,
+            default=FetchStrategy.AUTO,
+            context="FETCH_STRATEGY_DEFAULT",
+        )
+
+        return FetchStrategyConfig(
+            default=default,
+            per_platform=per_platform,
+        )
+
+    def get_fetch_performance_config(self) -> FetchPerformanceConfig:
+        """Get fetch performance configuration.
+
+        Parses FETCH_CACHE_DURATION_HOURS, FETCH_TIMEOUT_SECONDS,
+        FETCH_MAX_RETRIES, and FETCH_RETRY_DELAY_SECONDS from config.
+
+        Values are validated to ensure they are within reasonable bounds:
+        - cache_duration_hours: >= 0
+        - timeout_seconds: > 0
+        - max_retries: >= 0
+        - retry_delay_seconds: >= 0
+
+        Returns:
+            FetchPerformanceConfig instance with performance settings
+        """
+        # Default values
+        cache_duration_hours = 24
+        timeout_seconds = 30
+        max_retries = 3
+        retry_delay_seconds = 1.0
+
+        # Parse each performance setting with type conversion and validation
+        if "FETCH_CACHE_DURATION_HOURS" in self._raw_values:
+            try:
+                cache_value = int(self._raw_values["FETCH_CACHE_DURATION_HOURS"])
+                if cache_value >= 0:
+                    cache_duration_hours = cache_value
+                else:
+                    logger.warning(
+                        f"FETCH_CACHE_DURATION_HOURS must be >= 0, got {cache_value}, "
+                        f"using default {cache_duration_hours}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_CACHE_DURATION_HOURS value "
+                    f"'{self._raw_values['FETCH_CACHE_DURATION_HOURS']}', "
+                    f"using default {cache_duration_hours}"
+                )
+
+        if "FETCH_TIMEOUT_SECONDS" in self._raw_values:
+            try:
+                timeout_value = int(self._raw_values["FETCH_TIMEOUT_SECONDS"])
+                if timeout_value > 0:
+                    timeout_seconds = timeout_value
+                else:
+                    logger.warning(
+                        f"FETCH_TIMEOUT_SECONDS must be > 0, got {timeout_value}, "
+                        f"using default {timeout_seconds}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_TIMEOUT_SECONDS value "
+                    f"'{self._raw_values['FETCH_TIMEOUT_SECONDS']}', "
+                    f"using default {timeout_seconds}"
+                )
+
+        if "FETCH_MAX_RETRIES" in self._raw_values:
+            try:
+                retries_value = int(self._raw_values["FETCH_MAX_RETRIES"])
+                if retries_value >= 0:
+                    max_retries = retries_value
+                else:
+                    logger.warning(
+                        f"FETCH_MAX_RETRIES must be >= 0, got {retries_value}, "
+                        f"using default {max_retries}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_MAX_RETRIES value "
+                    f"'{self._raw_values['FETCH_MAX_RETRIES']}', "
+                    f"using default {max_retries}"
+                )
+
+        if "FETCH_RETRY_DELAY_SECONDS" in self._raw_values:
+            try:
+                delay_value = float(self._raw_values["FETCH_RETRY_DELAY_SECONDS"])
+                if delay_value >= 0:
+                    retry_delay_seconds = delay_value
+                else:
+                    logger.warning(
+                        f"FETCH_RETRY_DELAY_SECONDS must be >= 0, got {delay_value}, "
+                        f"using default {retry_delay_seconds}"
+                    )
+            except ValueError:
+                logger.warning(
+                    f"Invalid FETCH_RETRY_DELAY_SECONDS value "
+                    f"'{self._raw_values['FETCH_RETRY_DELAY_SECONDS']}', "
+                    f"using default {retry_delay_seconds}"
+                )
+
+        return FetchPerformanceConfig(
+            cache_duration_hours=cache_duration_hours,
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            retry_delay_seconds=retry_delay_seconds,
+        )
+
+    def get_fallback_credentials(
+        self,
+        platform: str,
+        strict: bool = False,
+        validate: bool = False,
+    ) -> dict[str, str] | None:
+        """Get fallback credentials for a platform.
+
+        Parses FALLBACK_{PLATFORM}_* keys and expands environment variables.
+        Applies credential key aliasing for backward compatibility (e.g., 'org'
+        is treated as 'organization' for Azure DevOps, 'base_url' as 'url' for
+        Jira, 'api_token' as 'token' for Trello).
+
+        Canonicalization is applied before validation, ensuring required fields
+        are checked against canonical keys defined in PLATFORM_REQUIRED_CREDENTIALS.
+
+        Args:
+            platform: Platform name (e.g., 'azure_devops', 'trello')
+            strict: If True, raises EnvVarExpansionError for missing env vars
+            validate: If True, validates credentials have required fields
+
+        Returns:
+            Dictionary of credential key-value pairs with canonical keys,
+            or None if no credentials found
+
+        Raises:
+            EnvVarExpansionError: If strict=True and env var expansion fails
+            ConfigValidationError: If validate=True and required fields missing
+        """
+        prefix = f"FALLBACK_{platform.upper()}_"
+        raw_credentials: dict[str, str] = {}
+
+        for key, value in self._raw_values.items():
+            if key.startswith(prefix):
+                cred_name = key.replace(prefix, "").lower()
+                context = f"credential {key}"
+                raw_credentials[cred_name] = expand_env_vars(value, strict=strict, context=context)
+
+        if not raw_credentials:
+            return None
+
+        # Canonicalize credential keys using platform-specific aliases
+        credentials = canonicalize_credentials(platform, raw_credentials)
+
+        if validate:
+            validate_credentials(platform, credentials, strict=True)
+
+        return credentials
+
+    def _get_active_platforms(self) -> set[str]:
+        """Get the set of 'active' platforms that need validation.
+
+        Active platforms are those explicitly defined in:
+        - per_platform strategy overrides
+        - agent integrations
+        - fallback_credentials
+
+        Returns:
+            Set of lowercase platform names that are actively configured
+        """
+        # Delegate to the extracted helper function
+        return get_active_platforms(
+            raw_config_keys=set(self._raw_values.keys()),
+            strategy_config=self.get_fetch_strategy_config(),
+            agent_config=self.get_agent_config(),
+        )
+
+    def validate_fetch_config(self, strict: bool = True) -> list[str]:
+        """Validate the complete fetch configuration.
+
+        Performs scoped validation only on 'active' platforms that are explicitly
+        configured (defined in per_platform, integrations, or fallback_credentials).
+        This reduces noise by not checking all KNOWN_PLATFORMS by default.
+
+        Validation includes:
+        - Strategy/platform compatibility
+        - Credential availability and completeness
+        - Per-platform override references
+        - Enum parsing (agent platform, fetch strategies)
+
+        Args:
+            strict: If True, raises ConfigValidationError on first error.
+                    If False, collects and returns all errors without raising.
+
+        Returns:
+            List of validation error messages
+
+        Raises:
+            ConfigValidationError: If strict=True and validation fails
+        """
+        errors: list[str] = []
+
+        # Get agent config - may raise ConfigValidationError for invalid enum values
+        try:
+            agent_config = self.get_agent_config()
+        except ConfigValidationError as e:
+            if strict:
+                raise
+            errors.append(str(e))
+            # Use default agent config to continue validation
+            agent_config = AgentConfig(
+                platform=AgentPlatform.AUGGIE,
+                integrations={},
+            )
+
+        # Get strategy config - may raise ConfigValidationError for invalid enum values
+        try:
+            strategy_config = self.get_fetch_strategy_config()
+        except ConfigValidationError as e:
+            if strict:
+                raise
+            errors.append(str(e))
+            # Use default strategy config to continue validation
+            strategy_config = FetchStrategyConfig(
+                default=FetchStrategy.AUTO,
+                per_platform={},
+            )
+
+        # Validate per-platform overrides reference known platforms
+        override_warnings = strategy_config.validate_platform_overrides(strict=False)
+        errors.extend(override_warnings)
+
+        # Get only the active platforms that need validation
+        # Use the already-parsed configs to avoid re-calling getters (which could raise)
+        active_platforms = get_active_platforms(
+            raw_config_keys=set(self._raw_values.keys()),
+            strategy_config=strategy_config,
+            agent_config=agent_config,
+        )
+
+        # Validate only active platforms' strategies
+        for platform in active_platforms:
+            strategy = strategy_config.get_strategy(platform)
+            has_agent_support = agent_config.supports_platform(platform)
+
+            # Determine if credentials are required for this platform
+            # - DIRECT strategy: always requires credentials
+            # - AUTO strategy: requires credentials if no agent support (direct is only path)
+            credentials_required = strategy == FetchStrategy.DIRECT or (
+                strategy == FetchStrategy.AUTO and not has_agent_support
+            )
+
+            # Use strict mode for env var expansion when credentials are required
+            # This fail-fast behavior prevents silent 401/403 errors at runtime
+            credentials = None
+            try:
+                credentials = self.get_fallback_credentials(platform, strict=credentials_required)
+            except EnvVarExpansionError as e:
+                # Missing env vars in required credentials is a config error
+                errors.append(
+                    f"Platform '{platform}' requires credentials but has missing "
+                    f"environment variable(s): {e}"
+                )
+
+            has_credentials = credentials is not None and len(credentials) > 0
+
+            platform_errors = validate_strategy_for_platform(
+                platform=platform,
+                strategy=strategy,
+                agent_config=agent_config,
+                has_credentials=has_credentials,
+                strict=False,
+            )
+            errors.extend(platform_errors)
+
+            # If direct or auto strategy with credentials, validate credential fields
+            if has_credentials and strategy.value in ("direct", "auto"):
+                cred_errors = validate_credentials(platform, credentials, strict=False)
+                errors.extend(cred_errors)
+
+        if strict and errors:
+            raise ConfigValidationError(
+                "Fetch configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            )
+
+        return errors
+
     def show(self) -> None:
         """Display current configuration using Rich formatting."""
-        from spec.utils.console import console, print_header, print_info
-
         print_header("Current Configuration")
 
         # Show config file locations
@@ -564,5 +917,6 @@ class ConfigManager:
 
 __all__ = [
     "ConfigManager",
+    "EnvVarExpansionError",
+    "SENSITIVE_KEY_PATTERNS",
 ]
-

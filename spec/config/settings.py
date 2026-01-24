@@ -82,6 +82,14 @@ class Settings:
     # Documentation update settings
     auto_update_docs: bool = True  # Enable automatic documentation updates
 
+    # Fetch strategy settings
+    agent_platform: str = "auggie"
+    fetch_strategy_default: str = "auto"
+    fetch_cache_duration_hours: int = 24
+    fetch_timeout_seconds: int = 30
+    fetch_max_retries: int = 3
+    fetch_retry_delay_seconds: float = 1.0
+
     # Config key to attribute mapping
     _key_mapping: dict[str, str] = field(
         default_factory=lambda: {
@@ -105,6 +113,13 @@ class Settings:
             "SUBAGENT_REVIEWER": "subagent_reviewer",
             "SUBAGENT_DOC_UPDATER": "subagent_doc_updater",
             "AUTO_UPDATE_DOCS": "auto_update_docs",
+            # Fetch strategy settings
+            "AGENT_PLATFORM": "agent_platform",
+            "FETCH_STRATEGY_DEFAULT": "fetch_strategy_default",
+            "FETCH_CACHE_DURATION_HOURS": "fetch_cache_duration_hours",
+            "FETCH_TIMEOUT_SECONDS": "fetch_timeout_seconds",
+            "FETCH_MAX_RETRIES": "fetch_max_retries",
+            "FETCH_RETRY_DELAY_SECONDS": "fetch_retry_delay_seconds",
         },
         repr=False,
     )
@@ -154,4 +169,3 @@ __all__ = [
     "Settings",
     "CONFIG_FILE",
 ]
-
