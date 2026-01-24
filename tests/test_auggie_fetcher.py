@@ -13,12 +13,13 @@ Tests cover:
 
 from __future__ import annotations
 
-import asyncio
+import time
 from unittest.mock import MagicMock
 
 import pytest
 
 from spec.config.fetch_config import AgentConfig, AgentPlatform
+from spec.integrations.auggie import AuggieClient
 from spec.integrations.fetchers import (
     AgentFetchError,
     AgentIntegrationError,
@@ -37,8 +38,8 @@ from spec.integrations.providers.base import Platform
 
 @pytest.fixture
 def mock_auggie_client():
-    """Create a mock AuggieClient."""
-    client = MagicMock()
+    """Create a mock AuggieClient with proper spec for type safety."""
+    client = MagicMock(spec=AuggieClient)
     # Default: successful response with JSON
     client.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test issue"}'
     return client
@@ -416,7 +417,7 @@ class TestAuggieMediatedFetcherFetchMethod:
 
     @pytest.mark.asyncio
     async def test_fetch_with_timeout_override(self, mock_auggie_client):
-        """Can override timeout in fetch() call."""
+        """Can override timeout in fetch() call without mutating instance state."""
         mock_auggie_client.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test"}'
         fetcher = AuggieMediatedFetcher(mock_auggie_client, timeout_seconds=30.0)
 
@@ -424,8 +425,19 @@ class TestAuggieMediatedFetcherFetchMethod:
         result = await fetcher.fetch("PROJ-123", "jira", timeout_seconds=10.0)
 
         assert result == {"key": "PROJ-123", "summary": "Test"}
-        # Verify timeout was restored after call
+        # Verify instance timeout was never modified (thread-safe design)
         assert fetcher._timeout_seconds == 30.0
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_unsupported_platform_enum_raises(self, mock_auggie_client):
+        """Raises AgentIntegrationError for known but unsupported platform enum."""
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        with pytest.raises(AgentIntegrationError) as exc_info:
+            await fetcher.fetch("TICKET-1", "azure_devops")
+
+        assert "not supported" in str(exc_info.value)
+        assert "AZURE_DEVOPS" in str(exc_info.value)
 
 
 class TestAuggieMediatedFetcherTimeout:
@@ -448,25 +460,20 @@ class TestAuggieMediatedFetcherTimeout:
     async def test_timeout_raises_agent_fetch_error(self, mock_auggie_client):
         """Raises AgentFetchError when timeout expires."""
 
-        async def slow_operation(*args, **kwargs):
-            await asyncio.sleep(10)  # Simulate slow operation
-            return '{"key": "PROJ-123"}'
-
-        # Make run_print_quiet block by using side_effect that sleeps
+        # Use a short but reliable sleep time to avoid flakiness
         def blocking_call(*args, **kwargs):
-            import time
-
-            time.sleep(10)
+            time.sleep(1)  # 1 second sleep
             return '{"key": "PROJ-123"}'
 
         mock_auggie_client.run_print_quiet.side_effect = blocking_call
-        fetcher = AuggieMediatedFetcher(mock_auggie_client, timeout_seconds=0.1)
+        # Use 0.01s timeout - much shorter than 1s sleep
+        fetcher = AuggieMediatedFetcher(mock_auggie_client, timeout_seconds=0.01)
 
         with pytest.raises(AgentFetchError) as exc_info:
             await fetcher._execute_fetch_prompt("test prompt", Platform.JIRA)
 
         assert "timed out" in str(exc_info.value)
-        assert "0.1s" in str(exc_info.value)
+        assert "0.01s" in str(exc_info.value)
 
 
 class TestAuggieMediatedFetcherValidation:

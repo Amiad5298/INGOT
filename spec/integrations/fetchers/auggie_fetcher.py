@@ -31,6 +31,7 @@ from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
     AgentIntegrationError,
     AgentResponseParseError,
+    PlatformNotSupportedError,
 )
 from spec.integrations.providers.base import Platform
 
@@ -157,22 +158,23 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
         return "Auggie MCP Fetcher"
 
     def _resolve_platform(self, platform: str) -> Platform:
-        """Resolve a platform string to Platform enum.
+        """Resolve a platform string to Platform enum and validate support.
 
         Args:
             platform: Platform name as string (case-insensitive)
 
         Returns:
-            Platform enum value
+            Platform enum value (guaranteed to be in SUPPORTED_PLATFORMS)
 
         Raises:
-            AgentIntegrationError: If platform string is not recognized
+            AgentIntegrationError: If platform string is not recognized or not supported
         """
         platform_upper = platform.upper()
+        valid_platforms = sorted(p.name for p in SUPPORTED_PLATFORMS)
+
         try:
-            return Platform[platform_upper]
+            platform_enum = Platform[platform_upper]
         except KeyError:
-            valid_platforms = [p.name for p in SUPPORTED_PLATFORMS]
             raise AgentIntegrationError(
                 message=(
                     f"Unknown platform: '{platform}'. "
@@ -180,6 +182,18 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
                 ),
                 agent_name=self.name,
             ) from None
+
+        # Validate the resolved enum is actually supported
+        if platform_enum not in SUPPORTED_PLATFORMS:
+            raise AgentIntegrationError(
+                message=(
+                    f"Platform '{platform_enum.name}' is not supported. "
+                    f"Supported platforms: {', '.join(valid_platforms)}"
+                ),
+                agent_name=self.name,
+            )
+
+        return platform_enum
 
     def supports_platform(self, platform: Platform) -> bool:
         """Check if Auggie has integration for this platform.
@@ -228,17 +242,17 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
             AgentResponseParseError: If response cannot be parsed or validated
         """
         platform_enum = self._resolve_platform(platform)
-        original_timeout = self._timeout_seconds
+        effective_timeout = (
+            timeout_seconds if timeout_seconds is not None else self._timeout_seconds
+        )
+        return await self.fetch_raw(ticket_id, platform_enum, timeout_seconds=effective_timeout)
 
-        if timeout_seconds is not None:
-            self._timeout_seconds = timeout_seconds
-
-        try:
-            return await self.fetch_raw(ticket_id, platform_enum)
-        finally:
-            self._timeout_seconds = original_timeout
-
-    async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+    async def _execute_fetch_prompt(
+        self,
+        prompt: str,
+        platform: Platform,
+        timeout_seconds: float | None = None,
+    ) -> str:
         """Execute fetch prompt via Auggie CLI with timeout.
 
         Uses run_print_quiet() for non-interactive execution that
@@ -252,6 +266,7 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
         Args:
             prompt: Structured prompt to send to Auggie
             platform: Target platform (for logging/context)
+            timeout_seconds: Timeout for this execution (defaults to self._timeout_seconds)
 
         Returns:
             Raw response string from Auggie
@@ -259,10 +274,13 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
         Raises:
             AgentFetchError: If execution fails or times out
         """
+        effective_timeout = (
+            timeout_seconds if timeout_seconds is not None else self._timeout_seconds
+        )
         logger.debug(
             "Executing Auggie fetch for %s (timeout: %.1fs)",
             platform.name,
-            self._timeout_seconds,
+            effective_timeout,
         )
 
         try:
@@ -273,11 +291,11 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
                     None,
                     lambda: self._auggie.run_print_quiet(prompt, dont_save_session=True),
                 ),
-                timeout=self._timeout_seconds,
+                timeout=effective_timeout,
             )
         except asyncio.TimeoutError:
             raise AgentFetchError(
-                message=(f"Auggie CLI execution timed out after {self._timeout_seconds}s"),
+                message=(f"Auggie CLI execution timed out after {effective_timeout}s"),
                 agent_name=self.name,
             ) from None
         except Exception as e:
@@ -345,15 +363,22 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
 
         return data
 
-    async def fetch_raw(self, ticket_id: str, platform: Platform) -> dict[str, Any]:
+    async def fetch_raw(
+        self,
+        ticket_id: str,
+        platform: Platform,
+        timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
         """Fetch raw ticket data with validation.
 
-        Extends the base class implementation to add platform-specific
-        validation of the response data.
+        Implements the full fetch logic with platform-specific validation.
+        This method does not call super() to allow passing timeout through
+        the call chain in a thread-safe manner.
 
         Args:
             ticket_id: The ticket identifier
             platform: The platform to fetch from
+            timeout_seconds: Timeout for this request (defaults to self._timeout_seconds)
 
         Returns:
             Validated raw ticket data as a dictionary
@@ -363,8 +388,25 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
             AgentFetchError: If agent execution fails
             AgentResponseParseError: If response parsing or validation fails
         """
-        # Call parent implementation for fetching and parsing
-        data = await super().fetch_raw(ticket_id, platform)
+        if not self.supports_platform(platform):
+            raise PlatformNotSupportedError(
+                platform=platform.name,
+                fetcher_name=self.name,
+            )
 
-        # Add validation step
+        prompt = self._build_prompt(ticket_id, platform)
+        try:
+            response = await self._execute_fetch_prompt(
+                prompt, platform, timeout_seconds=timeout_seconds
+            )
+        except AgentIntegrationError:
+            raise
+        except Exception as e:
+            raise AgentIntegrationError(
+                message=f"Unexpected error during agent communication: {e}",
+                agent_name=self.name,
+                original_error=e,
+            ) from e
+
+        data = self._parse_response(response)
         return self._validate_response(data, platform)
