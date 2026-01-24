@@ -369,6 +369,40 @@ class TestProviderRegistryGetProviderForInput:
 
         assert "JIRA" in str(exc_info.value)
 
+    def test_get_provider_for_input_wraps_generic_exception_as_platform_not_supported(
+        self, monkeypatch
+    ):
+        """Generic exceptions from PlatformDetector.detect are wrapped as PlatformNotSupportedError.
+
+        Regression test: Ensures that when PlatformDetector.detect raises a non-PlatformNotSupportedError,
+        it is normalized to PlatformNotSupportedError without causing TypeError during construction.
+        """
+        # Register a provider so we have a non-empty supported_platforms list
+        ProviderRegistry.register(MockJiraProvider)
+
+        # Mock PlatformDetector.detect to raise a generic ValueError
+        def mock_detect_raises_value_error(input_str: str):
+            raise ValueError("Unexpected internal error in detector")
+
+        monkeypatch.setattr(
+            "spec.integrations.providers.registry.PlatformDetector.detect",
+            mock_detect_raises_value_error,
+        )
+
+        # Act & Assert - should raise PlatformNotSupportedError, NOT ValueError or TypeError
+        with pytest.raises(PlatformNotSupportedError) as exc_info:
+            ProviderRegistry.get_provider_for_input("test-input")
+
+        error = exc_info.value
+        # Verify the error was constructed correctly with all expected fields
+        assert error.input_str == "test-input"
+        assert "JIRA" in error.supported_platforms
+        assert "Failed to detect platform from input" in str(error)
+        assert "Unexpected internal error in detector" in str(error)
+
+        # Verify exception chaining preserved the original cause
+        assert isinstance(error.__cause__, ValueError)
+
 
 class TestProviderRegistryUtilityMethods:
     """Tests for utility methods."""
