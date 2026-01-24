@@ -19,6 +19,7 @@ from typing import Any
 
 from ..providers.base import Platform
 from .exceptions import (
+    AgentFetchError,
     AgentIntegrationError,
     AgentResponseParseError,
     PlatformNotSupportedError,
@@ -167,7 +168,7 @@ class AgentMediatedFetcher(TicketFetcher):
         prompt = self._build_prompt(ticket_id, platform)
         try:
             response = await self._execute_fetch_prompt(prompt, platform)
-        except AgentIntegrationError:
+        except (AgentFetchError, AgentResponseParseError, AgentIntegrationError):
             raise
         except Exception as e:
             raise AgentIntegrationError(
