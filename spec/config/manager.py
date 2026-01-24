@@ -22,13 +22,16 @@ from pathlib import Path
 from typing import Any, Literal
 
 from spec.config.fetch_config import (
-    KNOWN_PLATFORMS,
     AgentConfig,
     AgentPlatform,
     ConfigValidationError,
     FetchPerformanceConfig,
     FetchStrategy,
     FetchStrategyConfig,
+    canonicalize_credentials,
+    get_active_platforms,
+    parse_agent_platform,
+    parse_fetch_strategy,
     validate_credentials,
     validate_strategy_for_platform,
 )
@@ -36,7 +39,12 @@ from spec.config.schema import validate_config_dict
 from spec.config.settings import CONFIG_FILE, Settings
 from spec.integrations.git import find_repo_root
 from spec.utils.console import console, print_header, print_info
-from spec.utils.env_utils import SENSITIVE_KEY_PATTERNS, EnvVarExpansionError
+from spec.utils.env_utils import (
+    SENSITIVE_KEY_PATTERNS,
+    EnvVarExpansionError,
+    expand_env_vars,
+    is_sensitive_key,
+)
 from spec.utils.logging import log_message
 
 # Module-level logger
@@ -671,19 +679,6 @@ class ConfigManager:
         result = result.replace('\\"', '"')
         return result
 
-    @staticmethod
-    def _is_sensitive_key(key: str) -> bool:
-        """Check if a configuration key contains sensitive data.
-
-        Args:
-            key: The configuration key name
-
-        Returns:
-            True if the key is considered sensitive
-        """
-        key_upper = key.upper()
-        return any(pattern in key_upper for pattern in SENSITIVE_KEY_PATTERNS)
-
     def _log_config_save(self, key: str, scope: str) -> None:
         """Log a configuration save without exposing sensitive values.
 
@@ -695,7 +690,7 @@ class ConfigManager:
             key: The configuration key that was saved
             scope: The scope (global or local) where it was saved
         """
-        if self._is_sensitive_key(key):
+        if is_sensitive_key(key):
             log_message(f"Configuration saved to {scope}: {key}=<REDACTED>")
         else:
             log_message(f"Configuration saved to {scope}: {key}")
@@ -712,91 +707,6 @@ class ConfigManager:
         """
         return self._raw_values.get(key, default)
 
-    def _expand_env_vars(
-        self,
-        value: Any,
-        strict: bool = False,
-        context: str = "",
-    ) -> Any:
-        """Recursively expand ${VAR} references to environment variables.
-
-        Supports nested structures (dicts, lists) and can operate in strict mode
-        where missing environment variables cause an error.
-
-        Args:
-            value: The value to expand (string, dict, list, or other)
-            strict: If True, raises EnvVarExpansionError for missing env vars.
-                    If False, preserves the ${VAR} pattern for debugging.
-            context: Context string for error messages (e.g., key name)
-
-        Returns:
-            The value with ${VAR} references replaced with environment values
-
-        Raises:
-            EnvVarExpansionError: If strict=True and an env var is not set
-        """
-        if isinstance(value, str):
-            pattern = r"\$\{([^}]+)\}"
-            missing_vars: list[str] = []
-
-            def replace(match: re.Match[str]) -> str:
-                var_name = match.group(1)
-                env_value = os.environ.get(var_name)
-                if env_value is None:
-                    missing_vars.append(var_name)
-                    if strict:
-                        return match.group(0)  # Will error after
-                    else:
-                        # Warn about missing var but preserve pattern
-                        logger.warning(
-                            f"Environment variable '{var_name}' not set"
-                            + (f" in {context}" if context else "")
-                        )
-                        return match.group(0)
-                return env_value
-
-            result = re.sub(pattern, replace, value)
-
-            if strict and missing_vars:
-                raise EnvVarExpansionError(
-                    f"Missing environment variable(s): {', '.join(missing_vars)}"
-                    + (f" in {context}" if context else "")
-                )
-
-            return result
-        elif isinstance(value, dict):
-            return {
-                k: self._expand_env_vars(
-                    v, strict=strict, context=f"{context}.{k}" if context else k
-                )
-                for k, v in value.items()
-            }
-        elif isinstance(value, list):
-            return [
-                self._expand_env_vars(
-                    v, strict=strict, context=f"{context}[{i}]" if context else f"[{i}]"
-                )
-                for i, v in enumerate(value)
-            ]
-        return value
-
-    def expand_env_vars_strict(self, value: Any, context: str = "") -> Any:
-        """Expand environment variables in strict mode (errors on missing vars).
-
-        Use this for credential expansion where missing vars indicate misconfiguration.
-
-        Args:
-            value: The value to expand
-            context: Context string for error messages
-
-        Returns:
-            The expanded value
-
-        Raises:
-            EnvVarExpansionError: If any referenced env var is not set
-        """
-        return self._expand_env_vars(value, strict=True, context=context)
-
     def get_agent_config(self) -> AgentConfig:
         """Get AI agent configuration.
 
@@ -804,8 +714,11 @@ class ConfigManager:
 
         Returns:
             AgentConfig instance with platform and integrations
+
+        Raises:
+            ConfigValidationError: If AGENT_PLATFORM has an invalid value
         """
-        platform_str = self._raw_values.get("AGENT_PLATFORM", "auggie")
+        platform_str = self._raw_values.get("AGENT_PLATFORM")
         integrations: dict[str, bool] = {}
 
         # Parse AGENT_INTEGRATION_* keys
@@ -814,13 +727,12 @@ class ConfigManager:
                 platform_name = key.replace("AGENT_INTEGRATION_", "").lower()
                 integrations[platform_name] = value.lower() in ("true", "1", "yes")
 
-        try:
-            platform = AgentPlatform(platform_str.lower())
-        except ValueError:
-            logger.warning(
-                f"Invalid AGENT_PLATFORM value '{platform_str}', falling back to 'auggie'"
-            )
-            platform = AgentPlatform.AUGGIE
+        # Use safe parser - raises ConfigValidationError for invalid values
+        platform = parse_agent_platform(
+            platform_str,
+            default=AgentPlatform.AUGGIE,
+            context="AGENT_PLATFORM",
+        )
 
         return AgentConfig(
             platform=platform,
@@ -834,29 +746,30 @@ class ConfigManager:
 
         Returns:
             FetchStrategyConfig instance with default and per-platform strategies
+
+        Raises:
+            ConfigValidationError: If any strategy value is invalid
         """
-        default_str = self._raw_values.get("FETCH_STRATEGY_DEFAULT", "auto")
+        default_str = self._raw_values.get("FETCH_STRATEGY_DEFAULT")
         per_platform: dict[str, FetchStrategy] = {}
 
         # Parse FETCH_STRATEGY_* keys (excluding DEFAULT)
+        # Use safe parser - raises ConfigValidationError for invalid values
         for key, value in self._raw_values.items():
             if key.startswith("FETCH_STRATEGY_") and key != "FETCH_STRATEGY_DEFAULT":
                 platform_name = key.replace("FETCH_STRATEGY_", "").lower()
-                try:
-                    per_platform[platform_name] = FetchStrategy(value.lower())
-                except ValueError:
-                    logger.warning(
-                        f"Invalid fetch strategy '{value}' for platform "
-                        f"'{platform_name}', ignoring"
-                    )
+                per_platform[platform_name] = parse_fetch_strategy(
+                    value,
+                    default=FetchStrategy.AUTO,
+                    context=key,
+                )
 
-        try:
-            default = FetchStrategy(default_str.lower())
-        except ValueError:
-            logger.warning(
-                f"Invalid FETCH_STRATEGY_DEFAULT value '{default_str}', falling back to 'auto'"
-            )
-            default = FetchStrategy.AUTO
+        # Use safe parser - raises ConfigValidationError for invalid values
+        default = parse_fetch_strategy(
+            default_str,
+            default=FetchStrategy.AUTO,
+            context="FETCH_STRATEGY_DEFAULT",
+        )
 
         return FetchStrategyConfig(
             default=default,
@@ -960,13 +873,6 @@ class ConfigManager:
             retry_delay_seconds=retry_delay_seconds,
         )
 
-    # Credential key aliases for backward compatibility
-    # Maps alias -> canonical name for specific platforms
-    # For azure_devops: 'org' -> 'organization', 'token' -> 'pat'
-    _CREDENTIAL_ALIASES: dict[str, dict[str, str]] = {
-        "azure_devops": {"org": "organization", "token": "pat"},
-    }
-
     def get_fallback_credentials(
         self,
         platform: str,
@@ -976,8 +882,12 @@ class ConfigManager:
         """Get fallback credentials for a platform.
 
         Parses FALLBACK_{PLATFORM}_* keys and expands environment variables.
-        Supports credential key aliases for backward compatibility (e.g., 'org'
-        is treated as 'organization' for Azure DevOps).
+        Applies credential key aliasing for backward compatibility (e.g., 'org'
+        is treated as 'organization' for Azure DevOps, 'base_url' as 'url' for
+        Jira, 'api_token' as 'token' for Trello).
+
+        Canonicalization is applied before validation, ensuring required fields
+        are checked against canonical keys defined in PLATFORM_REQUIRED_CREDENTIALS.
 
         Args:
             platform: Platform name (e.g., 'azure_devops', 'trello')
@@ -985,31 +895,27 @@ class ConfigManager:
             validate: If True, validates credentials have required fields
 
         Returns:
-            Dictionary of credential key-value pairs, or None if no credentials
+            Dictionary of credential key-value pairs with canonical keys,
+            or None if no credentials found
 
         Raises:
             EnvVarExpansionError: If strict=True and env var expansion fails
             ConfigValidationError: If validate=True and required fields missing
         """
         prefix = f"FALLBACK_{platform.upper()}_"
-        credentials: dict[str, str] = {}
-
-        # Get platform-specific aliases
-        platform_lower = platform.lower()
-        aliases = self._CREDENTIAL_ALIASES.get(platform_lower, {})
+        raw_credentials: dict[str, str] = {}
 
         for key, value in self._raw_values.items():
             if key.startswith(prefix):
                 cred_name = key.replace(prefix, "").lower()
-                # Apply alias mapping for backward compatibility
-                cred_name = aliases.get(cred_name, cred_name)
                 context = f"credential {key}"
-                credentials[cred_name] = self._expand_env_vars(
-                    value, strict=strict, context=context
-                )
+                raw_credentials[cred_name] = expand_env_vars(value, strict=strict, context=context)
 
-        if not credentials:
+        if not raw_credentials:
             return None
+
+        # Canonicalize credential keys using platform-specific aliases
+        credentials = canonicalize_credentials(platform, raw_credentials)
 
         if validate:
             validate_credentials(platform, credentials, strict=True)
@@ -1027,32 +933,12 @@ class ConfigManager:
         Returns:
             Set of lowercase platform names that are actively configured
         """
-        active: set[str] = set()
-
-        # Get platforms from per_platform strategy overrides
-        strategy_config = self.get_fetch_strategy_config()
-        active.update(p.lower() for p in strategy_config.per_platform.keys())
-
-        # Get platforms from agent integrations
-        agent_config = self.get_agent_config()
-        active.update(p.lower() for p in agent_config.integrations.keys())
-
-        # Get platforms from fallback credentials (FALLBACK_{PLATFORM}_* keys)
-        for key in self._raw_values.keys():
-            if key.startswith("FALLBACK_"):
-                # Extract platform name: FALLBACK_{PLATFORM}_{CRED_KEY}
-                parts = key.split("_", 2)  # Split into at most 3 parts
-                if len(parts) >= 2:
-                    # Handle multi-word platforms like AZURE_DEVOPS
-                    # We need to find which known platform matches
-                    remaining = key.replace("FALLBACK_", "")
-                    for known in KNOWN_PLATFORMS:
-                        known_upper = known.upper()
-                        if remaining.startswith(known_upper + "_"):
-                            active.add(known)
-                            break
-
-        return active
+        # Delegate to the extracted helper function
+        return get_active_platforms(
+            raw_config_keys=set(self._raw_values.keys()),
+            strategy_config=self.get_fetch_strategy_config(),
+            agent_config=self.get_agent_config(),
+        )
 
     def validate_fetch_config(self, strict: bool = True) -> list[str]:
         """Validate the complete fetch configuration.

@@ -64,6 +64,74 @@ class AgentPlatform(Enum):
     MANUAL = "manual"
 
 
+def parse_fetch_strategy(
+    value: str | None,
+    default: FetchStrategy = FetchStrategy.AUTO,
+    context: str = "",
+) -> FetchStrategy:
+    """Safely parse a FetchStrategy from a string value.
+
+    Args:
+        value: The string value to parse (e.g., "auto", "direct", "agent")
+        default: Default strategy to return if value is None or empty
+        context: Context string for error messages (e.g., "FETCH_STRATEGY_DEFAULT")
+
+    Returns:
+        Parsed FetchStrategy enum member
+
+    Raises:
+        ConfigValidationError: If value is not a valid FetchStrategy
+    """
+    if value is None or value.strip() == "":
+        return default
+
+    value_lower = value.strip().lower()
+    valid_values = [e.value for e in FetchStrategy]
+
+    try:
+        return FetchStrategy(value_lower)
+    except ValueError:
+        context_msg = f" in {context}" if context else ""
+        raise ConfigValidationError(
+            f"Invalid fetch strategy '{value}'{context_msg}. "
+            f"Allowed values: {', '.join(valid_values)}"
+        ) from None
+
+
+def parse_agent_platform(
+    value: str | None,
+    default: AgentPlatform = AgentPlatform.AUGGIE,
+    context: str = "",
+) -> AgentPlatform:
+    """Safely parse an AgentPlatform from a string value.
+
+    Args:
+        value: The string value to parse (e.g., "auggie", "cursor", "manual")
+        default: Default platform to return if value is None or empty
+        context: Context string for error messages (e.g., "AGENT_PLATFORM")
+
+    Returns:
+        Parsed AgentPlatform enum member
+
+    Raises:
+        ConfigValidationError: If value is not a valid AgentPlatform
+    """
+    if value is None or value.strip() == "":
+        return default
+
+    value_lower = value.strip().lower()
+    valid_values = [e.value for e in AgentPlatform]
+
+    try:
+        return AgentPlatform(value_lower)
+    except ValueError:
+        context_msg = f" in {context}" if context else ""
+        raise ConfigValidationError(
+            f"Invalid agent platform '{value}'{context_msg}. "
+            f"Allowed values: {', '.join(valid_values)}"
+        ) from None
+
+
 # Known ticket platforms for validation
 KNOWN_PLATFORMS = frozenset(
     {
@@ -85,6 +153,49 @@ PLATFORM_REQUIRED_CREDENTIALS: dict[str, frozenset[str]] = {
     "trello": frozenset({"api_key", "token"}),
     "monday": frozenset({"api_key"}),
 }
+
+# Credential key aliases for backward compatibility
+# Maps alias -> canonical name for specific platforms
+# This allows users to use common synonyms that get normalized to canonical keys
+CREDENTIAL_ALIASES: dict[str, dict[str, str]] = {
+    "azure_devops": {"org": "organization", "token": "pat"},
+    "jira": {"base_url": "url"},
+    "trello": {"api_token": "token"},
+}
+
+
+def canonicalize_credentials(
+    platform: str,
+    credentials: dict[str, Any],
+) -> dict[str, Any]:
+    """Canonicalize credential keys using platform-specific aliases.
+
+    Applies alias mappings to transform common synonyms into canonical keys
+    expected by PLATFORM_REQUIRED_CREDENTIALS. This should be called before
+    validate_credentials to ensure validation checks canonical keys.
+
+    Args:
+        platform: Platform name (e.g., 'jira', 'azure_devops')
+        credentials: Dictionary of credential key-value pairs
+
+    Returns:
+        New dictionary with aliased keys replaced by canonical names
+
+    Example:
+        >>> canonicalize_credentials("jira", {"base_url": "http://...", "token": "x"})
+        {"url": "http://...", "token": "x"}
+    """
+    platform_lower = platform.lower()
+    aliases = CREDENTIAL_ALIASES.get(platform_lower, {})
+
+    canonicalized: dict[str, Any] = {}
+    for key, value in credentials.items():
+        key_lower = key.lower()
+        # Apply alias mapping, or keep original key
+        canonical_key = aliases.get(key_lower, key_lower)
+        canonicalized[canonical_key] = value
+
+    return canonicalized
 
 
 @dataclass
@@ -189,36 +300,54 @@ class FetchPerformanceConfig:
     retry_delay_seconds: float = 1.0
 
     def __post_init__(self) -> None:
-        """Validate and clamp values to safe upper bounds."""
+        """Validate and clamp values to safe bounds (lower and upper)."""
         import logging
 
         logger = logging.getLogger(__name__)
 
-        # Cache duration - clamp to max using simple assignment
-        if self.cache_duration_hours > MAX_CACHE_DURATION_HOURS:
+        # Cache duration - clamp to [0, MAX]
+        if self.cache_duration_hours < 0:
+            logger.warning(
+                f"cache_duration_hours ({self.cache_duration_hours}) is negative, " "clamping to 0"
+            )
+            self.cache_duration_hours = 0
+        elif self.cache_duration_hours > MAX_CACHE_DURATION_HOURS:
             logger.warning(
                 f"cache_duration_hours ({self.cache_duration_hours}) exceeds max "
                 f"({MAX_CACHE_DURATION_HOURS}), clamping to max"
             )
             self.cache_duration_hours = MAX_CACHE_DURATION_HOURS
 
-        # Timeout - clamp to max
-        if self.timeout_seconds > MAX_TIMEOUT_SECONDS:
+        # Timeout - clamp to [1, MAX] (must be > 0 for valid HTTP timeout)
+        if self.timeout_seconds <= 0:
+            logger.warning(
+                f"timeout_seconds ({self.timeout_seconds}) must be positive, " "clamping to 1"
+            )
+            self.timeout_seconds = 1
+        elif self.timeout_seconds > MAX_TIMEOUT_SECONDS:
             logger.warning(
                 f"timeout_seconds ({self.timeout_seconds}) exceeds max "
                 f"({MAX_TIMEOUT_SECONDS}), clamping to max"
             )
             self.timeout_seconds = MAX_TIMEOUT_SECONDS
 
-        # Retries - clamp to max
-        if self.max_retries > MAX_RETRIES:
+        # Retries - clamp to [0, MAX]
+        if self.max_retries < 0:
+            logger.warning(f"max_retries ({self.max_retries}) is negative, clamping to 0")
+            self.max_retries = 0
+        elif self.max_retries > MAX_RETRIES:
             logger.warning(
                 f"max_retries ({self.max_retries}) exceeds max ({MAX_RETRIES}), clamping to max"
             )
             self.max_retries = MAX_RETRIES
 
-        # Retry delay - clamp to max
-        if self.retry_delay_seconds > MAX_RETRY_DELAY_SECONDS:
+        # Retry delay - clamp to [0, MAX]
+        if self.retry_delay_seconds < 0:
+            logger.warning(
+                f"retry_delay_seconds ({self.retry_delay_seconds}) is negative, " "clamping to 0"
+            )
+            self.retry_delay_seconds = 0.0
+        elif self.retry_delay_seconds > MAX_RETRY_DELAY_SECONDS:
             logger.warning(
                 f"retry_delay_seconds ({self.retry_delay_seconds}) exceeds max "
                 f"({MAX_RETRY_DELAY_SECONDS}), clamping to max"
@@ -365,6 +494,51 @@ def validate_strategy_for_platform(
     return errors
 
 
+def get_active_platforms(
+    raw_config_keys: set[str],
+    strategy_config: FetchStrategyConfig,
+    agent_config: AgentConfig,
+) -> set[str]:
+    """Get the set of 'active' platforms that need validation.
+
+    Active platforms are those explicitly defined in:
+    - per_platform strategy overrides
+    - agent integrations
+    - fallback_credentials (FALLBACK_{PLATFORM}_* keys)
+
+    This function centralizes platform discovery logic so that ConfigManager
+    and validation functions can share the same logic.
+
+    Args:
+        raw_config_keys: Set of raw configuration key names
+        strategy_config: Parsed fetch strategy configuration
+        agent_config: Parsed agent configuration
+
+    Returns:
+        Set of lowercase platform names that are actively configured
+    """
+    active: set[str] = set()
+
+    # Get platforms from per_platform strategy overrides
+    active.update(p.lower() for p in strategy_config.per_platform.keys())
+
+    # Get platforms from agent integrations
+    active.update(p.lower() for p in agent_config.integrations.keys())
+
+    # Get platforms from fallback credentials (FALLBACK_{PLATFORM}_* keys)
+    for key in raw_config_keys:
+        if key.startswith("FALLBACK_"):
+            # Extract platform name: FALLBACK_{PLATFORM}_{CRED_KEY}
+            remaining = key.replace("FALLBACK_", "")
+            for known in KNOWN_PLATFORMS:
+                known_upper = known.upper()
+                if remaining.startswith(known_upper + "_"):
+                    active.add(known)
+                    break
+
+    return active
+
+
 __all__ = [
     "ConfigValidationError",
     "FetchStrategy",
@@ -374,10 +548,15 @@ __all__ = [
     "FetchPerformanceConfig",
     "KNOWN_PLATFORMS",
     "PLATFORM_REQUIRED_CREDENTIALS",
+    "CREDENTIAL_ALIASES",
     "MAX_CACHE_DURATION_HOURS",
     "MAX_TIMEOUT_SECONDS",
     "MAX_RETRIES",
     "MAX_RETRY_DELAY_SECONDS",
+    "parse_fetch_strategy",
+    "parse_agent_platform",
+    "canonicalize_credentials",
+    "get_active_platforms",
     "validate_credentials",
     "validate_strategy_for_platform",
 ]

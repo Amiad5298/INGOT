@@ -876,36 +876,48 @@ class TestConfigManagerSensitiveValueMasking:
 
     def test_is_sensitive_key_detects_token(self):
         """Keys containing TOKEN are detected as sensitive."""
-        assert ConfigManager._is_sensitive_key("JIRA_TOKEN") is True
-        assert ConfigManager._is_sensitive_key("jira_token") is True
-        assert ConfigManager._is_sensitive_key("MY_API_TOKEN") is True
+        from spec.utils.env_utils import is_sensitive_key
+
+        assert is_sensitive_key("JIRA_TOKEN") is True
+        assert is_sensitive_key("jira_token") is True
+        assert is_sensitive_key("MY_API_TOKEN") is True
 
     def test_is_sensitive_key_detects_key(self):
         """Keys containing KEY are detected as sensitive."""
-        assert ConfigManager._is_sensitive_key("API_KEY") is True
-        assert ConfigManager._is_sensitive_key("api_key") is True
-        assert ConfigManager._is_sensitive_key("ENCRYPTION_KEY") is True
+        from spec.utils.env_utils import is_sensitive_key
+
+        assert is_sensitive_key("API_KEY") is True
+        assert is_sensitive_key("api_key") is True
+        assert is_sensitive_key("ENCRYPTION_KEY") is True
 
     def test_is_sensitive_key_detects_secret(self):
         """Keys containing SECRET are detected as sensitive."""
-        assert ConfigManager._is_sensitive_key("CLIENT_SECRET") is True
-        assert ConfigManager._is_sensitive_key("secret_value") is True
+        from spec.utils.env_utils import is_sensitive_key
+
+        assert is_sensitive_key("CLIENT_SECRET") is True
+        assert is_sensitive_key("secret_value") is True
 
     def test_is_sensitive_key_detects_password(self):
         """Keys containing PASSWORD are detected as sensitive."""
-        assert ConfigManager._is_sensitive_key("DB_PASSWORD") is True
-        assert ConfigManager._is_sensitive_key("password") is True
+        from spec.utils.env_utils import is_sensitive_key
+
+        assert is_sensitive_key("DB_PASSWORD") is True
+        assert is_sensitive_key("password") is True
 
     def test_is_sensitive_key_detects_pat(self):
         """Keys containing PAT are detected as sensitive."""
-        assert ConfigManager._is_sensitive_key("GITHUB_PAT") is True
-        assert ConfigManager._is_sensitive_key("pat_token") is True
+        from spec.utils.env_utils import is_sensitive_key
+
+        assert is_sensitive_key("GITHUB_PAT") is True
+        assert is_sensitive_key("pat_token") is True
 
     def test_is_sensitive_key_non_sensitive(self):
         """Non-sensitive keys are not flagged."""
-        assert ConfigManager._is_sensitive_key("DEFAULT_MODEL") is False
-        assert ConfigManager._is_sensitive_key("AUTO_OPEN_FILES") is False
-        assert ConfigManager._is_sensitive_key("JIRA_PROJECT") is False
+        from spec.utils.env_utils import is_sensitive_key
+
+        assert is_sensitive_key("DEFAULT_MODEL") is False
+        assert is_sensitive_key("AUTO_OPEN_FILES") is False
+        assert is_sensitive_key("JIRA_PROJECT") is False
 
     def test_save_does_not_log_sensitive_values(self, tmp_path, monkeypatch, caplog):
         """Sensitive values are not logged in plaintext."""
@@ -1240,56 +1252,60 @@ class TestFetchConfigDataclasses:
         assert config.retry_delay_seconds == 2.5
 
 
-class TestConfigManagerEnvVarExpansion:
-    """Tests for _expand_env_vars method."""
+class TestEnvVarExpansion:
+    """Tests for expand_env_vars function from spec.utils.env_utils."""
 
-    def test_expand_env_vars_string(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_string(self, monkeypatch):
         """Expands ${VAR} in strings."""
-        monkeypatch.setenv("TEST_VAR", "expanded_value")
-        manager = ConfigManager(tmp_path / "config")
+        from spec.utils.env_utils import expand_env_vars
 
-        result = manager._expand_env_vars("prefix_${TEST_VAR}_suffix")
+        monkeypatch.setenv("TEST_VAR", "expanded_value")
+
+        result = expand_env_vars("prefix_${TEST_VAR}_suffix")
         assert result == "prefix_expanded_value_suffix"
 
-    def test_expand_env_vars_missing_var(self, tmp_path):
-        """Preserves ${VAR} when variable not set."""
-        manager = ConfigManager(tmp_path / "config")
+    def test_expand_env_vars_missing_var(self):
+        """Preserves ${VAR} when variable not set (strict=False)."""
+        from spec.utils.env_utils import expand_env_vars
 
-        result = manager._expand_env_vars("${MISSING_VAR}")
+        result = expand_env_vars("${MISSING_VAR}", strict=False)
         assert result == "${MISSING_VAR}"
 
-    def test_expand_env_vars_dict(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_dict(self, monkeypatch):
         """Recursively expands in dicts."""
+        from spec.utils.env_utils import expand_env_vars
+
         monkeypatch.setenv("VAR1", "value1")
         monkeypatch.setenv("VAR2", "value2")
-        manager = ConfigManager(tmp_path / "config")
 
-        result = manager._expand_env_vars({"key1": "${VAR1}", "key2": "${VAR2}"})
+        result = expand_env_vars({"key1": "${VAR1}", "key2": "${VAR2}"})
         assert result == {"key1": "value1", "key2": "value2"}
 
-    def test_expand_env_vars_list(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_list(self, monkeypatch):
         """Recursively expands in lists."""
-        monkeypatch.setenv("ITEM", "expanded")
-        manager = ConfigManager(tmp_path / "config")
+        from spec.utils.env_utils import expand_env_vars
 
-        result = manager._expand_env_vars(["${ITEM}", "static"])
+        monkeypatch.setenv("ITEM", "expanded")
+
+        result = expand_env_vars(["${ITEM}", "static"])
         assert result == ["expanded", "static"]
 
-    def test_expand_env_vars_nested(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_nested(self, monkeypatch):
         """Recursively expands in nested structures."""
-        monkeypatch.setenv("NESTED", "deep_value")
-        manager = ConfigManager(tmp_path / "config")
+        from spec.utils.env_utils import expand_env_vars
 
-        result = manager._expand_env_vars({"outer": {"inner": "${NESTED}"}})
+        monkeypatch.setenv("NESTED", "deep_value")
+
+        result = expand_env_vars({"outer": {"inner": "${NESTED}"}})
         assert result == {"outer": {"inner": "deep_value"}}
 
-    def test_expand_env_vars_non_string(self, tmp_path):
+    def test_expand_env_vars_non_string(self):
         """Returns non-string/dict/list values unchanged."""
-        manager = ConfigManager(tmp_path / "config")
+        from spec.utils.env_utils import expand_env_vars
 
-        assert manager._expand_env_vars(42) == 42
-        assert manager._expand_env_vars(True) is True
-        assert manager._expand_env_vars(None) is None
+        assert expand_env_vars(42) == 42
+        assert expand_env_vars(True) is True
+        assert expand_env_vars(None) is None
 
 
 class TestConfigManagerGetAgentConfig:
@@ -1320,17 +1336,22 @@ class TestConfigManagerGetAgentConfig:
         config = manager.get_agent_config()
         assert config.platform == AgentPlatform.CURSOR
 
-    def test_get_agent_config_invalid_platform_falls_back(self, tmp_path):
-        """Falls back to AUGGIE for invalid platform."""
-        from spec.config.fetch_config import AgentPlatform
+    def test_get_agent_config_invalid_platform_raises(self, tmp_path):
+        """Raises ConfigValidationError for invalid platform value."""
+        from spec.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
         config_path.write_text('AGENT_PLATFORM="invalid_platform"\n')
         manager = ConfigManager(config_path)
         manager.load()
 
-        config = manager.get_agent_config()
-        assert config.platform == AgentPlatform.AUGGIE
+        with pytest.raises(ConfigValidationError) as exc_info:
+            manager.get_agent_config()
+
+        # Error should include the invalid value and allowed values
+        assert "invalid_platform" in str(exc_info.value)
+        assert "auggie" in str(exc_info.value).lower()
+        assert "cursor" in str(exc_info.value).lower()
 
     def test_get_agent_config_integrations(self, tmp_path):
         """Parses AGENT_INTEGRATION_* keys."""
@@ -1380,18 +1401,6 @@ class TestConfigManagerGetFetchStrategyConfig:
         config = manager.get_fetch_strategy_config()
         assert config.default == FetchStrategy.AGENT
 
-    def test_get_fetch_strategy_config_invalid_default_falls_back(self, tmp_path):
-        """Falls back to AUTO for invalid default strategy."""
-        from spec.config.fetch_config import FetchStrategy
-
-        config_path = tmp_path / "config"
-        config_path.write_text('FETCH_STRATEGY_DEFAULT="invalid"\n')
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        config = manager.get_fetch_strategy_config()
-        assert config.default == FetchStrategy.AUTO
-
     def test_get_fetch_strategy_config_per_platform(self, tmp_path):
         """Parses FETCH_STRATEGY_* keys for per-platform overrides."""
         from spec.config.fetch_config import FetchStrategy
@@ -1413,9 +1422,9 @@ FETCH_STRATEGY_JIRA=agent
         assert config.per_platform["trello"] == FetchStrategy.DIRECT
         assert config.per_platform["jira"] == FetchStrategy.AGENT
 
-    def test_get_fetch_strategy_config_skips_invalid_overrides(self, tmp_path):
-        """Skips per-platform overrides with invalid strategy values."""
-        from spec.config.fetch_config import FetchStrategy
+    def test_get_fetch_strategy_config_invalid_override_raises(self, tmp_path):
+        """Invalid per-platform override value raises ConfigValidationError."""
+        from spec.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
         config_path.write_text(
@@ -1426,9 +1435,33 @@ FETCH_STRATEGY_INVALID=not_a_strategy
         manager = ConfigManager(config_path)
         manager.load()
 
-        config = manager.get_fetch_strategy_config()
-        assert config.per_platform["valid"] == FetchStrategy.DIRECT
-        assert "invalid" not in config.per_platform
+        with pytest.raises(ConfigValidationError) as exc_info:
+            manager.get_fetch_strategy_config()
+
+        # Error should include the invalid value and allowed values
+        assert "not_a_strategy" in str(exc_info.value)
+        assert "auto" in str(exc_info.value).lower()
+        assert "direct" in str(exc_info.value).lower()
+        assert "FETCH_STRATEGY_INVALID" in str(exc_info.value)
+
+    def test_get_fetch_strategy_config_invalid_default_raises(self, tmp_path):
+        """Invalid FETCH_STRATEGY_DEFAULT value raises ConfigValidationError."""
+        from spec.config.fetch_config import ConfigValidationError
+
+        config_path = tmp_path / "config"
+        config_path.write_text(
+            """FETCH_STRATEGY_DEFAULT=bad_default
+"""
+        )
+        manager = ConfigManager(config_path)
+        manager.load()
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            manager.get_fetch_strategy_config()
+
+        # Error should include the invalid value and allowed values
+        assert "bad_default" in str(exc_info.value)
+        assert "FETCH_STRATEGY_DEFAULT" in str(exc_info.value)
 
 
 class TestConfigManagerGetFetchPerformanceConfig:
@@ -1647,57 +1680,44 @@ FALLBACK_AZURE_DEVOPS_PAT=${MY_PAT}
 class TestEnvVarExpansionStrict:
     """Tests for strict mode environment variable expansion."""
 
-    def test_expand_env_vars_strict_mode_raises_on_missing(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_strict_mode_raises_on_missing(self, monkeypatch):
         """Strict mode raises EnvVarExpansionError for missing env vars."""
-        from spec.config.manager import EnvVarExpansionError
-
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        manager = ConfigManager(config_path)
-        manager.load()
+        from spec.utils.env_utils import EnvVarExpansionError, expand_env_vars_strict
 
         with pytest.raises(EnvVarExpansionError) as exc_info:
-            manager.expand_env_vars_strict("${MISSING_VAR}", context="test_key")
+            expand_env_vars_strict("${MISSING_VAR}", context="test_field")
 
         assert "MISSING_VAR" in str(exc_info.value)
-        assert "test_key" in str(exc_info.value)
+        # Context is included in error message for non-sensitive contexts
+        assert "test_field" in str(exc_info.value)
 
-    def test_expand_env_vars_strict_mode_succeeds_when_set(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_strict_mode_succeeds_when_set(self, monkeypatch):
         """Strict mode expands when env var is set."""
+        from spec.utils.env_utils import expand_env_vars_strict
+
         monkeypatch.setenv("MY_SECRET", "secret_value")
 
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        result = manager.expand_env_vars_strict("token=${MY_SECRET}", context="test_key")
+        result = expand_env_vars_strict("token=${MY_SECRET}", context="test_key")
         assert result == "token=secret_value"
 
-    def test_expand_env_vars_nested_dict(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_nested_dict(self, monkeypatch):
         """Expands env vars in nested dict structures."""
+        from spec.utils.env_utils import expand_env_vars
+
         monkeypatch.setenv("NESTED_VAR", "nested_value")
 
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        manager = ConfigManager(config_path)
-        manager.load()
-
         data = {"level1": {"level2": {"value": "${NESTED_VAR}"}}}
-        result = manager._expand_env_vars(data)
+        result = expand_env_vars(data)
         assert result["level1"]["level2"]["value"] == "nested_value"
 
-    def test_expand_env_vars_nested_list(self, tmp_path, monkeypatch):
+    def test_expand_env_vars_nested_list(self, monkeypatch):
         """Expands env vars in list structures."""
+        from spec.utils.env_utils import expand_env_vars
+
         monkeypatch.setenv("LIST_VAR", "list_value")
 
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        manager = ConfigManager(config_path)
-        manager.load()
-
         data = ["${LIST_VAR}", "plain", "${LIST_VAR}"]
-        result = manager._expand_env_vars(data)
+        result = expand_env_vars(data)
         assert result == ["list_value", "plain", "list_value"]
 
 
@@ -1846,22 +1866,45 @@ class TestPerformanceGuardrails:
         assert config.max_retries == 5
         assert config.retry_delay_seconds == 2.5
 
+    def test_performance_config_clamps_to_lower_bounds(self):
+        """Performance config clamps negative/zero values to lower bounds."""
+        from spec.config.fetch_config import FetchPerformanceConfig
+
+        config = FetchPerformanceConfig(
+            cache_duration_hours=-10,  # Negative - clamp to 0
+            timeout_seconds=0,  # Zero - clamp to 1 (must be positive)
+            max_retries=-5,  # Negative - clamp to 0
+            retry_delay_seconds=-1.0,  # Negative - clamp to 0
+        )
+
+        assert config.cache_duration_hours == 0
+        assert config.timeout_seconds == 1  # Clamped to 1, not 0
+        assert config.max_retries == 0
+        assert config.retry_delay_seconds == 0.0
+
+    def test_performance_config_zero_timeout_clamps_to_one(self):
+        """Zero timeout is clamped to 1 (must be positive for HTTP)."""
+        from spec.config.fetch_config import FetchPerformanceConfig
+
+        config = FetchPerformanceConfig(timeout_seconds=-100)
+        assert config.timeout_seconds == 1
+
 
 class TestNoSecretLeakage:
     """Tests to ensure secrets are never logged."""
 
     def test_sensitive_key_detection(self):
         """Sensitive key patterns are correctly detected."""
-        from spec.config.manager import ConfigManager
+        from spec.utils.env_utils import is_sensitive_key
 
-        assert ConfigManager._is_sensitive_key("JIRA_TOKEN") is True
-        assert ConfigManager._is_sensitive_key("AZURE_PAT") is True
-        assert ConfigManager._is_sensitive_key("API_KEY") is True
-        assert ConfigManager._is_sensitive_key("SECRET_VALUE") is True
-        assert ConfigManager._is_sensitive_key("MY_PASSWORD") is True
-        assert ConfigManager._is_sensitive_key("CREDENTIAL_DATA") is True
-        assert ConfigManager._is_sensitive_key("DEFAULT_MODEL") is False
-        assert ConfigManager._is_sensitive_key("AGENT_PLATFORM") is False
+        assert is_sensitive_key("JIRA_TOKEN") is True
+        assert is_sensitive_key("AZURE_PAT") is True
+        assert is_sensitive_key("API_KEY") is True
+        assert is_sensitive_key("SECRET_VALUE") is True
+        assert is_sensitive_key("MY_PASSWORD") is True
+        assert is_sensitive_key("CREDENTIAL_DATA") is True
+        assert is_sensitive_key("DEFAULT_MODEL") is False
+        assert is_sensitive_key("AGENT_PLATFORM") is False
 
     def test_fallback_credentials_not_in_settings(self, tmp_path):
         """Fallback credentials are not exposed in settings attributes."""
@@ -2238,8 +2281,28 @@ FALLBACK_AZURE_DEVOPS_PAT=secret
         assert creds["organization"] == "direct-org"
         assert creds["pat"] == "secret"
 
-    def test_jira_has_no_aliases(self, tmp_path):
-        """Jira credentials have no aliasing applied."""
+    def test_jira_base_url_alias_mapped_to_url(self, tmp_path):
+        """The 'base_url' credential key is mapped to 'url' for Jira."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_JIRA_BASE_URL=https://jira.example.com
+FALLBACK_JIRA_EMAIL=user@example.com
+FALLBACK_JIRA_TOKEN=secret
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("jira", validate=False)
+        # 'base_url' should be mapped to 'url'
+        assert "url" in creds
+        assert creds["url"] == "https://jira.example.com"
+        # 'base_url' should not be present as a separate key
+        assert "base_url" not in creds
+        assert creds["token"] == "secret"
+
+    def test_jira_url_key_works_directly(self, tmp_path):
+        """The 'url' key works directly without aliasing for Jira."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_JIRA_URL=https://jira.example.com
@@ -2252,6 +2315,40 @@ FALLBACK_JIRA_TOKEN=secret
         creds = manager.get_fallback_credentials("jira", validate=False)
         assert creds["url"] == "https://jira.example.com"
         assert creds["token"] == "secret"
+
+    def test_trello_api_token_alias_mapped_to_token(self, tmp_path):
+        """The 'api_token' credential key is mapped to 'token' for Trello."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_TRELLO_API_KEY=my-api-key
+FALLBACK_TRELLO_API_TOKEN=my-token
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("trello", validate=False)
+        # 'api_token' should be mapped to 'token'
+        assert "token" in creds
+        assert creds["token"] == "my-token"
+        # 'api_token' should not be present as a separate key
+        assert "api_token" not in creds
+        assert creds["api_key"] == "my-api-key"
+
+    def test_trello_token_key_works_directly(self, tmp_path):
+        """The 'token' key works directly without aliasing for Trello."""
+        config_file = tmp_path / "config"
+        config_file.write_text(
+            """FALLBACK_TRELLO_API_KEY=my-api-key
+FALLBACK_TRELLO_TOKEN=my-token
+"""
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        creds = manager.get_fallback_credentials("trello", validate=False)
+        assert creds["api_key"] == "my-api-key"
+        assert creds["token"] == "my-token"
 
 
 class TestScopedPlatformValidation:
