@@ -1,7 +1,8 @@
 # Implementation Plan: AMI-17 - Implement ProviderRegistry Factory Pattern
 
 **Ticket:** [AMI-17](https://linear.app/amiadspec/issue/AMI-17/implement-providerregistry-factory-pattern)
-**Status:** Draft
+**Status:** ✅ IMPLEMENTED (PR #21)
+**PR:** [#21](https://github.com/Amiad5298/Spec/pull/21)
 **Date:** 2026-01-24
 
 ---
@@ -268,22 +269,100 @@ class MockJiraProvider(IssueTrackerProvider):
 
 From the ticket:
 
-- [ ] `@ProviderRegistry.register` decorator works without instantiating provider
-- [ ] `get_provider()` returns singleton instance
-- [ ] `get_provider_for_input()` integrates with `PlatformDetector`
-- [ ] `PlatformNotSupportedError` raised for unregistered platforms
-- [ ] `clear()` method works for test isolation
-- [ ] `set_user_interaction()` enables DI for testing
-- [ ] Exports added to `providers/__init__.py`
-- [ ] Unit tests with mock providers
+- [x] `@ProviderRegistry.register` decorator works without instantiating provider
+- [x] `get_provider()` returns singleton instance
+- [x] `get_provider_for_input()` integrates with `PlatformDetector`
+- [x] `PlatformNotSupportedError` raised for unregistered platforms
+- [x] `clear()` method works for test isolation
+- [x] `set_user_interaction()` enables DI for testing
+- [x] Exports added to `providers/__init__.py`
+- [x] Unit tests with mock providers
 
 Additional implementation requirements:
 
-- [ ] Thread-safe singleton instantiation
-- [ ] `list_platforms()` method implemented
-- [ ] `get_user_interaction()` getter method implemented
-- [ ] Type hints and docstrings for all public methods
-- [ ] Follows existing code style and patterns
+- [x] Thread-safe singleton instantiation
+- [x] `list_platforms()` method implemented
+- [x] `get_user_interaction()` getter method implemented
+- [x] Type hints and docstrings for all public methods
+- [x] Follows existing code style and patterns
+
+---
+
+## Implementation Notes (PR #21)
+
+The following implementation details were added beyond the original plan:
+
+### 1. `_create_provider_instance()` Private Method
+
+A private helper method using `inspect.signature()` for dependency injection:
+
+```python
+@classmethod
+def _create_provider_instance(cls, provider_class: type[IssueTrackerProvider]) -> IssueTrackerProvider:
+    """Create a provider instance with optional DI."""
+    sig = inspect.signature(provider_class.__init__)
+    params = sig.parameters
+
+    # Check if provider accepts user_interaction parameter
+    if "user_interaction" in params:
+        return provider_class(user_interaction=cls._user_interaction)
+    else:
+        return provider_class()
+```
+
+This enables automatic injection of `UserInteractionInterface` for providers that accept it.
+
+### 2. Duplicate Registration Handling
+
+Warning logs are emitted when re-registering a provider for an existing platform:
+
+```python
+if platform in cls._providers:
+    logger.warning(
+        f"Provider for {platform.name} already registered "
+        f"({cls._providers[platform].__name__}), replacing with {provider_class.__name__}"
+    )
+```
+
+### 3. Exception Normalization in `get_provider_for_input()`
+
+Generic exceptions from `PlatformDetector.detect()` are wrapped as `PlatformNotSupportedError`:
+
+```python
+except Exception as e:
+    with cls._lock:
+        registered = sorted([p.name for p in cls._providers.keys()])
+    raise PlatformNotSupportedError(
+        input_str=input_str,
+        message=f"Failed to detect platform from input: {e}",
+        supported_platforms=registered,
+    ) from e
+```
+
+### 4. Enhanced Validation
+
+- `TypeError` raised if registered class doesn't subclass `IssueTrackerProvider`
+- `TypeError` raised if `PLATFORM` attribute is not a `Platform` enum value
+- Validation happens at registration time (decorator), not at lookup time
+
+### 5. Constructor Contract Documentation
+
+Added to `IssueTrackerProvider` base class docstring (lines 401-430 in `base.py`):
+
+- Documents valid constructor signatures
+- Explains that providers must have no required arguments OR accept optional `user_interaction`
+- Provides examples of valid and invalid constructors
+
+### 6. Test Coverage
+
+25 comprehensive tests in `tests/test_provider_registry.py` (740 lines) covering:
+
+- Registration (decorator, validation, multiple providers)
+- Singleton pattern (lazy instantiation, same instance)
+- Thread safety (concurrent access, lock protection)
+- Dependency injection (user_interaction parameter detection)
+- Error handling (unregistered platforms, invalid providers)
+- Test isolation (clear() method)
 
 ---
 
