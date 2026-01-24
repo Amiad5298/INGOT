@@ -1,8 +1,9 @@
 # Implementation Plan: AMI-33 - Add Fetch Strategy Configuration to Config Schema
 
 **Ticket:** [AMI-33](https://linear.app/amiadspec/issue/AMI-33/add-fetch-strategy-configuration-to-config-schema)
-**Status:** Draft
+**Status:** ✅ IMPLEMENTED (PR #20)
 **Date:** 2026-01-23
+**Updated:** 2026-01-24
 
 ---
 
@@ -71,14 +72,16 @@ spec/config/
 
 | File | Purpose |
 |------|---------|
-| `spec/config/fetch_config.py` | Dataclasses: `FetchStrategy`, `AgentPlatform`, `AgentConfig`, `FetchStrategyConfig`, `FetchPerformanceConfig` |
+| `spec/config/fetch_config.py` | Dataclasses: `FetchStrategy`, `AgentPlatform`, `AgentConfig`, `FetchStrategyConfig`, `FetchPerformanceConfig`; Validation: `ConfigValidationError`, `validate_credentials()`, `validate_strategy_for_platform()`, `get_active_platforms()`, `canonicalize_credentials()`; Parser helpers: `parse_fetch_strategy()`, `parse_agent_platform()` |
+| `spec/utils/env_utils.py` | Environment variable utilities: `expand_env_vars()`, `expand_env_vars_strict()`, `is_sensitive_key()`, `EnvVarExpansionError`, `SENSITIVE_KEY_PATTERNS` |
+| `tests/test_fetch_config.py` | 39 comprehensive unit tests |
 
 ### Modified Files
 
 | File | Changes |
 |------|---------|
-| `spec/config/manager.py` | Add `get_agent_config()`, `get_fetch_strategy_config()`, `get_fallback_credentials()`, `_expand_env_vars()` |
-| `spec/config/__init__.py` | Export new config classes |
+| `spec/config/manager.py` | Add `get_agent_config()`, `get_fetch_strategy_config()`, `get_fetch_performance_config()`, `get_fallback_credentials()`, `validate_fetch_config()`, `_get_active_platforms()` |
+| `spec/config/__init__.py` | Export new config classes and validation utilities |
 | `spec/config/settings.py` | Add new config keys to `_key_mapping` for flat settings |
 
 ---
@@ -379,17 +382,143 @@ Without any configuration:
 ## Acceptance Criteria Checklist
 
 From the ticket:
-- [ ] `AgentConfig` dataclass with platform and integrations
-- [ ] `FetchStrategyConfig` dataclass with default and per-platform overrides
-- [ ] `FetchPerformanceConfig` for timeout/retry/cache settings
-- [ ] Environment variable expansion (`${VAR}` syntax)
-- [ ] ConfigManager methods for new config sections
-- [ ] Config file template with comments (documented above)
-- [ ] Unit tests for config parsing
-- [ ] Documentation for config options (in docstrings and example config)
+- [x] `AgentConfig` dataclass with platform and integrations
+- [x] `FetchStrategyConfig` dataclass with default and per-platform overrides
+- [x] `FetchPerformanceConfig` for timeout/retry/cache settings
+- [x] Environment variable expansion (`${VAR}` syntax)
+- [x] ConfigManager methods for new config sections
+- [x] Config file template with comments (documented above)
+- [x] Unit tests for config parsing (39 tests)
+- [x] Documentation for config options (in docstrings and example config)
 
 Additional from implementation:
-- [ ] Flat KEY=VALUE format compatible with existing config files
-- [ ] Sensible defaults for all settings
-- [ ] Type hints and docstrings for all public methods
-- [ ] Package exports in `__init__.py`
+- [x] Flat KEY=VALUE format compatible with existing config files
+- [x] Sensible defaults for all settings
+- [x] Type hints and docstrings for all public methods
+- [x] Package exports in `__init__.py`
+
+---
+
+## Additional Features Implemented (Beyond Original Plan)
+
+The implementation exceeded the original plan with these additional features:
+
+### 1. Validation Framework
+
+**File:** `spec/config/fetch_config.py`
+
+- **`ConfigValidationError`** - Exception for fail-fast validation failures
+- **`validate_credentials(platform, credentials, strict)`** - Validates required credential fields per platform
+- **`validate_strategy_for_platform(platform, strategy, agent_config, has_credentials, strict)`** - Validates strategy is viable
+- **`get_active_platforms(raw_config_keys, strategy_config, agent_config)`** - Discovers explicitly configured platforms
+
+```python
+# Validation example
+from spec.config.fetch_config import validate_credentials, ConfigValidationError
+
+try:
+    validate_credentials("jira", {"url": "...", "email": "..."}, strict=True)
+except ConfigValidationError as e:
+    print(f"Missing fields: {e}")  # Missing token
+```
+
+### 2. Performance Bounds with Clamping
+
+**File:** `spec/config/fetch_config.py`
+
+Upper bounds prevent system hangs:
+
+| Setting | Max Value | Notes |
+|---------|-----------|-------|
+| `cache_duration_hours` | 168 (1 week) | Clamped to max |
+| `timeout_seconds` | 300 (5 min) | Clamped to max |
+| `max_retries` | 10 | Clamped to max |
+| `retry_delay_seconds` | 60 | Clamped to max |
+
+Values are clamped in `FetchPerformanceConfig.__post_init__()` with logged warnings.
+
+### 3. Credential Aliasing
+
+**File:** `spec/config/fetch_config.py`
+
+Platform-specific key normalization via `CREDENTIAL_ALIASES` and `canonicalize_credentials()`:
+
+```python
+CREDENTIAL_ALIASES = {
+    "azure_devops": {"org": "organization", "token": "pat"},
+    "jira": {"base_url": "url"},
+    "trello": {"api_token": "token"},
+}
+```
+
+This allows users to use common synonyms that get normalized to canonical keys.
+
+### 4. Scoped Validation
+
+**File:** `spec/config/manager.py`
+
+`ConfigManager.validate_fetch_config()` only validates "active" platforms that are explicitly configured:
+- Platforms in `per_platform` strategy overrides
+- Platforms in `agent.integrations`
+- Platforms with `FALLBACK_{PLATFORM}_*` credentials
+
+This reduces noise by not checking all `KNOWN_PLATFORMS` by default.
+
+### 5. Extracted Environment Utilities
+
+**File:** `spec/utils/env_utils.py`
+
+Environment variable expansion was extracted to a separate utility module:
+
+- **`expand_env_vars(value, strict, context)`** - Recursive expansion with strict mode
+- **`expand_env_vars_strict(value, context)`** - Convenience wrapper for strict mode
+- **`is_sensitive_key(key)`** - Checks if key contains sensitive patterns
+- **`EnvVarExpansionError`** - Exception for missing env vars in strict mode
+- **`SENSITIVE_KEY_PATTERNS`** - Patterns like `TOKEN`, `SECRET`, `PASSWORD`
+
+Sensitive key detection prevents logging secrets:
+
+```python
+if is_sensitive_key("FALLBACK_JIRA_TOKEN"):
+    logger.warning("Missing env var")  # Context omitted
+```
+
+### 6. Safe Enum Parsers
+
+**File:** `spec/config/fetch_config.py`
+
+- **`parse_fetch_strategy(value, default, context)`** - Returns `FetchStrategy` with proper error messages
+- **`parse_agent_platform(value, default, context)`** - Returns `AgentPlatform` with proper error messages
+
+```python
+strategy = parse_fetch_strategy("invalid", context="FETCH_STRATEGY_DEFAULT")
+# Raises: ConfigValidationError("Invalid fetch strategy 'invalid' in FETCH_STRATEGY_DEFAULT...")
+```
+
+### 7. Strict/Non-Strict Modes
+
+All validation supports both modes:
+- **`strict=True`**: Raises `ConfigValidationError` immediately (fail-fast)
+- **`strict=False`**: Returns list of errors/warnings (for debugging/reporting)
+
+---
+
+## Test Coverage
+
+**File:** `tests/test_fetch_config.py` - 39 unit tests
+
+| Category | Tests |
+|----------|-------|
+| Enum parsing | `parse_fetch_strategy()`, `parse_agent_platform()` with valid/invalid/empty values |
+| Dataclass defaults | All fields have sensible defaults |
+| `AgentConfig.supports_platform()` | Case-insensitive platform matching |
+| `FetchStrategyConfig.get_strategy()` | Per-platform overrides and default fallback |
+| `FetchPerformanceConfig` bounds | Upper/lower bound clamping with warnings |
+| Credential validation | Missing fields, empty values, unexpanded env vars |
+| Strategy validation | `AGENT`/`DIRECT`/`AUTO` viability checks |
+| `get_active_platforms()` | Platform discovery from config keys |
+| `canonicalize_credentials()` | Alias normalization |
+| Environment expansion | `expand_env_vars()`, `expand_env_vars_strict()`, nested structures |
+| Sensitive key detection | `is_sensitive_key()` patterns |
+
+All tests pass: `pytest tests/test_fetch_config.py -v`
