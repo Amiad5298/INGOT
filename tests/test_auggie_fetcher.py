@@ -6,22 +6,30 @@ Tests cover:
 - Prompt template retrieval
 - Execute fetch prompt via AuggieClient
 - Full fetch_raw integration with mocked AuggieClient
+- New fetch() method with string platform parameter
+- Timeout functionality
+- Response validation
 """
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock
 
 import pytest
 
 from spec.config.fetch_config import AgentConfig, AgentPlatform
 from spec.integrations.fetchers import (
+    AgentFetchError,
     AgentIntegrationError,
+    AgentResponseParseError,
     AuggieMediatedFetcher,
     PlatformNotSupportedError,
 )
 from spec.integrations.fetchers.auggie_fetcher import (
+    DEFAULT_TIMEOUT_SECONDS,
     PLATFORM_PROMPT_TEMPLATES,
+    REQUIRED_FIELDS,
     SUPPORTED_PLATFORMS,
 )
 from spec.integrations.providers.base import Platform
@@ -221,22 +229,22 @@ class TestAuggieMediatedFetcherExecuteFetchPrompt:
 
     @pytest.mark.asyncio
     async def test_execute_fetch_prompt_empty_response_raises(self, mock_auggie_client):
-        """Raises AgentIntegrationError on empty response."""
+        """Raises AgentFetchError on empty response."""
         mock_auggie_client.run_print_quiet.return_value = ""
         fetcher = AuggieMediatedFetcher(mock_auggie_client)
 
-        with pytest.raises(AgentIntegrationError) as exc_info:
+        with pytest.raises(AgentFetchError) as exc_info:
             await fetcher._execute_fetch_prompt("test prompt", Platform.JIRA)
 
         assert "empty response" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_execute_fetch_prompt_exception_wrapped(self, mock_auggie_client):
-        """Wraps exceptions in AgentIntegrationError."""
+        """Wraps exceptions in AgentFetchError."""
         mock_auggie_client.run_print_quiet.side_effect = RuntimeError("CLI failed")
         fetcher = AuggieMediatedFetcher(mock_auggie_client)
 
-        with pytest.raises(AgentIntegrationError) as exc_info:
+        with pytest.raises(AgentFetchError) as exc_info:
             await fetcher._execute_fetch_prompt("test prompt", Platform.JIRA)
 
         assert "CLI invocation failed" in str(exc_info.value)
@@ -312,7 +320,9 @@ Let me know if you need more info."""
     @pytest.mark.asyncio
     async def test_fetch_raw_prompt_contains_ticket_id(self, mock_auggie_client):
         """Prompt sent to Auggie contains the ticket ID."""
-        mock_auggie_client.run_print_quiet.return_value = '{"key": "ABC-999"}'
+        mock_auggie_client.run_print_quiet.return_value = (
+            '{"key": "ABC-999", "summary": "Test issue"}'
+        )
         fetcher = AuggieMediatedFetcher(mock_auggie_client)
 
         await fetcher.fetch_raw("ABC-999", Platform.JIRA)
@@ -341,3 +351,214 @@ class TestPlatformPromptTemplatesConstant:
             assert (
                 "only" in template.lower() or "ONLY" in template
             ), f"Template for {platform} should request ONLY JSON"
+
+
+class TestAuggieMediatedFetcherFetchMethod:
+    """Tests for fetch() method with string platform parameter."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_string_platform_jira(self, mock_auggie_client):
+        """Can fetch using platform string 'jira'."""
+        mock_auggie_client.run_print_quiet.return_value = (
+            '{"key": "PROJ-123", "summary": "Test issue"}'
+        )
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        result = await fetcher.fetch("PROJ-123", "jira")
+
+        assert result == {"key": "PROJ-123", "summary": "Test issue"}
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_string_platform_linear(self, mock_auggie_client):
+        """Can fetch using platform string 'linear'."""
+        mock_auggie_client.run_print_quiet.return_value = (
+            '{"identifier": "TEAM-42", "title": "Linear issue"}'
+        )
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        result = await fetcher.fetch("TEAM-42", "linear")
+
+        assert result == {"identifier": "TEAM-42", "title": "Linear issue"}
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_string_platform_github(self, mock_auggie_client):
+        """Can fetch using platform string 'github'."""
+        mock_auggie_client.run_print_quiet.return_value = '{"number": 123, "title": "GitHub issue"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        result = await fetcher.fetch("owner/repo#123", "github")
+
+        assert result == {"number": 123, "title": "GitHub issue"}
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_string_platform_case_insensitive(self, mock_auggie_client):
+        """Platform string is case-insensitive."""
+        mock_auggie_client.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        # Test various case combinations
+        result_upper = await fetcher.fetch("PROJ-123", "JIRA")
+        result_mixed = await fetcher.fetch("PROJ-123", "Jira")
+
+        assert result_upper["key"] == "PROJ-123"
+        assert result_mixed["key"] == "PROJ-123"
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_invalid_platform_string_raises(self, mock_auggie_client):
+        """Raises AgentIntegrationError for unknown platform string."""
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        with pytest.raises(AgentIntegrationError) as exc_info:
+            await fetcher.fetch("TICKET-1", "unknown_platform")
+
+        assert "Unknown platform" in str(exc_info.value)
+        assert "unknown_platform" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_fetch_with_timeout_override(self, mock_auggie_client):
+        """Can override timeout in fetch() call."""
+        mock_auggie_client.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client, timeout_seconds=30.0)
+
+        # Override with shorter timeout
+        result = await fetcher.fetch("PROJ-123", "jira", timeout_seconds=10.0)
+
+        assert result == {"key": "PROJ-123", "summary": "Test"}
+        # Verify timeout was restored after call
+        assert fetcher._timeout_seconds == 30.0
+
+
+class TestAuggieMediatedFetcherTimeout:
+    """Tests for timeout functionality."""
+
+    def test_timeout_default_value(self, mock_auggie_client):
+        """Default timeout is DEFAULT_TIMEOUT_SECONDS."""
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        assert fetcher._timeout_seconds == DEFAULT_TIMEOUT_SECONDS
+        assert fetcher._timeout_seconds == 60.0
+
+    def test_timeout_custom_value_in_init(self, mock_auggie_client):
+        """Can set custom timeout in __init__."""
+        fetcher = AuggieMediatedFetcher(mock_auggie_client, timeout_seconds=120.0)
+
+        assert fetcher._timeout_seconds == 120.0
+
+    @pytest.mark.asyncio
+    async def test_timeout_raises_agent_fetch_error(self, mock_auggie_client):
+        """Raises AgentFetchError when timeout expires."""
+
+        async def slow_operation(*args, **kwargs):
+            await asyncio.sleep(10)  # Simulate slow operation
+            return '{"key": "PROJ-123"}'
+
+        # Make run_print_quiet block by using side_effect that sleeps
+        def blocking_call(*args, **kwargs):
+            import time
+
+            time.sleep(10)
+            return '{"key": "PROJ-123"}'
+
+        mock_auggie_client.run_print_quiet.side_effect = blocking_call
+        fetcher = AuggieMediatedFetcher(mock_auggie_client, timeout_seconds=0.1)
+
+        with pytest.raises(AgentFetchError) as exc_info:
+            await fetcher._execute_fetch_prompt("test prompt", Platform.JIRA)
+
+        assert "timed out" in str(exc_info.value)
+        assert "0.1s" in str(exc_info.value)
+
+
+class TestAuggieMediatedFetcherValidation:
+    """Tests for response validation."""
+
+    @pytest.mark.asyncio
+    async def test_validation_passes_with_required_fields_jira(self, mock_auggie_client):
+        """Validation passes when all required Jira fields present."""
+        mock_auggie_client.run_print_quiet.return_value = (
+            '{"key": "PROJ-123", "summary": "Test", "status": "Open"}'
+        )
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        result = await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
+
+        assert result["key"] == "PROJ-123"
+        assert result["summary"] == "Test"
+
+    @pytest.mark.asyncio
+    async def test_validation_passes_with_required_fields_linear(self, mock_auggie_client):
+        """Validation passes when all required Linear fields present."""
+        mock_auggie_client.run_print_quiet.return_value = (
+            '{"identifier": "TEAM-42", "title": "Linear issue"}'
+        )
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        result = await fetcher.fetch_raw("TEAM-42", Platform.LINEAR)
+
+        assert result["identifier"] == "TEAM-42"
+        assert result["title"] == "Linear issue"
+
+    @pytest.mark.asyncio
+    async def test_validation_passes_with_required_fields_github(self, mock_auggie_client):
+        """Validation passes when all required GitHub fields present."""
+        mock_auggie_client.run_print_quiet.return_value = '{"number": 123, "title": "GitHub issue"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        result = await fetcher.fetch_raw("owner/repo#123", Platform.GITHUB)
+
+        assert result["number"] == 123
+        assert result["title"] == "GitHub issue"
+
+    @pytest.mark.asyncio
+    async def test_validation_fails_missing_jira_key(self, mock_auggie_client):
+        """Raises AgentResponseParseError when Jira 'key' missing."""
+        mock_auggie_client.run_print_quiet.return_value = '{"summary": "Test issue"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        with pytest.raises(AgentResponseParseError) as exc_info:
+            await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
+
+        assert "missing required fields" in str(exc_info.value)
+        assert "key" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_validation_fails_missing_jira_summary(self, mock_auggie_client):
+        """Raises AgentResponseParseError when Jira 'summary' missing."""
+        mock_auggie_client.run_print_quiet.return_value = '{"key": "PROJ-123"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        with pytest.raises(AgentResponseParseError) as exc_info:
+            await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
+
+        assert "missing required fields" in str(exc_info.value)
+        assert "summary" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_validation_fails_missing_linear_identifier(self, mock_auggie_client):
+        """Raises AgentResponseParseError when Linear 'identifier' missing."""
+        mock_auggie_client.run_print_quiet.return_value = '{"title": "Linear issue"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        with pytest.raises(AgentResponseParseError) as exc_info:
+            await fetcher.fetch_raw("TEAM-42", Platform.LINEAR)
+
+        assert "missing required fields" in str(exc_info.value)
+        assert "identifier" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_validation_fails_missing_github_number(self, mock_auggie_client):
+        """Raises AgentResponseParseError when GitHub 'number' missing."""
+        mock_auggie_client.run_print_quiet.return_value = '{"title": "GitHub issue"}'
+        fetcher = AuggieMediatedFetcher(mock_auggie_client)
+
+        with pytest.raises(AgentResponseParseError) as exc_info:
+            await fetcher.fetch_raw("owner/repo#123", Platform.GITHUB)
+
+        assert "missing required fields" in str(exc_info.value)
+        assert "number" in str(exc_info.value)
+
+    def test_required_fields_defined_for_all_supported_platforms(self):
+        """REQUIRED_FIELDS has entries for all SUPPORTED_PLATFORMS."""
+        for platform in SUPPORTED_PLATFORMS:
+            assert platform in REQUIRED_FIELDS, f"Missing REQUIRED_FIELDS for {platform}"
+            assert len(REQUIRED_FIELDS[platform]) > 0, f"Empty REQUIRED_FIELDS for {platform}"

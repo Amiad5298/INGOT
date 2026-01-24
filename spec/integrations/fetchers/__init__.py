@@ -14,7 +14,9 @@ Classes:
 Exceptions:
     TicketFetchError: Base exception for fetch failures
     PlatformNotSupportedError: Fetcher doesn't support requested platform
-    AgentIntegrationError: Agent integration failure
+    AgentIntegrationError: Agent integration/configuration failure
+    AgentFetchError: Tool execution failed during fetch
+    AgentResponseParseError: JSON output was malformed
 """
 
 from spec.integrations.fetchers.auggie_fetcher import AuggieMediatedFetcher
@@ -23,7 +25,9 @@ from spec.integrations.fetchers.base import (
     TicketFetcher,
 )
 from spec.integrations.fetchers.exceptions import (
+    AgentFetchError,
     AgentIntegrationError,
+    AgentResponseParseError,
     PlatformNotSupportedError,
     TicketFetchError,
 )
@@ -38,4 +42,6 @@ __all__ = [
     "TicketFetchError",
     "PlatformNotSupportedError",
     "AgentIntegrationError",
+    "AgentFetchError",
+    "AgentResponseParseError",
 ]
