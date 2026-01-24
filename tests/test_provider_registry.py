@@ -5,11 +5,13 @@ Tests cover:
 - Singleton instance creation
 - Platform lookup and error handling
 - get_provider_for_input() with PlatformDetector
-- Thread safety
+- Thread safety for all operations
 - clear() for test isolation
 - Dependency injection for UserInteractionInterface
+- Registration validation and duplicate handling
 """
 
+import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
@@ -100,6 +102,40 @@ class MockGitHubProvider(IssueTrackerProvider):
         return True, "Connected"
 
 
+class MockLinearProviderWithDI(IssueTrackerProvider):
+    """Mock Linear provider that accepts user_interaction for DI testing."""
+
+    PLATFORM = Platform.LINEAR
+
+    def __init__(self, user_interaction: UserInteractionInterface | None = None):
+        self.user_interaction = user_interaction
+
+    @property
+    def platform(self) -> Platform:
+        return Platform.LINEAR
+
+    @property
+    def name(self) -> str:
+        return "Mock Linear"
+
+    def can_handle(self, input_str: str) -> bool:
+        return "linear" in input_str.lower()
+
+    def parse_input(self, input_str: str) -> str:
+        return input_str
+
+    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
+        return GenericTicket(
+            id=ticket_id,
+            platform=Platform.LINEAR,
+            url=f"https://linear.app/team/issue/{ticket_id}",
+            title="Mock Linear Issue",
+        )
+
+    def check_connection(self) -> tuple[bool, str]:
+        return True, "Connected"
+
+
 class TestProviderRegistryRegister:
     """Tests for @ProviderRegistry.register decorator."""
 
@@ -159,6 +195,72 @@ class TestProviderRegistryRegister:
         assert len(ProviderRegistry._providers) == 2
         assert Platform.JIRA in ProviderRegistry._providers
         assert Platform.GITHUB in ProviderRegistry._providers
+
+    def test_register_non_subclass_raises_typeerror(self):
+        """Non-IssueTrackerProvider subclass raises TypeError."""
+        with pytest.raises(TypeError) as exc_info:
+
+            @ProviderRegistry.register
+            class NotAProvider:
+                PLATFORM = Platform.JIRA
+
+        assert "subclass of IssueTrackerProvider" in str(exc_info.value)
+
+    def test_register_duplicate_same_class_is_noop(self):
+        """Re-registering the same class is a no-op."""
+        ProviderRegistry.register(MockJiraProvider)
+        ProviderRegistry.register(MockJiraProvider)
+
+        assert ProviderRegistry._providers[Platform.JIRA] is MockJiraProvider
+        assert len(ProviderRegistry._providers) == 1
+
+    def test_register_duplicate_different_class_replaces(self, caplog):
+        """Registering different class for same platform replaces it with warning."""
+        ProviderRegistry.register(MockJiraProvider)
+
+        @ProviderRegistry.register
+        class AnotherJiraProvider(MockJiraProvider):
+            PLATFORM = Platform.JIRA
+
+        # Should be replaced
+        assert ProviderRegistry._providers[Platform.JIRA] is AnotherJiraProvider
+        # Warning should be logged
+        assert "Replacing existing provider" in caplog.text
+
+    def test_register_duplicate_clears_existing_instance(self):
+        """Registering new provider clears existing cached instance."""
+        ProviderRegistry.register(MockJiraProvider)
+        instance1 = ProviderRegistry.get_provider(Platform.JIRA)
+        assert Platform.JIRA in ProviderRegistry._instances
+
+        @ProviderRegistry.register
+        class AnotherJiraProvider(MockJiraProvider):
+            PLATFORM = Platform.JIRA
+
+        # Instance should be cleared
+        assert Platform.JIRA not in ProviderRegistry._instances
+
+        # Getting provider should create new instance
+        instance2 = ProviderRegistry.get_provider(Platform.JIRA)
+        assert isinstance(instance2, AnotherJiraProvider)
+        assert instance2 is not instance1
+
+    def test_register_does_not_instantiate_provider(self):
+        """Registration should not call provider's __init__."""
+        init_called = False
+
+        class TrackedProvider(MockJiraProvider):
+            PLATFORM = Platform.JIRA
+
+            def __init__(self):
+                nonlocal init_called
+                init_called = True
+                super().__init__()
+
+        ProviderRegistry.register(TrackedProvider)
+
+        assert not init_called
+        assert Platform.JIRA not in ProviderRegistry._instances
 
 
 class TestProviderRegistryGetProvider:
@@ -270,6 +372,19 @@ class TestProviderRegistryUtilityMethods:
         platforms = ProviderRegistry.list_platforms()
         assert platforms == []
 
+    def test_list_platforms_returns_sorted_deterministically(self):
+        """list_platforms() returns sorted list for deterministic output."""
+        # Register in non-alphabetical order
+        ProviderRegistry.register(MockJiraProvider)
+        ProviderRegistry.register(MockGitHubProvider)
+        ProviderRegistry.register(MockLinearProviderWithDI)
+
+        platforms = ProviderRegistry.list_platforms()
+
+        # Should be sorted alphabetically by platform name
+        platform_names = [p.name for p in platforms]
+        assert platform_names == sorted(platform_names)
+
     def test_clear_resets_providers_and_instances(self):
         """clear() removes all providers and instances."""
         ProviderRegistry.register(MockJiraProvider)
@@ -286,13 +401,23 @@ class TestProviderRegistryUtilityMethods:
         assert len(ProviderRegistry._providers) == 0
         assert len(ProviderRegistry._instances) == 0
 
+    def test_clear_resets_user_interaction_to_cli(self):
+        """clear() resets user interaction to CLIUserInteraction."""
+        mock_ui = MagicMock(spec=UserInteractionInterface)
+        ProviderRegistry.set_user_interaction(mock_ui)
+
+        ProviderRegistry.clear()
+
+        ui = ProviderRegistry.get_user_interaction()
+        assert isinstance(ui, CLIUserInteraction)
+
     def test_set_user_interaction(self):
         """set_user_interaction() sets the UI implementation."""
         mock_ui = MagicMock(spec=UserInteractionInterface)
 
         ProviderRegistry.set_user_interaction(mock_ui)
 
-        assert ProviderRegistry._user_interaction is mock_ui
+        assert ProviderRegistry.get_user_interaction() is mock_ui
 
     def test_get_user_interaction_returns_current(self):
         """get_user_interaction() returns current implementation."""
@@ -398,6 +523,79 @@ class TestProviderRegistryThreadSafety:
         assert results["registered"] is True
 
 
+class TestProviderRegistryDependencyInjection:
+    """Tests for dependency injection of UserInteractionInterface."""
+
+    def test_di_injected_into_provider_with_user_interaction_param(self):
+        """UserInteractionInterface is injected into providers that accept it."""
+        mock_ui = MagicMock(spec=UserInteractionInterface)
+        ProviderRegistry.set_user_interaction(mock_ui)
+        ProviderRegistry.register(MockLinearProviderWithDI)
+
+        provider = ProviderRegistry.get_provider(Platform.LINEAR)
+
+        assert provider.user_interaction is mock_ui
+
+    def test_di_not_injected_into_provider_without_param(self):
+        """Providers without user_interaction param are created without injection."""
+        ProviderRegistry.register(MockJiraProvider)
+
+        # Should not raise - provider doesn't expect user_interaction
+        provider = ProviderRegistry.get_provider(Platform.JIRA)
+
+        assert isinstance(provider, MockJiraProvider)
+
+    def test_set_user_interaction_affects_new_providers(self):
+        """set_user_interaction affects newly created providers."""
+        ProviderRegistry.register(MockLinearProviderWithDI)
+
+        # Set UI before first get
+        mock_ui = MagicMock(spec=UserInteractionInterface)
+        ProviderRegistry.set_user_interaction(mock_ui)
+
+        provider = ProviderRegistry.get_provider(Platform.LINEAR)
+
+        assert provider.user_interaction is mock_ui
+
+    def test_set_user_interaction_does_not_affect_existing_instances(self):
+        """set_user_interaction does NOT affect already-created instances."""
+        ProviderRegistry.register(MockLinearProviderWithDI)
+
+        # First UI
+        mock_ui1 = MagicMock(spec=UserInteractionInterface)
+        ProviderRegistry.set_user_interaction(mock_ui1)
+        provider1 = ProviderRegistry.get_provider(Platform.LINEAR)
+
+        # Change UI
+        mock_ui2 = MagicMock(spec=UserInteractionInterface)
+        ProviderRegistry.set_user_interaction(mock_ui2)
+        provider2 = ProviderRegistry.get_provider(Platform.LINEAR)
+
+        # Same instance, still has old UI
+        assert provider1 is provider2
+        assert provider1.user_interaction is mock_ui1
+
+    def test_clear_then_recreate_uses_new_ui(self):
+        """After clear(), new providers get the newly set UI."""
+        ProviderRegistry.register(MockLinearProviderWithDI)
+
+        mock_ui1 = MagicMock(spec=UserInteractionInterface)
+        ProviderRegistry.set_user_interaction(mock_ui1)
+        provider1 = ProviderRegistry.get_provider(Platform.LINEAR)
+
+        # Clear and re-register
+        ProviderRegistry.clear()
+        mock_ui2 = MagicMock(spec=UserInteractionInterface)
+        ProviderRegistry.set_user_interaction(mock_ui2)
+        ProviderRegistry.register(MockLinearProviderWithDI)
+
+        provider2 = ProviderRegistry.get_provider(Platform.LINEAR)
+
+        # Different instance with new UI
+        assert provider2 is not provider1
+        assert provider2.user_interaction is mock_ui2
+
+
 class TestProviderRegistryImport:
     """Tests for module imports."""
 
@@ -412,3 +610,80 @@ class TestProviderRegistryImport:
         from spec.integrations.providers import __all__
 
         assert "ProviderRegistry" in __all__
+
+
+class TestProviderRegistryConcurrentClearAndRegister:
+    """Additional thread safety tests using queue for more rigorous results."""
+
+    def test_concurrent_clear_and_register_no_exceptions(self):
+        """Concurrent clear and register operations don't raise exceptions."""
+        error_queue = queue.Queue()
+
+        def clear_op():
+            try:
+                for _ in range(10):
+                    ProviderRegistry.clear()
+            except Exception as e:
+                error_queue.put(e)
+
+        def register_op():
+            try:
+                for _ in range(10):
+                    ProviderRegistry.register(MockJiraProvider)
+            except Exception as e:
+                error_queue.put(e)
+
+        threads = [
+            threading.Thread(target=clear_op),
+            threading.Thread(target=register_op),
+            threading.Thread(target=clear_op),
+            threading.Thread(target=register_op),
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # No errors
+        assert error_queue.empty()
+
+    def test_concurrent_register_multiple_platforms(self):
+        """Concurrent registration of multiple platforms works correctly."""
+        error_queue = queue.Queue()
+
+        def register_jira():
+            try:
+                ProviderRegistry.register(MockJiraProvider)
+            except Exception as e:
+                error_queue.put(e)
+
+        def register_github():
+            try:
+                ProviderRegistry.register(MockGitHubProvider)
+            except Exception as e:
+                error_queue.put(e)
+
+        def register_linear():
+            try:
+                ProviderRegistry.register(MockLinearProviderWithDI)
+            except Exception as e:
+                error_queue.put(e)
+
+        threads = [
+            threading.Thread(target=register_jira),
+            threading.Thread(target=register_github),
+            threading.Thread(target=register_linear),
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # No errors
+        assert error_queue.empty()
+
+        # All platforms registered
+        platforms = ProviderRegistry.list_platforms()
+        assert len(platforms) == 3
