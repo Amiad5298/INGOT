@@ -169,6 +169,26 @@ class TestGetCredentials:
         assert creds.credentials == {}
         assert "token" in creds.error_message.lower()
 
+    def test_get_credentials_unknown_exception_returns_generic_message(self, mock_config_manager):
+        """Unknown exceptions return generic message to avoid leaking secrets.
+
+        SECURITY: If ConfigManager raises an error containing raw secrets
+        (e.g., "Invalid token 'sk-123...'"), we must NOT expose that in error_message.
+        """
+        # Simulate an unknown exception that might contain a secret in the message
+        mock_config_manager.get_fallback_credentials.side_effect = RuntimeError(
+            "Invalid token 'sk-secret-token-12345'"
+        )
+        auth_manager = AuthenticationManager(mock_config_manager)
+
+        creds = auth_manager.get_credentials(Platform.GITHUB)
+
+        assert creds.is_configured is False
+        assert creds.credentials == {}
+        # Should return generic message, NOT the exception message with the secret
+        assert "sk-secret-token" not in creds.error_message
+        assert "Failed to load credentials" in creds.error_message
+
     def test_get_credentials_all_platforms(self, mock_config_manager):
         """Can request credentials for all supported platforms."""
         auth_manager = AuthenticationManager(mock_config_manager)
@@ -246,32 +266,35 @@ class TestGetCredentials:
         keys expected by ConfigManager. If the Enum name ever changes (e.g.,
         AZURE_DEVOPS -> AZUREDEVOPS), this test will fail, preventing a
         regression in credential loading.
+
+        NOTE: We verify only critical arguments (platform_name, strict=True)
+        using call_args to avoid brittleness if ConfigManager adds optional parameters.
         """
         mock_config_manager.get_fallback_credentials.return_value = {"token": "test"}
         auth_manager = AuthenticationManager(mock_config_manager)
 
         # Test AZURE_DEVOPS specifically - its underscore is critical
         auth_manager.get_credentials(Platform.AZURE_DEVOPS)
-        mock_config_manager.get_fallback_credentials.assert_called_with(
-            "azure_devops", strict=True, validate=True
-        )
+        call_args = mock_config_manager.get_fallback_credentials.call_args
+        assert call_args.args[0] == "azure_devops"
+        assert call_args.kwargs.get("strict") is True
 
         # Test other platforms to ensure consistent naming contract
         mock_config_manager.reset_mock()
         mock_config_manager.get_fallback_credentials.return_value = {"token": "test"}
 
         auth_manager.get_credentials(Platform.JIRA)
-        mock_config_manager.get_fallback_credentials.assert_called_with(
-            "jira", strict=True, validate=True
-        )
+        call_args = mock_config_manager.get_fallback_credentials.call_args
+        assert call_args.args[0] == "jira"
+        assert call_args.kwargs.get("strict") is True
 
         mock_config_manager.reset_mock()
         mock_config_manager.get_fallback_credentials.return_value = {"token": "test"}
 
         auth_manager.get_credentials(Platform.GITHUB)
-        mock_config_manager.get_fallback_credentials.assert_called_with(
-            "github", strict=True, validate=True
-        )
+        call_args = mock_config_manager.get_fallback_credentials.call_args
+        assert call_args.args[0] == "github"
+        assert call_args.kwargs.get("strict") is True
 
 
 # =============================================================================
@@ -304,6 +327,43 @@ class TestHasFallbackConfigured:
         assert auth_manager.has_fallback_configured(Platform.AZURE_DEVOPS) is False
         assert auth_manager.has_fallback_configured(Platform.MONDAY) is False
         assert auth_manager.has_fallback_configured(Platform.TRELLO) is False
+
+    def test_has_fallback_configured_false_positive_prevention(self, mock_config_manager):
+        """Returns False when credentials exist but no required key is present.
+
+        This tests the fix for false positives where a user has a typo
+        (e.g., FALLBACK_JIRA_TOKE instead of FALLBACK_JIRA_TOKEN).
+        """
+
+        def get_creds_with_typo(platform, **kwargs):
+            if platform == "jira":
+                # Simulates typo: FALLBACK_JIRA_TOKE instead of FALLBACK_JIRA_TOKEN
+                return {
+                    "toke": "abc123",  # typo - not a required key
+                    "emal": "user@example.com",  # typo - not a required key
+                }
+            return None
+
+        mock_config_manager.get_fallback_credentials.side_effect = get_creds_with_typo
+        auth_manager = AuthenticationManager(mock_config_manager)
+
+        # Should return False because no required keys (url, email, token) are present
+        assert auth_manager.has_fallback_configured(Platform.JIRA) is False
+
+    def test_has_fallback_configured_with_at_least_one_required_key(self, mock_config_manager):
+        """Returns True when at least one required key exists."""
+
+        def get_creds_partial(platform, **kwargs):
+            if platform == "jira":
+                # Has one required key (token), missing others
+                return {"token": "abc123"}
+            return None
+
+        mock_config_manager.get_fallback_credentials.side_effect = get_creds_partial
+        auth_manager = AuthenticationManager(mock_config_manager)
+
+        # Should return True because at least one required key (token) is present
+        assert auth_manager.has_fallback_configured(Platform.JIRA) is True
 
 
 # =============================================================================

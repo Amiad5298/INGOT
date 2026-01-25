@@ -18,7 +18,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from spec.config.manager import ConfigManager
 
+from spec.config import ConfigValidationError
+from spec.config.fetch_config import PLATFORM_REQUIRED_CREDENTIALS
 from spec.integrations.providers.base import Platform
+from spec.utils.env_utils import EnvVarExpansionError
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +143,8 @@ class AuthenticationManager:
                 strict=True,  # Fail on missing env vars
                 validate=True,  # Validate required fields
             )
-        except Exception as e:
-            # SECURITY: Only log exception type, not message (may contain credentials)
+        except (EnvVarExpansionError, ConfigValidationError) as e:
+            # Known safe exceptions - their messages are designed for user display
             logger.debug(
                 "Failed to get credentials for %s: %s",
                 platform_name,
@@ -151,6 +154,19 @@ class AuthenticationManager:
                 platform=platform,
                 is_configured=False,
                 error_message=str(e),
+            )
+        except Exception as e:
+            # SECURITY: Unknown exceptions may contain secrets in their message
+            # (e.g., "Invalid token 'sk-123...'"). Return generic message to avoid leaks.
+            logger.debug(
+                "Failed to get credentials for %s: %s",
+                platform_name,
+                type(e).__name__,
+            )
+            return PlatformCredentials(
+                platform=platform,
+                is_configured=False,
+                error_message=f"Failed to load credentials for {platform_name}",
             )
 
         if credentials is None:
@@ -170,16 +186,16 @@ class AuthenticationManager:
     def has_fallback_configured(self, platform: Platform) -> bool:
         """Quick check if fallback credentials exist for a platform.
 
-        This performs a lightweight check that only verifies credential keys
-        exist in the configuration, without strict validation (e.g., env var
-        expansion). For full validation, use get_credentials() instead.
+        This performs a lightweight check that verifies at least one REQUIRED
+        credential key exists in the configuration, without strict validation
+        (e.g., env var expansion). For full validation, use get_credentials() instead.
 
         Args:
             platform: Platform to check
 
         Returns:
-            True if credential keys exist for the platform (may still fail
-            full validation due to missing env vars or empty values)
+            True if at least one required credential key exists for the platform
+            (may still fail full validation due to missing env vars or empty values)
         """
         if platform not in self.SUPPORTED_FALLBACK_PLATFORMS:
             return False
@@ -193,7 +209,18 @@ class AuthenticationManager:
                 strict=False,  # Don't fail on unexpanded env vars
                 validate=False,  # Don't validate required fields
             )
-            return credentials is not None and len(credentials) > 0
+            if credentials is None or len(credentials) == 0:
+                return False
+
+            # Verify at least one REQUIRED key exists to avoid false positives
+            # from typos or irrelevant keys (e.g., FALLBACK_JIRA_TOKE vs FALLBACK_JIRA_TOKEN)
+            required_keys = PLATFORM_REQUIRED_CREDENTIALS.get(platform_name, frozenset())
+            if not required_keys:
+                # Unknown platform - fall back to basic check
+                return True
+
+            credential_keys = set(credentials.keys())
+            return bool(credential_keys & required_keys)
         except Exception:
             return False
 
