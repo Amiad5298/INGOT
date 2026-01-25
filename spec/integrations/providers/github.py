@@ -130,19 +130,17 @@ class GitHubProvider(IssueTrackerProvider):
 
     PLATFORM = Platform.GITHUB
 
-    # URL patterns for GitHub (supports both github.com and GitHub Enterprise)
-    _URL_PATTERNS = [
-        # Standard GitHub.com issue/PR URL
-        re.compile(
-            r"https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/(issues|pull)/(?P<number>\d+)",
-            re.IGNORECASE,
-        ),
-        # GitHub Enterprise URL pattern (any domain with /issues/ or /pull/)
-        re.compile(
-            r"https?://(?P<host>[^/]+)/(?P<owner>[^/]+)/(?P<repo>[^/]+)/(issues|pull)/(?P<number>\d+)",
-            re.IGNORECASE,
-        ),
-    ]
+    # URL pattern for GitHub.com only (strict validation)
+    _GITHUB_COM_PATTERN = re.compile(
+        r"https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/(issues|pull)/(?P<number>\d+)",
+        re.IGNORECASE,
+    )
+
+    # Generic URL pattern for extracting components (used with explicit Enterprise host validation)
+    _GENERIC_URL_PATTERN = re.compile(
+        r"https?://(?P<host>[^/]+)/(?P<owner>[^/]+)/(?P<repo>[^/]+)/(issues|pull)/(?P<number>\d+)",
+        re.IGNORECASE,
+    )
 
     # Short reference pattern: owner/repo#123
     _SHORT_REF_PATTERN = re.compile(r"^(?P<owner>[^/]+)/(?P<repo>[^/]+)#(?P<number>\d+)$")
@@ -186,21 +184,58 @@ class GitHubProvider(IssueTrackerProvider):
         """Human-readable provider name."""
         return "GitHub Issues"
 
+    def _get_allowed_hosts(self) -> set[str]:
+        """Return the set of allowed hosts for URL validation.
+
+        Returns:
+            Set containing 'github.com' and optionally the configured Enterprise host.
+        """
+        allowed = {"github.com"}
+        github_base_url = os.environ.get("GITHUB_BASE_URL")
+        if github_base_url:
+            # Extract host from base URL (e.g., "https://github.mycompany.com" -> "github.mycompany.com")
+            base_host_match = re.match(r"https?://([^/]+)", github_base_url)
+            if base_host_match:
+                allowed.add(base_host_match.group(1).lower())
+        return allowed
+
+    def _is_allowed_url(self, input_str: str) -> tuple[bool, re.Match | None]:
+        """Check if a URL matches an allowed host.
+
+        Args:
+            input_str: URL to check
+
+        Returns:
+            Tuple of (is_allowed, match_object). match_object is None if not allowed.
+        """
+        # First try github.com pattern (always allowed)
+        match = self._GITHUB_COM_PATTERN.match(input_str)
+        if match:
+            return True, match
+
+        # Try generic pattern and check if host is allowed
+        match = self._GENERIC_URL_PATTERN.match(input_str)
+        if match:
+            host = match.group("host").lower()
+            allowed_hosts = self._get_allowed_hosts()
+            if host in allowed_hosts:
+                return True, match
+
+        return False, None
+
     def can_handle(self, input_str: str) -> bool:
         """Check if this provider can handle the given input.
 
         Recognizes:
         - GitHub URLs: https://github.com/owner/repo/issues/123
         - GitHub PR URLs: https://github.com/owner/repo/pull/123
-        - GitHub Enterprise URLs: https://github.company.com/owner/repo/issues/123
+        - GitHub Enterprise URLs: ONLY when GITHUB_BASE_URL env var is set
         - Short references: owner/repo#123
         - Bare issue numbers: #123 (ONLY if default owner/repo are configured)
 
         GitHub Enterprise Behavior:
-            When GITHUB_BASE_URL is set, the catch-all URL pattern validates that
-            the host matches the configured base URL. If GITHUB_BASE_URL is not set,
-            the provider uses permissive matching for any domain with /issues/ or
-            /pull/ paths.
+            Enterprise URLs are ONLY accepted when GITHUB_BASE_URL is explicitly set.
+            The provider is secure by default and does not accept arbitrary domains.
 
         Args:
             input_str: URL or ticket reference to check
@@ -210,31 +245,10 @@ class GitHubProvider(IssueTrackerProvider):
         """
         input_str = input_str.strip()
 
-        # Check GitHub Enterprise URL constraint if GITHUB_BASE_URL is set
-        github_base_url = os.environ.get("GITHUB_BASE_URL")
-
-        # Check URL patterns (unambiguous GitHub detection)
-        for i, pattern in enumerate(self._URL_PATTERNS):
-            match = pattern.match(input_str)
-            if match:
-                # First pattern is github.com-specific, always accept
-                if i == 0:
-                    return True
-                # Second pattern is the catch-all for GitHub Enterprise
-                # If GITHUB_BASE_URL is set, validate the host matches
-                if github_base_url:
-                    host = match.group("host")
-                    # Extract host from base URL (e.g., "https://github.mycompany.com" -> "github.mycompany.com")
-                    base_host_match = re.match(r"https?://([^/]+)", github_base_url)
-                    if base_host_match:
-                        expected_host = base_host_match.group(1)
-                        if host.lower() == expected_host.lower():
-                            return True
-                    # Host doesn't match configured base URL, skip
-                else:
-                    # GITHUB_BASE_URL not set - permissive behavior for backward compatibility
-                    # WARNING: This accepts any domain with GitHub-like URL structure
-                    return True
+        # Check if URL matches an allowed host (github.com or configured Enterprise)
+        is_allowed, _ = self._is_allowed_url(input_str)
+        if is_allowed:
+            return True
 
         # Check short reference pattern (owner/repo#123)
         if self._SHORT_REF_PATTERN.match(input_str):
@@ -257,18 +271,33 @@ class GitHubProvider(IssueTrackerProvider):
             Examples: "octocat/Hello-World#42", "myorg/backend#1234"
 
         Raises:
-            ValueError: If input cannot be parsed
+            ValueError: If input cannot be parsed or domain is not allowed
         """
         input_str = input_str.strip()
 
-        # Try URL patterns first
-        for pattern in self._URL_PATTERNS:
-            match = pattern.match(input_str)
-            if match:
-                owner = match.group("owner")
-                repo = match.group("repo")
-                number = match.group("number")
-                return f"{owner}/{repo}#{number}"
+        # Try URL patterns first - with strict domain validation
+        is_allowed, match = self._is_allowed_url(input_str)
+        if match:
+            if not is_allowed:
+                # URL structure matches but domain is not allowed
+                host = match.group("host") if "host" in match.groupdict() else "unknown"
+                raise ValueError(
+                    f"Domain '{host}' is not allowed. Only github.com or explicitly "
+                    f"configured GITHUB_BASE_URL hosts are accepted."
+                )
+            owner = match.group("owner")
+            repo = match.group("repo")
+            number = match.group("number")
+            return f"{owner}/{repo}#{number}"
+
+        # Check if it looks like a URL but didn't match allowed hosts
+        generic_match = self._GENERIC_URL_PATTERN.match(input_str)
+        if generic_match:
+            host = generic_match.group("host")
+            raise ValueError(
+                f"Domain '{host}' is not allowed. Only github.com or explicitly "
+                f"configured GITHUB_BASE_URL hosts are accepted."
+            )
 
         # Try short reference pattern (owner/repo#123)
         match = self._SHORT_REF_PATTERN.match(input_str)
@@ -322,10 +351,11 @@ class GitHubProvider(IssueTrackerProvider):
         state_reason = raw_data.get("state_reason", "")
 
         # Check if this is a PR
-        # Primary: check pull_request field; Fallback: check if /pull/ in html_url
+        # Primary: check pull_request field; Fallback: use strict regex on html_url
         # This handles cases where data source (like an LLM) might omit the pull_request field
+        # Using stricter regex to avoid false positives (e.g., "/pull/request" would not match)
         is_pr = raw_data.get("pull_request") is not None
-        if not is_pr and "/pull/" in html_url:
+        if not is_pr and re.search(r"/pull/\d+", html_url):
             is_pr = True
         merged_at = raw_data.get("merged_at")
 

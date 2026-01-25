@@ -99,7 +99,7 @@ class TestGitHubProviderCanHandle:
         """Provider recognizes valid GitHub.com URLs."""
         assert provider.can_handle(url) is True
 
-    # GitHub Enterprise URLs
+    # GitHub Enterprise URLs - should NOT be accepted without explicit configuration
     @pytest.mark.parametrize(
         "url",
         [
@@ -107,9 +107,9 @@ class TestGitHubProviderCanHandle:
             "https://github.enterprise.corp/org/project/pull/42",
         ],
     )
-    def test_can_handle_github_enterprise_urls(self, provider, url):
-        """Provider recognizes GitHub Enterprise URLs."""
-        assert provider.can_handle(url) is True
+    def test_can_handle_github_enterprise_urls_without_config(self, provider, url):
+        """Provider rejects GitHub Enterprise URLs when GITHUB_BASE_URL is not set."""
+        assert provider.can_handle(url) is False
 
     # Valid short references
     @pytest.mark.parametrize(
@@ -145,6 +145,47 @@ class TestGitHubProviderCanHandle:
         assert provider.can_handle(input_str) is False
 
 
+class TestGitHubEnterpriseWithConfig:
+    """Test GitHub Enterprise URL handling with GITHUB_BASE_URL configured."""
+
+    @pytest.fixture
+    def provider_with_ghe(self, monkeypatch):
+        """Create a GitHubProvider with mocked GITHUB_BASE_URL."""
+        monkeypatch.setenv("GITHUB_BASE_URL", "https://github.mycompany.com")
+        return GitHubProvider()
+
+    def test_can_handle_configured_enterprise_url(self, provider_with_ghe):
+        """Provider accepts Enterprise URL when GITHUB_BASE_URL matches."""
+        url = "https://github.mycompany.com/owner/repo/issues/99"
+        assert provider_with_ghe.can_handle(url) is True
+
+    def test_can_handle_configured_enterprise_pr_url(self, provider_with_ghe):
+        """Provider accepts Enterprise PR URL when GITHUB_BASE_URL matches."""
+        url = "https://github.mycompany.com/org/project/pull/42"
+        assert provider_with_ghe.can_handle(url) is True
+
+    def test_can_handle_github_com_with_enterprise_config(self, provider_with_ghe):
+        """Provider still accepts github.com URLs when Enterprise is configured."""
+        url = "https://github.com/owner/repo/issues/123"
+        assert provider_with_ghe.can_handle(url) is True
+
+    def test_can_handle_wrong_enterprise_url(self, provider_with_ghe):
+        """Provider rejects Enterprise URL when host doesn't match config."""
+        url = "https://github.othercompany.com/owner/repo/issues/99"
+        assert provider_with_ghe.can_handle(url) is False
+
+    def test_parse_configured_enterprise_url(self, provider_with_ghe):
+        """Parse Enterprise URL when GITHUB_BASE_URL matches."""
+        url = "https://github.mycompany.com/org/project/issues/99"
+        assert provider_with_ghe.parse_input(url) == "org/project#99"
+
+    def test_parse_wrong_enterprise_url_raises(self, provider_with_ghe):
+        """Parse raises ValueError when Enterprise host doesn't match config."""
+        url = "https://github.othercompany.com/org/project/issues/99"
+        with pytest.raises(ValueError, match="not allowed"):
+            provider_with_ghe.parse_input(url)
+
+
 class TestGitHubProviderParseInput:
     """Test parse_input() method."""
 
@@ -158,10 +199,11 @@ class TestGitHubProviderParseInput:
         url = "https://github.com/owner/repo/pull/123"
         assert provider.parse_input(url) == "owner/repo#123"
 
-    def test_parse_ghe_url(self, provider):
-        """Parse GitHub Enterprise URL."""
+    def test_parse_ghe_url_without_config_raises(self, provider):
+        """Parse GitHub Enterprise URL without config raises ValueError."""
         url = "https://github.company.com/org/project/issues/99"
-        assert provider.parse_input(url) == "org/project#99"
+        with pytest.raises(ValueError, match="not allowed"):
+            provider.parse_input(url)
 
     def test_parse_short_ref(self, provider):
         """Parse short reference format."""
