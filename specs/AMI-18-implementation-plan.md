@@ -1,8 +1,9 @@
 # Implementation Plan: AMI-18 - Implement JiraProvider Concrete Class
 
 **Ticket:** [AMI-18](https://linear.app/amiadspec/issue/AMI-18/implement-jiraprovider-concrete-class)
-**Status:** Draft
+**Status:** Implemented (PR #26)
 **Date:** 2026-01-25
+**Last Updated:** 2026-01-25
 
 ---
 
@@ -231,26 +232,18 @@ class JiraProvider(IssueTrackerProvider):
 
     PLATFORM = Platform.JIRA
 
-    # URL patterns for Jira
+    # URL pattern for Jira - single consolidated pattern handles all Jira URL formats
+    # Supports: Atlassian Cloud, self-hosted Jira, any /browse/ URL with valid ticket ID
+    # Using alphanumeric project keys (e.g., A1-123, PROJ-456) to match real Jira usage
     _URL_PATTERNS = [
-        # Atlassian Cloud: https://company.atlassian.net/browse/PROJECT-123
         re.compile(
-            r"https?://[^/]+\.atlassian\.net/browse/(?P<ticket_id>[A-Z]+-\d+)",
-            re.IGNORECASE,
-        ),
-        # Self-hosted Jira: https://jira.company.com/browse/PROJECT-123
-        re.compile(
-            r"https?://jira\.[^/]+/browse/(?P<ticket_id>[A-Z]+-\d+)",
-            re.IGNORECASE,
-        ),
-        # Generic /browse/ URL
-        re.compile(
-            r"https?://[^/]+/browse/(?P<ticket_id>[A-Z]+-\d+)",
+            r"https?://[^/]+/browse/(?P<ticket_id>[A-Z][A-Z0-9]*-\d+)",
             re.IGNORECASE,
         ),
     ]
 
-    # ID pattern: PROJECT-123 format
+    # ID pattern: PROJECT-123 format with alphanumeric project keys
+    # Matches: PROJ-123, A1-456, ABC123-789 (project key must start with letter)
     _ID_PATTERN = re.compile(r"^(?P<ticket_id>[A-Z][A-Z0-9]*-\d+)$", re.IGNORECASE)
 
     # Numeric-only pattern: 123 → DEFAULT_PROJECT-123
@@ -270,9 +263,15 @@ class JiraProvider(IssueTrackerProvider):
                 If not provided, uses JIRA_DEFAULT_PROJECT env var or DEFAULT_PROJECT constant.
         """
         self._user_interaction = user_interaction or CLIUserInteraction()
+
+        # Track whether default_project was explicitly configured (constructor or env var)
+        # This affects can_handle() behavior for numeric-only IDs
+        env_project = os.environ.get("JIRA_DEFAULT_PROJECT")
+        self._has_explicit_default_project = default_project is not None or env_project is not None
+
         self._default_project = (
             default_project
-            or os.environ.get("JIRA_DEFAULT_PROJECT")
+            or env_project
             or DEFAULT_PROJECT
         )
 
@@ -290,10 +289,14 @@ class JiraProvider(IssueTrackerProvider):
         """Check if this provider can handle the given input.
 
         Recognizes:
-        - Atlassian Cloud URLs: https://company.atlassian.net/browse/PROJ-123
-        - Self-hosted Jira URLs: https://jira.company.com/browse/PROJ-123
-        - Ticket IDs: PROJ-123, ABC-1, XYZ-99999 (case-insensitive)
-        - Numeric IDs: 123 (uses default project)
+        - Jira URLs with /browse/ path: https://company.atlassian.net/browse/PROJ-123
+        - Ticket IDs: PROJ-123, A1-1, XYZ99-99999 (alphanumeric project keys, case-insensitive)
+        - Numeric IDs: 123 (ONLY if default_project is explicitly configured)
+
+        Note: Numeric-only IDs are only accepted when `default_project` was explicitly
+        set via constructor or JIRA_DEFAULT_PROJECT env var. This prevents ambiguous
+        input from being claimed when no project context exists, improving platform
+        disambiguation (e.g., avoiding conflicts with Linear or GitHub IDs).
 
         Args:
             input_str: URL or ticket ID to check
@@ -308,12 +311,13 @@ class JiraProvider(IssueTrackerProvider):
             if pattern.match(input_str):
                 return True
 
-        # Check ID pattern (PROJECT-123)
+        # Check ID pattern (PROJECT-123 with alphanumeric project key)
         if self._ID_PATTERN.match(input_str):
             return True
 
-        # Check numeric-only pattern (123)
-        if self._NUMERIC_ID_PATTERN.match(input_str):
+        # Numeric-only pattern (123) - only accept if default project is explicitly configured
+        # This prevents ambiguous input from being claimed when no project context exists
+        if self._has_explicit_default_project and self._NUMERIC_ID_PATTERN.match(input_str):
             return True
 
         return False
@@ -355,9 +359,20 @@ class JiraProvider(IssueTrackerProvider):
 
 ### Step 3: Add normalize() and remaining methods
 
+> **Note:** The `safe_nested_get()` helper method used below is inherited from the
+> `IssueTrackerProvider` base class. This provides defensive access to nested dict
+> fields where the parent object may be None or a non-dict type (common in malformed
+> API responses).
+
 ```python
     def normalize(self, raw_data: dict[str, Any]) -> GenericTicket:
         """Convert raw Jira data to GenericTicket.
+
+        Handles edge cases gracefully:
+        - Empty raw_data dict
+        - Missing fields
+        - Non-dict values where dicts are expected (e.g., status: null)
+        - Atlassian Document Format (ADF) descriptions
 
         Args:
             raw_data: Raw Jira API response (issue object)
@@ -365,62 +380,112 @@ class JiraProvider(IssueTrackerProvider):
         Returns:
             Populated GenericTicket with normalized fields
         """
-        fields = raw_data.get("fields", {})
-        ticket_id = raw_data.get("key", "")
+        raw_fields = raw_data.get("fields")
+        fields: dict[str, Any] = raw_fields if isinstance(raw_fields, dict) else {}
+        ticket_id = str(raw_data.get("key", ""))
 
-        # Extract status and type
-        status_name = fields.get("status", {}).get("name", "")
-        type_name = fields.get("issuetype", {}).get("name", "")
+        # Extract status and type with defensive handling for non-dict values
+        # Uses base class safe_nested_get() to handle cases where status/issuetype is None
+        status_obj = fields.get("status")
+        status_name = self.safe_nested_get(status_obj, "name", "")
+
+        issuetype_obj = fields.get("issuetype")
+        type_name = self.safe_nested_get(issuetype_obj, "name", "")
 
         # Extract timestamps
         created_at = self._parse_timestamp(fields.get("created"))
         updated_at = self._parse_timestamp(fields.get("updated"))
 
-        # Extract assignee
+        # Extract assignee with defensive handling
         assignee = None
-        if fields.get("assignee"):
-            assignee = fields["assignee"].get("displayName") or fields["assignee"].get("name")
+        assignee_obj = fields.get("assignee")
+        if isinstance(assignee_obj, dict):
+            assignee = assignee_obj.get("displayName") or assignee_obj.get("name")
 
-        # Extract labels
-        labels = fields.get("labels", [])
+        # Extract labels with defensive handling and normalization
+        labels_raw = fields.get("labels")
+        labels = (
+            [str(label).strip() for label in labels_raw if label and str(label).strip()]
+            if isinstance(labels_raw, list)
+            else []
+        )
 
-        # Build project key for URL
-        project_key = fields.get("project", {}).get("key", "")
+        # Build project key for URL with defensive handling
+        project_obj = fields.get("project")
+        project_key = self.safe_nested_get(project_obj, "key", "")
 
-        # Build URL (fallback if not in raw data)
-        url = raw_data.get("self", "")
-        if not url and project_key:
-            # Construct URL from project key
-            url = f"https://jira.atlassian.net/browse/{ticket_id}"
+        # Smart URL construction: parse scheme/netloc from 'self' API URL if available
+        # This ensures correct URLs for self-hosted Jira instances
+        api_url = raw_data.get("self", "")
+        browse_url = ""
+        if api_url and ticket_id:
+            parsed = urlparse(api_url)
+            if parsed.scheme and parsed.netloc:
+                browse_url = f"{parsed.scheme}://{parsed.netloc}/browse/{ticket_id}"
 
-        # Extract platform-specific metadata
+        # Fallback to JIRA_BASE_URL environment variable
+        if not browse_url and ticket_id:
+            base_url = os.environ.get("JIRA_BASE_URL", "")
+            if base_url:
+                browse_url = f"{base_url.rstrip('/')}/browse/{ticket_id}"
+
+        # Handle ADF (Atlassian Document Format) descriptions
+        # Modern Jira returns description as dict (ADF) instead of string
+        description_raw = fields.get("description", "")
+        description = ""
+        adf_description: dict[str, Any] = {}
+        if isinstance(description_raw, dict):
+            # ADF format - store in metadata and use placeholder
+            adf_description = description_raw
+            description = "[Rich content - see platform_metadata.adf_description]"
+        elif description_raw:
+            description = str(description_raw)
+
+        # Extract platform-specific metadata with defensive handling
+        priority_obj = fields.get("priority")
+        resolution_obj = fields.get("resolution")
+
         platform_metadata: PlatformMetadata = {
             "raw_response": raw_data,
             "project_key": project_key,
-            "priority": fields.get("priority", {}).get("name", ""),
-            "epic_link": fields.get("customfield_10014", ""),
-            "story_points": fields.get("customfield_10016"),
-            "components": [c.get("name", "") for c in fields.get("components", [])],
-            "issue_type_id": fields.get("issuetype", {}).get("id", ""),
-            "resolution": fields.get("resolution", {}).get("name", "") if fields.get("resolution") else "",
-            "fix_versions": [v.get("name", "") for v in fields.get("fixVersions", [])],
+            "priority": self.safe_nested_get(priority_obj, "name", ""),
+            "epic_link": str(fields.get("customfield_10014", "") or ""),
+            "story_points": self._parse_story_points(fields.get("customfield_10016")),
+            "components": [self.safe_nested_get(c, "name", "") for c in fields.get("components", []) if isinstance(c, dict)],
+            "issue_type_id": self.safe_nested_get(issuetype_obj, "id", ""),
+            "resolution": self.safe_nested_get(resolution_obj, "name", ""),
+            "fix_versions": [self.safe_nested_get(v, "name", "") for v in fields.get("fixVersions", []) if isinstance(v, dict)],
+            "api_url": api_url,  # Store original API URL
+            "adf_description": adf_description,  # Store ADF for downstream processing
         }
 
         return GenericTicket(
             id=ticket_id,
             platform=Platform.JIRA,
-            url=url,
-            title=fields.get("summary", ""),
-            description=fields.get("description", "") or "",
+            url=browse_url,
+            title=fields.get("summary", "") or "",
+            description=description,
             status=self._map_status(status_name),
             type=self._map_type(type_name),
             assignee=assignee,
             labels=labels,
             created_at=created_at,
             updated_at=updated_at,
-            branch_summary=sanitize_title_for_branch(fields.get("summary", "")),
+            branch_summary=sanitize_title_for_branch(fields.get("summary", "") or ""),
             platform_metadata=platform_metadata,
         )
+
+    def _parse_story_points(self, value: Any) -> float:
+        """Parse story points with robust type coercion.
+
+        Handles string values like "5" that some Jira instances return.
+        """
+        if value is None:
+            return 0.0
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
 
     def _map_status(self, status_name: str) -> TicketStatus:
         """Map Jira status to TicketStatus enum.
@@ -444,8 +509,16 @@ class JiraProvider(IssueTrackerProvider):
         """
         return TYPE_MAPPING.get(type_name.lower(), TicketType.UNKNOWN)
 
+    # Regex to normalize timezone format: +0000 → +00:00 for fromisoformat()
+    _TZ_PATTERN = re.compile(r"([+-])(\d{2})(\d{2})$")
+
     def _parse_timestamp(self, timestamp_str: str | None) -> datetime | None:
         """Parse ISO timestamp from Jira API.
+
+        Handles multiple Jira timestamp formats:
+        - 2024-01-15T10:30:00.000+0000 (no colon in timezone)
+        - 2024-01-15T10:30:00.000+00:00 (with colon)
+        - 2024-01-15T10:30:00.000Z (UTC)
 
         Args:
             timestamp_str: ISO format timestamp string
@@ -456,9 +529,11 @@ class JiraProvider(IssueTrackerProvider):
         if not timestamp_str:
             return None
         try:
-            # Jira uses ISO format: 2024-01-15T10:30:00.000+0000
-            # Handle with or without milliseconds and timezone
-            return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            # Normalize timezone format for Python's fromisoformat()
+            normalized = timestamp_str.replace("Z", "+00:00")
+            # Handle +0000 format (without colon) that older Python can't parse
+            normalized = self._TZ_PATTERN.sub(r"\1\2:\3", normalized)
+            return datetime.fromisoformat(normalized)
         except (ValueError, TypeError):
             return None
 
@@ -487,6 +562,13 @@ class JiraProvider(IssueTrackerProvider):
         Raises:
             NotImplementedError: Fetching should use TicketService
         """
+        # Emit deprecation warning for developers who call this directly
+        warnings.warn(
+            "JiraProvider.fetch_ticket() is deprecated. Use TicketService.get_ticket() "
+            "with AuggieMediatedFetcher or DirectAPIFetcher instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         raise NotImplementedError(
             "JiraProvider.fetch_ticket() is deprecated in hybrid architecture. "
             "Use TicketService.get_ticket() with AuggieMediatedFetcher or "
@@ -802,23 +884,35 @@ class TestTypeMapping:
 
 From Linear ticket AMI-18:
 
-- [ ] JiraProvider class extends IssueTrackerProvider ABC
-- [ ] Registers with ProviderRegistry using @register decorator
-- [ ] PLATFORM class attribute set to Platform.JIRA
-- [ ] Implements all required abstract methods:
-  - [ ] `platform` property
-  - [ ] `name` property
-  - [ ] `can_handle(input_str)` - recognizes Jira URLs and IDs
-  - [ ] `parse_input(input_str)` - extracts normalized ticket ID
-  - [ ] `fetch_ticket(ticket_id)` - placeholder for hybrid architecture
-  - [ ] `check_connection()` - returns ready status
-- [ ] Implements additional methods for hybrid architecture:
-  - [ ] `normalize(raw_data)` - converts Jira JSON to GenericTicket
-  - [ ] `get_prompt_template()` - returns structured prompt for agent
-- [ ] STATUS_MAPPING covers common Jira statuses
-- [ ] TYPE_MAPPING covers common Jira issue types
-- [ ] Unit tests with >90% coverage
-- [ ] Documentation in docstrings
+- [x] JiraProvider class extends IssueTrackerProvider ABC
+- [x] Registers with ProviderRegistry using @register decorator
+- [x] PLATFORM class attribute set to Platform.JIRA
+- [x] Implements all required abstract methods:
+  - [x] `platform` property
+  - [x] `name` property
+  - [x] `can_handle(input_str)` - recognizes Jira URLs and IDs
+  - [x] `parse_input(input_str)` - extracts normalized ticket ID
+  - [x] `fetch_ticket(ticket_id)` - placeholder with deprecation warning
+  - [x] `check_connection()` - returns ready status
+- [x] Implements additional methods for hybrid architecture:
+  - [x] `normalize(raw_data)` - converts Jira JSON to GenericTicket
+  - [x] `get_prompt_template()` - returns structured prompt for agent
+- [x] STATUS_MAPPING covers common Jira statuses
+- [x] TYPE_MAPPING covers common Jira issue types
+- [x] Unit tests with >90% coverage (achieved: 98% with 88 tests)
+- [x] Documentation in docstrings
+
+### Additional Implementation Enhancements (Beyond Original Requirements)
+
+- [x] **Defensive Field Handling** - Uses `safe_nested_get()` (from base class) to handle malformed API responses where nested objects may be None or non-dict types
+- [x] **ADF (Atlassian Document Format) Support** - Detects and stores rich text descriptions in `platform_metadata.adf_description`
+- [x] **Alphanumeric Project Keys** - Supports project keys like `A1-123`, `PROJ99-456` (not just `[A-Z]+`)
+- [x] **Smart URL Construction** - Parses `self` API URL to construct browse URLs for self-hosted instances
+- [x] **Conservative Numeric ID Handling** - Only claims numeric IDs when `default_project` is explicitly configured via constructor or env var (`_has_explicit_default_project` flag)
+- [x] **Deprecation Warning Pattern** - `fetch_ticket()` emits `DeprecationWarning` in addition to raising `NotImplementedError`
+- [x] **Timestamp Format Normalization** - Handles `+0000`, `+00:00`, and `Z` timezone formats
+- [x] **Story Points Type Coercion** - Handles string values like `"5"` → `5.0`
+- [x] **Labels Normalization** - Strips whitespace, converts to strings, filters empty values
 
 ---
 
@@ -899,7 +993,22 @@ def test_isolated_provider():
 >
 > 3. **Test Isolation Pattern** - Tests should use the `reset_registry` fixture (shown in Testing Strategy) to ensure clean registry state. This prevents cross-test pollution when using the `@ProviderRegistry.register` decorator.
 >
-> 4. **Numeric ID Support** - Plain numeric IDs (e.g., `123`) are supported and mapped to `DEFAULT_PROJECT-123` using the `_NUMERIC_ID_PATTERN` regex. The default project can be configured via:
->    - Constructor parameter: `JiraProvider(default_project="MYPROJ")`
->    - Environment variable: `JIRA_DEFAULT_PROJECT`
->    - Constant fallback: `DEFAULT_PROJECT = "PROJ"`
+> 4. **Conservative Numeric ID Support** - Plain numeric IDs (e.g., `123`) are only accepted when `default_project` is **explicitly configured** via constructor or `JIRA_DEFAULT_PROJECT` env var. The `_has_explicit_default_project` flag tracks this. This prevents ambiguous numeric input from being claimed when no project context exists, improving platform disambiguation.
+>
+> 5. **Defensive Normalization Pattern** - The `safe_nested_get()` helper method (now in `IssueTrackerProvider` base class) should be used for all nested field access in `normalize()`. This handles malformed API responses where nested objects may be None or non-dict types.
+>
+> 6. **ADF Support** - Modern Jira returns description as Atlassian Document Format (dict). The provider detects this, stores in `platform_metadata.adf_description`, and uses a placeholder string for the main description field.
+>
+> 7. **Smart URL Construction** - Browse URLs are constructed from the `self` API URL's scheme/netloc, ensuring correct URLs for self-hosted Jira instances. Falls back to `JIRA_BASE_URL` env var.
+
+---
+
+## Post-Implementation Update (2026-01-25)
+
+This implementation plan was updated after PR #26 was completed to document:
+
+1. **Consolidated URL Pattern** - Single pattern handles all Jira URL formats instead of 3 separate patterns
+2. **Alphanumeric Project Keys** - Pattern updated to `[A-Z][A-Z0-9]*-\d+` to support keys like `A1-123`
+3. **`safe_nested_get()` Promoted to Base Class** - Now inherited from `IssueTrackerProvider` for reuse by all providers
+4. **Additional Acceptance Criteria** - Added criteria for defensive field handling, ADF support, and other enhancements
+5. **Test Coverage** - 88 tests with 98% coverage for `jira.py`

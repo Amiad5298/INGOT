@@ -426,7 +426,43 @@ class IssueTrackerProvider(ABC):
     Class Attributes:
         PLATFORM: Required class attribute of type ``Platform`` for registry
             registration. Must be set before using ``@ProviderRegistry.register``.
+
+    Utility Methods:
+        safe_nested_get: Static helper for defensive access to nested dict fields.
+            Use this in normalize() implementations to handle malformed API responses
+            where nested objects may be None or non-dict types.
     """
+
+    @staticmethod
+    def safe_nested_get(obj: Any, key: str, default: str = "") -> str:
+        """Safely get a nested key from an object that might not be a dict.
+
+        This helper is designed for defensive normalization of API responses
+        where nested fields (like status, assignee, project) may be None or
+        unexpected types instead of the expected dict structure.
+
+        Example usage in normalize()::
+
+            status_obj = fields.get("status")
+            status_name = self.safe_nested_get(status_obj, "name", "")
+
+            # Instead of risky chained access:
+            # status_name = fields.get("status", {}).get("name", "")
+            # which fails if status is None (not a dict)
+
+        Args:
+            obj: The object to get the key from (may be None, dict, or other type)
+            key: The key to retrieve
+            default: Default value if key not found or obj is not a dict
+
+        Returns:
+            The string value at key if obj is a dict and key exists,
+            otherwise the default value. Non-string values are converted to str.
+        """
+        if isinstance(obj, dict):
+            value = obj.get(key, default)
+            return str(value) if value is not None else default
+        return default
 
     @property
     @abstractmethod

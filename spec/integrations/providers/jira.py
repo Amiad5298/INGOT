@@ -257,23 +257,6 @@ class JiraProvider(IssueTrackerProvider):
 
         raise ValueError(f"Cannot parse Jira ticket from input: {input_str}")
 
-    @staticmethod
-    def _safe_nested_get(obj: Any, key: str, default: str = "") -> str:
-        """Safely get a nested key from an object that might not be a dict.
-
-        Args:
-            obj: The object to get the key from (may be None, dict, or other type)
-            key: The key to retrieve
-            default: Default value if key not found or obj is not a dict
-
-        Returns:
-            The value at key if obj is a dict and key exists, otherwise default
-        """
-        if isinstance(obj, dict):
-            value = obj.get(key, default)
-            return str(value) if value is not None else default
-        return default
-
     def normalize(self, raw_data: dict[str, Any]) -> GenericTicket:
         """Convert raw Jira data to GenericTicket.
 
@@ -294,10 +277,10 @@ class JiraProvider(IssueTrackerProvider):
 
         # Extract status and type with defensive handling for non-dict values
         status_obj = fields.get("status")
-        status_name = self._safe_nested_get(status_obj, "name", "")
+        status_name = self.safe_nested_get(status_obj, "name", "")
 
         issuetype_obj = fields.get("issuetype")
-        type_name = self._safe_nested_get(issuetype_obj, "name", "")
+        type_name = self.safe_nested_get(issuetype_obj, "name", "")
 
         # Extract timestamps
         created_at = self._parse_timestamp(fields.get("created"))
@@ -320,7 +303,7 @@ class JiraProvider(IssueTrackerProvider):
 
         # Build project key for URL with defensive handling
         project_obj = fields.get("project")
-        project_key = self._safe_nested_get(project_obj, "key", "")
+        project_key = self.safe_nested_get(project_obj, "key", "")
 
         # Smart URL construction: parse scheme/netloc from 'self' API URL if available
         api_url = raw_data.get("self", "")
@@ -346,16 +329,16 @@ class JiraProvider(IssueTrackerProvider):
 
         # Extract priority with defensive handling
         priority_obj = fields.get("priority")
-        priority_name = self._safe_nested_get(priority_obj, "name", "")
+        priority_name = self.safe_nested_get(priority_obj, "name", "")
 
         # Extract resolution with defensive handling
         resolution_obj = fields.get("resolution")
-        resolution_name = self._safe_nested_get(resolution_obj, "name", "")
+        resolution_name = self.safe_nested_get(resolution_obj, "name", "")
 
         # Extract components (ensure it's a list of dicts)
         components_raw = fields.get("components")
         components = (
-            [self._safe_nested_get(c, "name", "") for c in components_raw]
+            [self.safe_nested_get(c, "name", "") for c in components_raw]
             if isinstance(components_raw, list)
             else []
         )
@@ -363,7 +346,7 @@ class JiraProvider(IssueTrackerProvider):
         # Extract fix versions (ensure it's a list of dicts)
         fix_versions_raw = fields.get("fixVersions")
         fix_versions = (
-            [self._safe_nested_get(v, "name", "") for v in fix_versions_raw]
+            [self.safe_nested_get(v, "name", "") for v in fix_versions_raw]
             if isinstance(fix_versions_raw, list)
             else []
         )
@@ -405,7 +388,7 @@ class JiraProvider(IssueTrackerProvider):
             "epic_link": epic_link,
             "story_points": story_points,
             "components": components,
-            "issue_type_id": self._safe_nested_get(issuetype_obj, "id", ""),
+            "issue_type_id": self.safe_nested_get(issuetype_obj, "id", ""),
             "resolution": resolution_name,
             "fix_versions": fix_versions,
             "api_url": api_url,  # Store original API URL for debugging
