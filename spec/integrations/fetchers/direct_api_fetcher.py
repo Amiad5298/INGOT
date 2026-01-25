@@ -694,8 +694,15 @@ class DirectAPIFetcher(TicketFetcher):
     def _resolve_platform(self, platform: str) -> Platform:
         """Resolve a platform string to Platform enum.
 
+        Robust Input Normalization:
+            Handles common input variations by normalizing the string before lookup:
+            - Case-insensitive: "jira" -> "JIRA"
+            - Strips whitespace: " jira " -> "JIRA"
+            - Normalizes separators: "azure-devops" -> "AZURE_DEVOPS"
+            - Handles spaces: "jira cloud" -> "JIRA_CLOUD"
+
         Args:
-            platform: Platform name as string (case-insensitive)
+            platform: Platform name as string (case-insensitive, flexible format)
 
         Returns:
             Platform enum value
@@ -703,8 +710,11 @@ class DirectAPIFetcher(TicketFetcher):
         Raises:
             AgentIntegrationError: If platform string is invalid
         """
+        # Normalize: uppercase, strip whitespace, replace hyphens and spaces with underscores
+        normalized = platform.strip().upper().replace("-", "_").replace(" ", "_")
+
         try:
-            return Platform[platform.upper()]
+            return Platform[normalized]
         except KeyError as err:
             raise AgentIntegrationError(
                 message=f"Unknown platform: {platform}",
