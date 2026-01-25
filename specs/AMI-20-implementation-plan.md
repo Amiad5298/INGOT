@@ -82,7 +82,20 @@ The provider is responsible for:
 > - `normalize()` - Called by `DirectAPIFetcher` and `AuggieMediatedFetcher` to convert raw JSON to `GenericTicket`
 > - `get_prompt_template()` - Called by `AuggieMediatedFetcher` to get platform-specific structured prompts
 >
-> These methods may be added to the ABC in a future refactor, but for now they are implemented as concrete methods on each provider.
+> These methods are intentionally not part of the ABC to maintain backward compatibility and allow the hybrid architecture to be adopted gradually without breaking existing providers. They may be added to the ABC in a future refactor once all providers have been migrated to the hybrid pattern.
+
+### Defensive Field Handling
+
+> **Pattern:** This implementation uses the `safe_nested_get()` static method from the base class for all nested dictionary access. This protects against malformed API responses where nested objects may be `None` or non-dict types:
+>
+> ```python
+> # Defensive pattern used throughout normalize():
+> state_obj = raw_data.get("state")
+> state_type = self.safe_nested_get(state_obj, "type", "")
+> state_name = self.safe_nested_get(state_obj, "name", "")
+> ```
+>
+> This pattern is consistent with the JiraProvider implementation (PR #26) and uses the base class utility method defined in `spec/integrations/providers/base.py`.
 
 ---
 
@@ -107,6 +120,7 @@ Data fetching is delegated to TicketFetcher implementations.
 from __future__ import annotations
 
 import re
+import warnings
 from datetime import datetime
 from typing import Any
 
@@ -348,6 +362,7 @@ class LinearProvider(IssueTrackerProvider):
         """Convert raw Linear GraphQL data to GenericTicket.
 
         Handles nested GraphQL response structure (e.g., labels.nodes[]).
+        Uses defensive field handling for malformed API responses.
 
         Args:
             raw_data: Raw Linear GraphQL response (issue object)
@@ -359,36 +374,47 @@ class LinearProvider(IssueTrackerProvider):
         ticket_id = raw_data.get("identifier", "")
 
         # Extract state - prefer state.type for reliable mapping
-        state = raw_data.get("state", {})
-        state_type = state.get("type", "")
-        state_name = state.get("name", "")
+        # Use safe_nested_get() for defensive handling of malformed responses
+        state_obj = raw_data.get("state")
+        state_type = self.safe_nested_get(state_obj, "type", "")
+        state_name = self.safe_nested_get(state_obj, "name", "")
 
         # Extract timestamps
         created_at = self._parse_timestamp(raw_data.get("createdAt"))
         updated_at = self._parse_timestamp(raw_data.get("updatedAt"))
 
         # Extract assignee (prefer name over email)
-        assignee = None
-        if raw_data.get("assignee"):
-            assignee = (
-                raw_data["assignee"].get("name")
-                or raw_data["assignee"].get("email")
-            )
+        # Use safe_nested_get() for defensive handling
+        assignee_obj = raw_data.get("assignee")
+        assignee = self.safe_nested_get(assignee_obj, "name", "") or self.safe_nested_get(assignee_obj, "email", "") or None
 
         # Extract labels from nested GraphQL structure
-        labels_data = raw_data.get("labels", {})
-        labels_nodes = labels_data.get("nodes", []) if isinstance(labels_data, dict) else []
-        labels = [node.get("name", "") for node in labels_nodes if node.get("name")]
+        # Use safe_nested_get() for defensive handling
+        labels_nodes = raw_data.get("labels", {}).get("nodes", [])
+        labels = [
+            self.safe_nested_get(label, "name", "").strip()
+            for label in labels_nodes
+            if isinstance(label, dict)
+        ]
+        labels = [l for l in labels if l]  # Filter empty strings
 
         # Get URL (directly from response)
         url = raw_data.get("url", "")
 
         # Build team key for metadata
-        team = raw_data.get("team", {})
-        team_key = team.get("key", "")
-        team_name = team.get("name", "")
+        # Use safe_nested_get() for defensive handling
+        team_obj = raw_data.get("team")
+        team_key = self.safe_nested_get(team_obj, "key", "")
+        team_name = self.safe_nested_get(team_obj, "name", "")
 
         # Extract platform-specific metadata
+        # Use safe_nested_get() for defensive handling of nested fields
+        cycle_obj = raw_data.get("cycle")
+        cycle_name = self.safe_nested_get(cycle_obj, "name", "") or None
+
+        parent_obj = raw_data.get("parent")
+        parent_id = self.safe_nested_get(parent_obj, "identifier", "") or None
+
         platform_metadata: PlatformMetadata = {
             "raw_response": raw_data,
             "linear_uuid": raw_data.get("id", ""),
@@ -398,12 +424,8 @@ class LinearProvider(IssueTrackerProvider):
             "priority_value": raw_data.get("priority"),
             "state_name": state_name,
             "state_type": state_type,
-            "cycle": raw_data.get("cycle", {}).get("name") if raw_data.get("cycle") else None,
-            "parent_id": (
-                raw_data.get("parent", {}).get("identifier")
-                if raw_data.get("parent")
-                else None
-            ),
+            "cycle": cycle_name,
+            "parent_id": parent_id,
         }
 
         return GenericTicket(
@@ -457,7 +479,7 @@ class LinearProvider(IssueTrackerProvider):
             labels: List of label names from the issue
 
         Returns:
-            Matched TicketType or UNKNOWN
+            Matched TicketType or UNKNOWN if no type-specific labels found
         """
         for label in labels:
             label_lower = label.lower().strip()
@@ -465,8 +487,8 @@ class LinearProvider(IssueTrackerProvider):
                 if any(kw in label_lower for kw in keywords):
                     return ticket_type
 
-        # Default to FEATURE if no type-specific labels found
-        # (common for new issues without explicit labeling)
+        # Return UNKNOWN if no type-specific labels found
+        # (Linear uses labels for categorization, so missing labels = unknown type)
         return TicketType.UNKNOWN
 
     def _parse_timestamp(self, timestamp_str: str | None) -> datetime | None:
@@ -515,6 +537,12 @@ class LinearProvider(IssueTrackerProvider):
         Raises:
             NotImplementedError: Fetching should use TicketService
         """
+        warnings.warn(
+            "LinearProvider.fetch_ticket() is deprecated. "
+            "Use TicketService.get_ticket() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         raise NotImplementedError(
             "LinearProvider.fetch_ticket() is deprecated in hybrid architecture. "
             "Use TicketService.get_ticket() with AuggieMediatedFetcher or "
@@ -779,6 +807,74 @@ class TestLinearProviderNormalize:
         assert ticket.platform_metadata["parent_id"] == "ENG-100"
 
 
+class TestDefensiveFieldHandling:
+    """Test defensive handling of malformed API responses."""
+
+    @pytest.fixture
+    def provider(self):
+        return LinearProvider()
+
+    def test_normalize_with_none_state(self, provider):
+        """Handle None state gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": None, "labels": {"nodes": []}}
+        ticket = provider.normalize(data)
+        assert ticket.status == TicketStatus.UNKNOWN
+
+    def test_normalize_with_non_dict_state(self, provider):
+        """Handle non-dict state gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": "invalid", "labels": {"nodes": []}}
+        ticket = provider.normalize(data)
+        assert ticket.status == TicketStatus.UNKNOWN
+
+    def test_normalize_with_none_assignee(self, provider):
+        """Handle None assignee gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": {}, "assignee": None, "labels": {"nodes": []}}
+        ticket = provider.normalize(data)
+        assert ticket.assignee is None
+
+    def test_normalize_with_none_labels(self, provider):
+        """Handle None labels gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": {}, "labels": None}
+        ticket = provider.normalize(data)
+        assert ticket.labels == []
+
+    def test_normalize_with_non_dict_labels(self, provider):
+        """Handle non-dict labels gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": {}, "labels": "invalid"}
+        ticket = provider.normalize(data)
+        assert ticket.labels == []
+
+    def test_normalize_with_malformed_label_nodes(self, provider):
+        """Handle malformed label nodes gracefully."""
+        data = {
+            "identifier": "TEST-1",
+            "title": "Test",
+            "state": {},
+            "labels": {"nodes": [None, "invalid", {"name": "valid"}, {"name": ""}]},
+        }
+        ticket = provider.normalize(data)
+        assert ticket.labels == ["valid"]
+
+    def test_normalize_with_none_team(self, provider):
+        """Handle None team gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": {}, "team": None, "labels": {"nodes": []}}
+        ticket = provider.normalize(data)
+        assert ticket.platform_metadata["team_key"] == ""
+        assert ticket.platform_metadata["team_name"] == ""
+
+    def test_normalize_with_none_cycle(self, provider):
+        """Handle None cycle gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": {}, "cycle": None, "labels": {"nodes": []}}
+        ticket = provider.normalize(data)
+        assert ticket.platform_metadata["cycle"] is None
+
+    def test_normalize_with_none_parent(self, provider):
+        """Handle None parent gracefully."""
+        data = {"identifier": "TEST-1", "title": "Test", "state": {}, "parent": None, "labels": {"nodes": []}}
+        ticket = provider.normalize(data)
+        assert ticket.platform_metadata["parent_id"] is None
+
+
 class TestStatusMapping:
     """Test status mapping coverage."""
 
@@ -855,6 +951,29 @@ class TestPromptTemplate:
         assert "identifier" in template
         assert "state" in template
         assert "labels" in template
+
+
+class TestFetchTicketDeprecation:
+    """Test fetch_ticket() deprecation warning."""
+
+    def test_fetch_ticket_raises_deprecation_warning(self):
+        """fetch_ticket() should emit DeprecationWarning before raising."""
+        provider = LinearProvider()
+
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            with pytest.raises(NotImplementedError):
+                provider.fetch_ticket("ENG-123")
+
+    def test_fetch_ticket_raises_not_implemented(self):
+        """fetch_ticket() should raise NotImplementedError."""
+        import warnings
+        provider = LinearProvider()
+
+        # Suppress the warning to test the exception
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            with pytest.raises(NotImplementedError, match="hybrid architecture"):
+                provider.fetch_ticket("ENG-123")
 ```
 
 ---
@@ -1118,4 +1237,3 @@ def test_isolated_provider():
 > 5. **State Type vs Name** - Linear workflow state types are reliable (`backlog`, `unstarted`, `started`, `completed`, `canceled`), while state names are customizable per team. Always prefer `state.type` for mapping, with `state.name` as fallback.
 >
 > 6. **Label-Based Type Inference** - Unlike Jira which has explicit issue types, Linear uses labels for categorization. Type is inferred from label keywords, with UNKNOWN as default when no type-specific labels are found.
-
