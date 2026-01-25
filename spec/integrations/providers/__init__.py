@@ -38,6 +38,7 @@ from spec.integrations.providers.exceptions import (
     TicketNotFoundError,
 )
 from spec.integrations.providers.jira import JiraProvider
+from spec.integrations.providers.linear import LinearProvider
 from spec.integrations.providers.registry import ProviderRegistry
 from spec.integrations.providers.user_interaction import (
     CLIUserInteraction,
@@ -77,4 +78,5 @@ __all__ = [
     "ProviderRegistry",
     # Providers
     "JiraProvider",
+    "LinearProvider",
 ]
