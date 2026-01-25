@@ -15,8 +15,10 @@ from typing import Any
 import pytest
 
 from spec.integrations.fetchers import (
+    AgentFetchError,
     AgentIntegrationError,
     AgentMediatedFetcher,
+    AgentResponseParseError,
     PlatformNotSupportedError,
     TicketFetcher,
     TicketFetchError,
@@ -214,33 +216,33 @@ class TestAgentMediatedFetcherJSONParsing:
         assert result == {"id": "X-1"}
 
     def test_parse_empty_response_raises_error(self):
-        """Empty response raises AgentIntegrationError."""
+        """Empty response raises AgentResponseParseError."""
         fetcher = MockAgentFetcher()
-        with pytest.raises(AgentIntegrationError, match="Empty response"):
+        with pytest.raises(AgentResponseParseError, match="Empty response"):
             fetcher._parse_response("")
 
     def test_parse_whitespace_only_raises_error(self):
-        """Whitespace-only response raises AgentIntegrationError."""
+        """Whitespace-only response raises AgentResponseParseError."""
         fetcher = MockAgentFetcher()
-        with pytest.raises(AgentIntegrationError, match="Empty response"):
+        with pytest.raises(AgentResponseParseError, match="Empty response"):
             fetcher._parse_response("   \n\t  ")
 
     def test_parse_invalid_json_raises_error(self):
-        """Invalid JSON raises AgentIntegrationError."""
+        """Invalid JSON raises AgentResponseParseError."""
         fetcher = MockAgentFetcher()
-        with pytest.raises(AgentIntegrationError, match="Failed to parse JSON"):
+        with pytest.raises(AgentResponseParseError, match="Failed to parse JSON"):
             fetcher._parse_response("not json at all")
 
     def test_parse_json_array_raises_error(self):
-        """JSON array (not object) raises AgentIntegrationError."""
+        """JSON array (not object) raises AgentResponseParseError."""
         fetcher = MockAgentFetcher()
-        with pytest.raises(AgentIntegrationError, match="Failed to parse JSON"):
+        with pytest.raises(AgentResponseParseError, match="Failed to parse JSON"):
             fetcher._parse_response("[1, 2, 3]")
 
     def test_parse_json_string_raises_error(self):
-        """JSON string raises AgentIntegrationError."""
+        """JSON string raises AgentResponseParseError."""
         fetcher = MockAgentFetcher()
-        with pytest.raises(AgentIntegrationError, match="Failed to parse JSON"):
+        with pytest.raises(AgentResponseParseError, match="Failed to parse JSON"):
             fetcher._parse_response('"just a string"')
 
     def test_parse_first_code_block_when_multiple_exist(self):
@@ -356,6 +358,56 @@ class TestAgentMediatedFetcherFetchRaw:
         with pytest.raises(AgentIntegrationError) as exc_info:
             await fetcher.fetch_raw("TEST-1", Platform.JIRA)
         assert str(exc_info.value) == "Agent unavailable"
+        assert exc_info.value.agent_name == "Test"
+
+    @pytest.mark.asyncio
+    async def test_fetch_raw_preserves_agent_fetch_errors(self):
+        """fetch_raw re-raises AgentFetchError without wrapping."""
+
+        class FetchErrorFetcher(AgentMediatedFetcher):
+            @property
+            def name(self) -> str:
+                return "Fetch Error Fetcher"
+
+            def supports_platform(self, platform: Platform) -> bool:
+                return True
+
+            async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+                raise AgentFetchError("Timeout during fetch", agent_name="Test")
+
+            def _get_prompt_template(self, platform: Platform) -> str:
+                return "Fetch {ticket_id}"
+
+        fetcher = FetchErrorFetcher()
+        with pytest.raises(AgentFetchError) as exc_info:
+            await fetcher.fetch_raw("TEST-1", Platform.JIRA)
+        assert str(exc_info.value) == "Timeout during fetch"
+        assert exc_info.value.agent_name == "Test"
+
+    @pytest.mark.asyncio
+    async def test_fetch_raw_preserves_agent_response_parse_errors(self):
+        """fetch_raw re-raises AgentResponseParseError without wrapping."""
+
+        class ParseErrorFetcher(AgentMediatedFetcher):
+            @property
+            def name(self) -> str:
+                return "Parse Error Fetcher"
+
+            def supports_platform(self, platform: Platform) -> bool:
+                return True
+
+            async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+                raise AgentResponseParseError(
+                    "Invalid JSON", agent_name="Test", raw_response="not json"
+                )
+
+            def _get_prompt_template(self, platform: Platform) -> str:
+                return "Fetch {ticket_id}"
+
+        fetcher = ParseErrorFetcher()
+        with pytest.raises(AgentResponseParseError) as exc_info:
+            await fetcher.fetch_raw("TEST-1", Platform.JIRA)
+        assert str(exc_info.value) == "Invalid JSON"
         assert exc_info.value.agent_name == "Test"
 
 

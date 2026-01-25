@@ -18,7 +18,12 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ..providers.base import Platform
-from .exceptions import AgentIntegrationError, PlatformNotSupportedError
+from .exceptions import (
+    AgentFetchError,
+    AgentIntegrationError,
+    AgentResponseParseError,
+    PlatformNotSupportedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +168,7 @@ class AgentMediatedFetcher(TicketFetcher):
         prompt = self._build_prompt(ticket_id, platform)
         try:
             response = await self._execute_fetch_prompt(prompt, platform)
-        except AgentIntegrationError:
+        except (AgentFetchError, AgentResponseParseError, AgentIntegrationError):
             raise
         except Exception as e:
             raise AgentIntegrationError(
@@ -204,12 +209,13 @@ class AgentMediatedFetcher(TicketFetcher):
             Parsed JSON as a dictionary
 
         Raises:
-            AgentIntegrationError: If response cannot be parsed as JSON
+            AgentResponseParseError: If response cannot be parsed as JSON
         """
         if not response or not response.strip():
-            raise AgentIntegrationError(
+            raise AgentResponseParseError(
                 message="Empty response received from agent",
                 agent_name=self.name,
+                raw_response=response,
             )
 
         # Priority 1: Try all JSON-tagged code blocks (```json ... ```)
@@ -234,9 +240,12 @@ class AgentMediatedFetcher(TicketFetcher):
             logger.debug("Extracted JSON from raw text")
             return result
 
-        raise AgentIntegrationError(
+        # Truncate response for error message if too long
+        response_preview = response[:500] + "..." if len(response) > 500 else response
+        raise AgentResponseParseError(
             message="Failed to parse JSON from agent response: no valid JSON object found",
             agent_name=self.name,
+            raw_response=response_preview,
         )
 
     def _try_parse_json(self, text: str) -> dict[str, Any] | None:
