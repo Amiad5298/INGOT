@@ -10,7 +10,9 @@ is handled by the connected AI agent's MCP integrations.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,6 +23,11 @@ from spec.integrations.providers.base import Platform
 logger = logging.getLogger(__name__)
 
 
+def _freeze_credentials(creds: dict[str, str]) -> Mapping[str, str]:
+    """Convert a mutable dict to an immutable MappingProxyType."""
+    return MappingProxyType(creds)
+
+
 @dataclass(frozen=True)
 class PlatformCredentials:
     """Credentials for a specific platform.
@@ -28,13 +35,13 @@ class PlatformCredentials:
     Attributes:
         platform: The platform these credentials are for
         is_configured: Whether valid credentials are available
-        credentials: Dictionary of credential key-value pairs (empty if not configured)
+        credentials: Read-only mapping of credential key-value pairs (empty if not configured)
         error_message: Description of why credentials are unavailable (if not configured)
     """
 
     platform: Platform
     is_configured: bool
-    credentials: dict[str, str]
+    credentials: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     error_message: str | None = None
 
 
@@ -68,16 +75,18 @@ class AuthenticationManager:
         _config: ConfigManager instance for loading credentials
     """
 
-    # Map Platform enum to credential requirement keys
-    # Uses lowercase platform names to match PLATFORM_REQUIRED_CREDENTIALS
-    PLATFORM_NAMES: dict[Platform, str] = {
-        Platform.JIRA: "jira",
-        Platform.GITHUB: "github",
-        Platform.LINEAR: "linear",
-        Platform.AZURE_DEVOPS: "azure_devops",
-        Platform.MONDAY: "monday",
-        Platform.TRELLO: "trello",
-    }
+    # Set of platforms that support fallback credentials.
+    # Platform name is derived from enum name (e.g., Platform.AZURE_DEVOPS -> "azure_devops")
+    SUPPORTED_FALLBACK_PLATFORMS: frozenset[Platform] = frozenset(
+        {
+            Platform.JIRA,
+            Platform.GITHUB,
+            Platform.LINEAR,
+            Platform.AZURE_DEVOPS,
+            Platform.MONDAY,
+            Platform.TRELLO,
+        }
+    )
 
     def __init__(self, config: ConfigManager) -> None:
         """Initialize with ConfigManager.
@@ -86,6 +95,18 @@ class AuthenticationManager:
             config: ConfigManager instance (should have load() called)
         """
         self._config = config
+
+    @staticmethod
+    def _get_platform_name(platform: Platform) -> str:
+        """Derive the lowercase platform name from the Platform enum.
+
+        Args:
+            platform: Platform enum value
+
+        Returns:
+            Lowercase platform name (e.g., "azure_devops" for Platform.AZURE_DEVOPS)
+        """
+        return platform.name.lower()
 
     def get_credentials(self, platform: Platform) -> PlatformCredentials:
         """Get fallback credentials for direct API access.
@@ -99,14 +120,14 @@ class AuthenticationManager:
         Returns:
             PlatformCredentials with credentials if available, or error_message if not
         """
-        platform_name = self.PLATFORM_NAMES.get(platform)
-        if platform_name is None:
+        if platform not in self.SUPPORTED_FALLBACK_PLATFORMS:
             return PlatformCredentials(
                 platform=platform,
                 is_configured=False,
-                credentials={},
-                error_message=f"Unknown platform: {platform}",
+                error_message=f"Platform {platform.name} does not support fallback credentials",
             )
+
+        platform_name = self._get_platform_name(platform)
 
         try:
             credentials = self._config.get_fallback_credentials(
@@ -115,11 +136,15 @@ class AuthenticationManager:
                 validate=True,  # Validate required fields
             )
         except Exception as e:
-            logger.debug(f"Failed to get credentials for {platform_name}: {e}")
+            # SECURITY: Only log exception type, not message (may contain credentials)
+            logger.debug(
+                "Failed to get credentials for %s: %s",
+                platform_name,
+                type(e).__name__,
+            )
             return PlatformCredentials(
                 platform=platform,
                 is_configured=False,
-                credentials={},
                 error_message=str(e),
             )
 
@@ -127,29 +152,45 @@ class AuthenticationManager:
             return PlatformCredentials(
                 platform=platform,
                 is_configured=False,
-                credentials={},
                 error_message=f"No fallback credentials configured for {platform_name}",
             )
 
         return PlatformCredentials(
             platform=platform,
             is_configured=True,
-            credentials=credentials,
+            credentials=_freeze_credentials(credentials),
             error_message=None,
         )
 
     def has_fallback_configured(self, platform: Platform) -> bool:
-        """Check if fallback credentials are available for a platform.
+        """Quick check if fallback credentials exist for a platform.
 
-        Convenience method for quick availability check without full validation.
+        This performs a lightweight check that only verifies credential keys
+        exist in the configuration, without strict validation (e.g., env var
+        expansion). For full validation, use get_credentials() instead.
 
         Args:
             platform: Platform to check
 
         Returns:
-            True if credentials are configured and valid
+            True if credential keys exist for the platform (may still fail
+            full validation due to missing env vars or empty values)
         """
-        return self.get_credentials(platform).is_configured
+        if platform not in self.SUPPORTED_FALLBACK_PLATFORMS:
+            return False
+
+        platform_name = self._get_platform_name(platform)
+
+        try:
+            # Use non-strict mode for quick check (no env var expansion)
+            credentials = self._config.get_fallback_credentials(
+                platform_name,
+                strict=False,  # Don't fail on unexpanded env vars
+                validate=False,  # Don't validate required fields
+            )
+            return credentials is not None and len(credentials) > 0
+        except Exception:
+            return False
 
     def list_fallback_platforms(self) -> list[Platform]:
         """List platforms with fallback credentials configured.
@@ -157,7 +198,11 @@ class AuthenticationManager:
         Returns:
             List of Platform enum values that have valid fallback credentials
         """
-        return [platform for platform in Platform if self.has_fallback_configured(platform)]
+        return [
+            platform
+            for platform in self.SUPPORTED_FALLBACK_PLATFORMS
+            if self.has_fallback_configured(platform)
+        ]
 
     def validate_credentials(self, platform: Platform) -> tuple[bool, str]:
         """Validate that required credential fields are present and non-empty.
@@ -165,6 +210,10 @@ class AuthenticationManager:
         NOTE: This performs FORMAT validation only. It checks that:
         - All required fields for the platform are present
         - No required fields are empty strings
+
+        Validation is delegated to ConfigManager.get_fallback_credentials()
+        with strict=True and validate=True. The ConfigManager is responsible
+        for checking that all required fields are present and non-empty.
 
         This method does NOT:
         - Make API calls to verify credentials are valid
@@ -187,5 +236,9 @@ class AuthenticationManager:
         if not creds.is_configured:
             return False, creds.error_message or "Credentials not configured"
 
-        # Basic validation passed (required fields present)
+        # Additional explicit check for empty string values
+        empty_fields = [key for key, value in creds.credentials.items() if value == ""]
+        if empty_fields:
+            return False, f"Empty credential values for: {', '.join(empty_fields)}"
+
         return True, f"Credentials configured for {platform.name}"

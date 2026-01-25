@@ -81,15 +81,26 @@ class TestAuthenticationManagerInit:
 
         assert auth_manager._config is mock_config_manager
 
-    def test_platform_names_mapping(self):
-        """All Platform enum values have mappings."""
-        for platform in Platform:
-            assert platform in AuthenticationManager.PLATFORM_NAMES
-            assert isinstance(AuthenticationManager.PLATFORM_NAMES[platform], str)
+    def test_supported_fallback_platforms_is_frozenset(self):
+        """SUPPORTED_FALLBACK_PLATFORMS is a frozenset for immutability."""
+        assert isinstance(AuthenticationManager.SUPPORTED_FALLBACK_PLATFORMS, frozenset)
+
+    def test_supported_fallback_platforms_contains_expected_platforms(self):
+        """SUPPORTED_FALLBACK_PLATFORMS contains the known fallback platforms."""
+        expected_platforms = {
+            Platform.JIRA,
+            Platform.GITHUB,
+            Platform.LINEAR,
+            Platform.AZURE_DEVOPS,
+            Platform.MONDAY,
+            Platform.TRELLO,
+        }
+        assert AuthenticationManager.SUPPORTED_FALLBACK_PLATFORMS == expected_platforms
 
     def test_platform_names_are_lowercase(self):
-        """Platform names are lowercase to match PLATFORM_REQUIRED_CREDENTIALS."""
-        for _platform, name in AuthenticationManager.PLATFORM_NAMES.items():
+        """Platform names derived from enum are lowercase."""
+        for platform in AuthenticationManager.SUPPORTED_FALLBACK_PLATFORMS:
+            name = AuthenticationManager._get_platform_name(platform)
             assert name == name.lower()
             assert "_" in name or name.isalpha()  # snake_case or single word
 
@@ -176,24 +187,25 @@ class TestGetCredentials:
         with pytest.raises(AttributeError):
             creds.is_configured = False  # type: ignore
 
-    def test_get_credentials_unknown_platform(self, mock_config_manager):
-        """Handles unknown platform gracefully when PLATFORM_NAMES is missing entry."""
+    def test_get_credentials_unsupported_platform(self, mock_config_manager, monkeypatch):
+        """Handles unsupported platform gracefully when not in SUPPORTED_FALLBACK_PLATFORMS."""
+        # Use monkeypatch to safely mock the supported platforms set
+        limited_platforms = frozenset({Platform.JIRA, Platform.GITHUB})
+        monkeypatch.setattr(
+            AuthenticationManager,
+            "SUPPORTED_FALLBACK_PLATFORMS",
+            limited_platforms,
+        )
+
         auth_manager = AuthenticationManager(mock_config_manager)
 
-        # Temporarily remove a platform from PLATFORM_NAMES to simulate unknown platform
-        original_mapping = AuthenticationManager.PLATFORM_NAMES.copy()
-        del AuthenticationManager.PLATFORM_NAMES[Platform.TRELLO]
+        # TRELLO is now unsupported since we limited the set
+        creds = auth_manager.get_credentials(Platform.TRELLO)
 
-        try:
-            creds = auth_manager.get_credentials(Platform.TRELLO)
-
-            assert creds.platform == Platform.TRELLO
-            assert creds.is_configured is False
-            assert creds.credentials == {}
-            assert "Unknown platform" in creds.error_message
-        finally:
-            # Restore original mapping
-            AuthenticationManager.PLATFORM_NAMES = original_mapping
+        assert creds.platform == Platform.TRELLO
+        assert creds.is_configured is False
+        assert creds.credentials == {}
+        assert "does not support fallback credentials" in creds.error_message
 
     def test_get_credentials_with_aliases(self, mock_config_manager):
         """Credential aliases are normalized by ConfigManager.
@@ -367,10 +379,12 @@ class TestPlatformCredentials:
 
     def test_platform_credentials_creation(self):
         """Can create PlatformCredentials with all fields."""
+        from types import MappingProxyType
+
         creds = PlatformCredentials(
             platform=Platform.JIRA,
             is_configured=True,
-            credentials={"url": "https://example.com", "token": "abc"},
+            credentials=MappingProxyType({"url": "https://example.com", "token": "abc"}),
             error_message=None,
         )
 
@@ -384,7 +398,6 @@ class TestPlatformCredentials:
         creds = PlatformCredentials(
             platform=Platform.GITHUB,
             is_configured=False,
-            credentials={},
             error_message="Token not configured",
         )
 
@@ -395,20 +408,24 @@ class TestPlatformCredentials:
 
     def test_platform_credentials_default_error_message(self):
         """error_message defaults to None."""
+        from types import MappingProxyType
+
         creds = PlatformCredentials(
             platform=Platform.LINEAR,
             is_configured=True,
-            credentials={"api_key": "key123"},
+            credentials=MappingProxyType({"api_key": "key123"}),
         )
 
         assert creds.error_message is None
 
     def test_platform_credentials_is_frozen(self):
         """PlatformCredentials is immutable (frozen)."""
+        from types import MappingProxyType
+
         creds = PlatformCredentials(
             platform=Platform.JIRA,
             is_configured=True,
-            credentials={"token": "abc"},
+            credentials=MappingProxyType({"token": "abc"}),
         )
 
         with pytest.raises(AttributeError):
@@ -416,3 +433,17 @@ class TestPlatformCredentials:
 
         with pytest.raises(AttributeError):
             creds.platform = Platform.GITHUB  # type: ignore
+
+    def test_platform_credentials_dict_is_immutable(self, config_with_jira_creds):
+        """Credentials mapping is truly read-only (MappingProxyType)."""
+        from types import MappingProxyType
+
+        auth_manager = AuthenticationManager(config_with_jira_creds)
+        creds = auth_manager.get_credentials(Platform.JIRA)
+
+        # Verify it's a MappingProxyType
+        assert isinstance(creds.credentials, MappingProxyType)
+
+        # Attempting to modify should raise TypeError
+        with pytest.raises(TypeError):
+            creds.credentials["new_key"] = "value"  # type: ignore
