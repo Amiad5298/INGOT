@@ -44,7 +44,7 @@ class TrelloHandler(PlatformHandler):
         Args:
             ticket_id: Trello card ID or shortLink
             credentials: Must contain 'api_key', 'token'
-            timeout_seconds: Request timeout (ignored if http_client provided)
+            timeout_seconds: Request timeout (per-request override for shared client)
             http_client: Shared HTTP client from DirectAPIFetcher
 
         Returns:
@@ -52,7 +52,8 @@ class TrelloHandler(PlatformHandler):
 
         Raises:
             CredentialValidationError: If required credentials are missing
-            httpx.HTTPError: For HTTP-level failures
+            PlatformNotFoundError: If card is not found (404)
+            httpx.HTTPError: For other HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -64,12 +65,14 @@ class TrelloHandler(PlatformHandler):
         params = {"key": api_key, "token": token}
 
         # Use base class helper for HTTP request execution
+        # ticket_id passed for harmonized 404 handling across REST/GraphQL
         response = await self._execute_request(
             method="GET",
             url=endpoint,
             http_client=http_client,
             timeout_seconds=timeout_seconds,
             params=params,
+            ticket_id=ticket_id,
         )
 
         result: dict[str, Any] = response.json()

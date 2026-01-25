@@ -64,7 +64,7 @@ class GitHubHandler(PlatformHandler):
         Args:
             ticket_id: GitHub issue ID in "owner/repo#number" format
             credentials: Must contain 'token'
-            timeout_seconds: Request timeout (ignored if http_client provided)
+            timeout_seconds: Request timeout (per-request override for shared client)
             http_client: Shared HTTP client from DirectAPIFetcher
 
         Returns:
@@ -73,7 +73,8 @@ class GitHubHandler(PlatformHandler):
         Raises:
             CredentialValidationError: If required credentials are missing
             TicketIdFormatError: If ticket ID format is invalid
-            httpx.HTTPError: For HTTP-level failures
+            PlatformNotFoundError: If issue is not found (404)
+            httpx.HTTPError: For other HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -88,12 +89,14 @@ class GitHubHandler(PlatformHandler):
         }
 
         # Use base class helper for HTTP request execution
+        # ticket_id passed for harmonized 404 handling across REST/GraphQL
         response = await self._execute_request(
             method="GET",
             url=endpoint,
             http_client=http_client,
             timeout_seconds=timeout_seconds,
             headers=headers,
+            ticket_id=ticket_id,
         )
 
         result: dict[str, Any] = response.json()

@@ -20,7 +20,13 @@ class AzureDevOpsHandler(PlatformHandler):
         - pat: Personal Access Token
 
     Ticket ID format: "ProjectName/WorkItemID" (e.g., "MyProject/12345")
+
+    API Version:
+        Uses Azure DevOps REST API version 7.0 via query parameter.
     """
+
+    # Azure DevOps API version - configured as constant for easy updates
+    API_VERSION = "7.0"
 
     @property
     def platform_name(self) -> str:
@@ -62,7 +68,7 @@ class AzureDevOpsHandler(PlatformHandler):
         Args:
             ticket_id: Azure DevOps work item in "Project/ID" format
             credentials: Must contain 'organization', 'pat'
-            timeout_seconds: Request timeout (ignored if http_client provided)
+            timeout_seconds: Request timeout (per-request override for shared client)
             http_client: Shared HTTP client from DirectAPIFetcher
 
         Returns:
@@ -71,7 +77,8 @@ class AzureDevOpsHandler(PlatformHandler):
         Raises:
             CredentialValidationError: If required credentials are missing
             TicketIdFormatError: If ticket ID format is invalid
-            httpx.HTTPError: For HTTP-level failures
+            PlatformNotFoundError: If work item is not found (404)
+            httpx.HTTPError: For other HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -80,21 +87,26 @@ class AzureDevOpsHandler(PlatformHandler):
         organization = credentials["organization"]
         pat = credentials["pat"]
 
+        # Architecture: api-version moved to params dict for cleaner URL construction
+        # and easier version management
         endpoint = (
-            f"https://dev.azure.com/{organization}/{project}/"
-            f"_apis/wit/workitems/{work_item_id}?api-version=7.0"
+            f"https://dev.azure.com/{organization}/{project}/" f"_apis/wit/workitems/{work_item_id}"
         )
         headers = {"Accept": "application/json"}
+        params = {"api-version": self.API_VERSION}
 
         # Use base class helper for HTTP request execution
         # Azure DevOps uses Basic auth with empty username and PAT as password
+        # ticket_id passed for harmonized 404 handling
         response = await self._execute_request(
             method="GET",
             url=endpoint,
             http_client=http_client,
             timeout_seconds=timeout_seconds,
             headers=headers,
+            params=params,
             auth=httpx.BasicAuth("", pat),
+            ticket_id=ticket_id,
         )
 
         result: dict[str, Any] = response.json()

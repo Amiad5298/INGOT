@@ -47,7 +47,7 @@ class JiraHandler(PlatformHandler):
         Args:
             ticket_id: Jira issue key (e.g., "PROJ-123")
             credentials: Must contain 'url', 'email', 'token'
-            timeout_seconds: Request timeout (ignored if http_client provided)
+            timeout_seconds: Request timeout (per-request override for shared client)
             http_client: Shared HTTP client from DirectAPIFetcher
 
         Returns:
@@ -55,7 +55,8 @@ class JiraHandler(PlatformHandler):
 
         Raises:
             CredentialValidationError: If required credentials are missing
-            httpx.HTTPError: For HTTP-level failures
+            PlatformNotFoundError: If issue is not found (404)
+            httpx.HTTPError: For other HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -69,6 +70,7 @@ class JiraHandler(PlatformHandler):
         headers = {"Accept": "application/json"}
 
         # Use base class helper for HTTP request execution
+        # ticket_id passed for harmonized 404 handling across REST/GraphQL
         response = await self._execute_request(
             method="GET",
             url=endpoint,
@@ -76,6 +78,7 @@ class JiraHandler(PlatformHandler):
             timeout_seconds=timeout_seconds,
             headers=headers,
             auth=httpx.BasicAuth(email, token),
+            ticket_id=ticket_id,
         )
 
         result: dict[str, Any] = response.json()

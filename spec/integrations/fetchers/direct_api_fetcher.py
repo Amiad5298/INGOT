@@ -23,6 +23,8 @@ import asyncio
 import logging
 import random
 from collections.abc import Mapping
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -32,7 +34,6 @@ from spec.integrations.fetchers.base import TicketFetcher
 from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
     AgentIntegrationError,
-    AgentResponseParseError,
     CredentialValidationError,
     PlatformApiError,
     PlatformNotFoundError,
@@ -285,9 +286,12 @@ class DirectAPIFetcher(TicketFetcher):
                     original_error=e,
                 ) from e
             except PlatformApiError as e:
-                # GraphQL errors and other API-level errors
-                raise AgentResponseParseError(
-                    message=str(e),
+                # Semantic Exception Mapping: PlatformApiError represents logical API errors
+                # (e.g., GraphQL errors, validation failures). These are fetch failures,
+                # not parse errors - the response was successfully parsed but indicated a
+                # platform-level problem. Map to AgentFetchError for correct semantics.
+                raise AgentFetchError(
+                    message=f"Platform API error: {e}",
                     agent_name=self.name,
                     original_error=e,
                 ) from e
@@ -318,8 +322,10 @@ class DirectAPIFetcher(TicketFetcher):
                         await asyncio.sleep(retry_delay)
                     continue
 
-                # Don't retry other client errors (4xx)
-                if 400 <= status_code < 500:
+                # Defensive Retry Logic: Explicitly exclude 429 from the 4xx non-retry check.
+                # This prevents future regressions if the order of conditions changes,
+                # ensuring 429 is always retried regardless of code structure.
+                if 400 <= status_code < 500 and status_code != HTTP_TOO_MANY_REQUESTS:
                     raise AgentFetchError(
                         message=f"API request failed: {status_code} {e.response.text}",
                         agent_name=self.name,
@@ -361,6 +367,11 @@ class DirectAPIFetcher(TicketFetcher):
     def _get_retry_after_delay(self, response: httpx.Response, attempt: int) -> float:
         """Extract Retry-After delay from response, or calculate default.
 
+        Robust Retry-After Handling:
+            Supports both formats specified in RFC 7231:
+            - delay-seconds: Integer number of seconds (e.g., "120")
+            - HTTP-date: RFC 1123 date format (e.g., "Sun, 26 Jan 2026 12:00:00 GMT")
+
         Args:
             response: HTTP response with 429 status
             attempt: Current attempt number (0-based)
@@ -370,16 +381,31 @@ class DirectAPIFetcher(TicketFetcher):
         """
         retry_after = response.headers.get("Retry-After")
         if retry_after:
+            # Try parsing as integer (delay-seconds format)
             try:
-                # Retry-After can be seconds (integer) or HTTP-date
-                # We only handle the integer case for simplicity
                 return float(retry_after)
             except ValueError:
                 pass
 
+            # Try parsing as HTTP-date (RFC 1123 format)
+            try:
+                retry_date = parsedate_to_datetime(retry_after)
+                now = datetime.now(UTC)
+                http_date_delay: float = (retry_date - now).total_seconds()
+                # Ensure we don't return a negative delay if the date is in the past
+                return max(0.0, http_date_delay)
+            except (ValueError, TypeError) as e:
+                # Log warning on parse failure but continue with default backoff
+                logger.warning(
+                    "Failed to parse Retry-After header '%s': %s. "
+                    "Falling back to exponential backoff.",
+                    retry_after,
+                    e,
+                )
+
         # Default: exponential backoff
-        delay: float = self._performance.retry_delay_seconds * (2**attempt)
-        return delay
+        default_delay: float = self._performance.retry_delay_seconds * (2**attempt)
+        return default_delay
 
     def _get_platform_handler(self, platform: Platform) -> PlatformHandler:
         """Get the handler for a specific platform.
