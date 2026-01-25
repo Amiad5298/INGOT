@@ -22,6 +22,7 @@ import os
 import re
 import warnings
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any
 from urllib.parse import urlparse
 
@@ -41,59 +42,65 @@ from spec.integrations.providers.user_interaction import (
 )
 
 # Status mapping: Jira status name → TicketStatus
-STATUS_MAPPING: dict[str, TicketStatus] = {
-    # Open states
-    "to do": TicketStatus.OPEN,
-    "open": TicketStatus.OPEN,
-    "backlog": TicketStatus.OPEN,
-    "new": TicketStatus.OPEN,
-    "reopened": TicketStatus.OPEN,
-    # In Progress states
-    "in progress": TicketStatus.IN_PROGRESS,
-    "in development": TicketStatus.IN_PROGRESS,
-    "in review": TicketStatus.REVIEW,
-    "code review": TicketStatus.REVIEW,
-    "review": TicketStatus.REVIEW,
-    "testing": TicketStatus.REVIEW,
-    "qa": TicketStatus.REVIEW,
-    # Done states
-    "done": TicketStatus.DONE,
-    "resolved": TicketStatus.DONE,
-    "completed": TicketStatus.DONE,
-    # Closed states
-    "closed": TicketStatus.CLOSED,
-    # Blocked states
-    "blocked": TicketStatus.BLOCKED,
-    "on hold": TicketStatus.BLOCKED,
-    "waiting": TicketStatus.BLOCKED,
-}
+# Using MappingProxyType to prevent accidental mutation (consistent with LinearProvider)
+STATUS_MAPPING: MappingProxyType[str, TicketStatus] = MappingProxyType(
+    {
+        # Open states
+        "to do": TicketStatus.OPEN,
+        "open": TicketStatus.OPEN,
+        "backlog": TicketStatus.OPEN,
+        "new": TicketStatus.OPEN,
+        "reopened": TicketStatus.OPEN,
+        # In Progress states
+        "in progress": TicketStatus.IN_PROGRESS,
+        "in development": TicketStatus.IN_PROGRESS,
+        "in review": TicketStatus.REVIEW,
+        "code review": TicketStatus.REVIEW,
+        "review": TicketStatus.REVIEW,
+        "testing": TicketStatus.REVIEW,
+        "qa": TicketStatus.REVIEW,
+        # Done states
+        "done": TicketStatus.DONE,
+        "resolved": TicketStatus.DONE,
+        "completed": TicketStatus.DONE,
+        # Closed states
+        "closed": TicketStatus.CLOSED,
+        # Blocked states
+        "blocked": TicketStatus.BLOCKED,
+        "on hold": TicketStatus.BLOCKED,
+        "waiting": TicketStatus.BLOCKED,
+    }
+)
 
 # Type mapping: Jira issue type → TicketType
-TYPE_MAPPING: dict[str, TicketType] = {
-    # Feature types
-    "story": TicketType.FEATURE,
-    "feature": TicketType.FEATURE,
-    "epic": TicketType.FEATURE,
-    "user story": TicketType.FEATURE,
-    "enhancement": TicketType.FEATURE,
-    "new feature": TicketType.FEATURE,
-    # Bug types
-    "bug": TicketType.BUG,
-    "defect": TicketType.BUG,
-    "incident": TicketType.BUG,
-    "problem": TicketType.BUG,
-    # Task types
-    "task": TicketType.TASK,
-    "sub-task": TicketType.TASK,
-    "subtask": TicketType.TASK,
-    "spike": TicketType.TASK,
-    # Maintenance types
-    "technical debt": TicketType.MAINTENANCE,
-    "improvement": TicketType.MAINTENANCE,
-    "refactor": TicketType.MAINTENANCE,
-    "maintenance": TicketType.MAINTENANCE,
-    "chore": TicketType.MAINTENANCE,
-}
+# Using MappingProxyType to prevent accidental mutation (consistent with LinearProvider)
+TYPE_MAPPING: MappingProxyType[str, TicketType] = MappingProxyType(
+    {
+        # Feature types
+        "story": TicketType.FEATURE,
+        "feature": TicketType.FEATURE,
+        "epic": TicketType.FEATURE,
+        "user story": TicketType.FEATURE,
+        "enhancement": TicketType.FEATURE,
+        "new feature": TicketType.FEATURE,
+        # Bug types
+        "bug": TicketType.BUG,
+        "defect": TicketType.BUG,
+        "incident": TicketType.BUG,
+        "problem": TicketType.BUG,
+        # Task types
+        "task": TicketType.TASK,
+        "sub-task": TicketType.TASK,
+        "subtask": TicketType.TASK,
+        "spike": TicketType.TASK,
+        # Maintenance types
+        "technical debt": TicketType.MAINTENANCE,
+        "improvement": TicketType.MAINTENANCE,
+        "refactor": TicketType.MAINTENANCE,
+        "maintenance": TicketType.MAINTENANCE,
+        "chore": TicketType.MAINTENANCE,
+    }
+)
 
 # Default project key for numeric-only ticket IDs
 # Can be overridden via environment variable JIRA_DEFAULT_PROJECT
@@ -384,7 +391,7 @@ class JiraProvider(IssueTrackerProvider):
         platform_metadata: PlatformMetadata = {
             "raw_response": raw_data,
             "project_key": project_key,
-            "priority": priority_name,
+            "priority_label": priority_name,
             "epic_link": epic_link,
             "story_points": story_points,
             "components": components,

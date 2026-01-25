@@ -152,9 +152,14 @@ class PlatformMetadata(TypedDict, total=False):
             is_pull_request: Whether this is a PR vs issue
             state_reason: Reason for closure (completed, not_planned, etc.)
         Linear:
-            team_key: Linear team identifier
-            cycle: Current cycle information
-            parent_id: Parent issue ID for sub-issues
+            team_key: Linear team identifier (e.g., "ENG")
+            team_name: Linear team display name (e.g., "Engineering")
+            cycle: Current cycle/sprint name (or None if not in a cycle)
+            parent_id: Parent issue ID for sub-issues (or None)
+            linear_uuid: Linear internal UUID for the issue
+            priority_value: Numeric priority (0-4, where 0=no priority, 1=urgent)
+            state_name: Display name of the workflow state (e.g., "In Progress")
+            state_type: Workflow state type (backlog/unstarted/started/completed/canceled)
         Azure DevOps:
             work_item_type: Azure work item type
             area_path: Area classification
@@ -164,7 +169,7 @@ class PlatformMetadata(TypedDict, total=False):
     # Common fields
     raw_response: dict[str, Any]
     project_key: str
-    priority: str
+    priority_label: str
     epic_link: str
     sprint: str
     story_points: float
@@ -186,8 +191,13 @@ class PlatformMetadata(TypedDict, total=False):
 
     # Linear-specific
     team_key: str
-    cycle: str
-    parent_id: str
+    team_name: str
+    cycle: str | None
+    parent_id: str | None
+    linear_uuid: str
+    priority_value: int | None
+    state_name: str
+    state_type: str
 
     # Azure DevOps-specific
     work_item_type: str

@@ -1,7 +1,7 @@
 # Implementation Plan: AMI-20 - Implement LinearProvider Concrete Class
 
 **Ticket:** [AMI-20](https://linear.app/amiadspec/issue/AMI-20/implement-linearprovider-concrete-class)
-**Status:** Draft
+**Status:** ✅ Implemented (PR #28)
 **Date:** 2026-01-25
 
 ---
@@ -122,6 +122,7 @@ from __future__ import annotations
 import re
 import warnings
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any
 
 from spec.integrations.providers.base import (
@@ -141,44 +142,54 @@ from spec.integrations.providers.user_interaction import (
 
 
 # Status mapping: Linear state.type → TicketStatus
-# Linear has 5 workflow state types (always use state.type, not state.name)
-STATUS_MAPPING: dict[str, TicketStatus] = {
-    # Backlog state - not started, low priority
-    "backlog": TicketStatus.OPEN,
-    # Unstarted state - ready to work on
-    "unstarted": TicketStatus.OPEN,
-    # Started state - actively being worked on
-    "started": TicketStatus.IN_PROGRESS,
-    # Completed state - work is finished
-    "completed": TicketStatus.DONE,
-    # Canceled state - will not be done
-    "canceled": TicketStatus.CLOSED,
-}
+# Linear has 5 workflow state types
+# Using MappingProxyType to prevent accidental mutation
+STATUS_TYPE_MAPPING: MappingProxyType[str, TicketStatus] = MappingProxyType(
+    {
+        # Backlog state - not started, low priority
+        "backlog": TicketStatus.OPEN,
+        # Unstarted state - ready to work on
+        "unstarted": TicketStatus.OPEN,
+        # Started state - actively being worked on
+        "started": TicketStatus.IN_PROGRESS,
+        # Completed state - work is finished
+        "completed": TicketStatus.DONE,
+        # Canceled state - will not be done
+        "canceled": TicketStatus.CLOSED,
+    }
+)
 
-# Additional state name mappings for common custom state names
-# These supplement the state.type mapping when state.type is unavailable
-STATE_NAME_MAPPING: dict[str, TicketStatus] = {
-    # Backlog states
-    "backlog": TicketStatus.OPEN,
-    "triage": TicketStatus.OPEN,
-    # Ready states
-    "todo": TicketStatus.OPEN,
-    "to do": TicketStatus.OPEN,
-    "ready": TicketStatus.OPEN,
-    # In progress states
-    "in progress": TicketStatus.IN_PROGRESS,
-    "in development": TicketStatus.IN_PROGRESS,
-    # Review states
-    "in review": TicketStatus.REVIEW,
-    "review": TicketStatus.REVIEW,
-    # Done states
-    "done": TicketStatus.DONE,
-    "complete": TicketStatus.DONE,
-    "completed": TicketStatus.DONE,
-    # Closed states
-    "canceled": TicketStatus.CLOSED,
-    "cancelled": TicketStatus.CLOSED,
-}
+# State name mappings for specific state names that OVERRIDE state.type
+# IMPORTANT: These are checked BEFORE state.type to handle cases like
+# "In Review" which has type="started" but should map to REVIEW
+# Using MappingProxyType to prevent accidental mutation
+STATE_NAME_MAPPING: MappingProxyType[str, TicketStatus] = MappingProxyType(
+    {
+        # Review states - MUST be checked before state.type
+        # because "In Review" often has type="started"
+        "in review": TicketStatus.REVIEW,
+        "review": TicketStatus.REVIEW,
+        "code review": TicketStatus.REVIEW,
+        "pending review": TicketStatus.REVIEW,
+        # Backlog states
+        "backlog": TicketStatus.OPEN,
+        "triage": TicketStatus.OPEN,
+        # Ready states
+        "todo": TicketStatus.OPEN,
+        "to do": TicketStatus.OPEN,
+        "ready": TicketStatus.OPEN,
+        # In progress states
+        "in progress": TicketStatus.IN_PROGRESS,
+        "in development": TicketStatus.IN_PROGRESS,
+        # Done states
+        "done": TicketStatus.DONE,
+        "complete": TicketStatus.DONE,
+        "completed": TicketStatus.DONE,
+        # Closed states
+        "canceled": TicketStatus.CLOSED,
+        "cancelled": TicketStatus.CLOSED,
+    }
+)
 ```
 
 ### Step 2: Add Type Keywords and Prompt Template
@@ -188,20 +199,24 @@ Continue in `spec/integrations/providers/linear.py`:
 ```python
 # Type inference keywords: keyword → TicketType
 # Linear uses labels for categorization, so we infer type from label names
-TYPE_KEYWORDS: dict[TicketType, list[str]] = {
-    TicketType.BUG: ["bug", "defect", "fix", "error", "crash", "regression", "issue"],
-    TicketType.FEATURE: ["feature", "enhancement", "story", "improvement", "new"],
-    TicketType.TASK: ["task", "chore", "todo", "spike", "research"],
-    TicketType.MAINTENANCE: [
-        "maintenance",
-        "tech-debt",
-        "tech debt",
-        "refactor",
-        "cleanup",
-        "infrastructure",
-        "devops",
-    ],
-}
+# NOTE: If no type-specific keywords are found, defaults to FEATURE (not UNKNOWN)
+# Using MappingProxyType to prevent accidental mutation
+TYPE_KEYWORDS: MappingProxyType[TicketType, tuple[str, ...]] = MappingProxyType(
+    {
+        TicketType.BUG: ("bug", "defect", "fix", "error", "crash", "regression", "issue"),
+        TicketType.FEATURE: ("feature", "enhancement", "story", "improvement", "new"),
+        TicketType.TASK: ("task", "chore", "todo", "spike", "research"),
+        TicketType.MAINTENANCE: (
+            "maintenance",
+            "tech-debt",
+            "tech debt",
+            "refactor",
+            "cleanup",
+            "infrastructure",
+            "devops",
+        ),
+    }
+)
 
 
 # Structured prompt template for agent-mediated fetching
@@ -257,21 +272,23 @@ class LinearProvider(IssueTrackerProvider):
 
     PLATFORM = Platform.LINEAR
 
-    # URL patterns for Linear
-    _URL_PATTERNS = [
-        # Linear issue: https://linear.app/team/issue/TEAM-123
-        re.compile(
-            r"https?://linear\.app/(?P<team>[^/]+)/issue/(?P<ticket_id>[A-Z]+-\d+)",
-            re.IGNORECASE,
-        ),
-        # Linear issue with title slug: https://linear.app/team/issue/TEAM-123/issue-title
-        re.compile(
-            r"https?://linear\.app/(?P<team>[^/]+)/issue/(?P<ticket_id>[A-Z]+-\d+)/[^/]*",
-            re.IGNORECASE,
-        ),
-    ]
+    # Unified URL pattern for Linear (handles with/without title slug)
+    # Pattern breakdown:
+    # - https?://linear\.app/ - Linear base URL
+    # - (?P<org>[^/]+) - organization/workspace slug
+    # - /issue/ - literal path
+    # - (?P<ticket_id>[A-Z][A-Z0-9]*-\d+) - ticket ID with alphanumeric team key (ENG-123, G2-42, A1-1)
+    # - (?:/[^/]*)? - optional title slug
+    # - $ - end of string (strict matching)
+    # Using fullmatch equivalent via $ anchor to prevent partial matches
+    _URL_PATTERN = re.compile(
+        r"https?://linear\.app/(?P<org>[^/]+)/issue/"
+        r"(?P<ticket_id>[A-Z][A-Z0-9]*-\d+)(?:/[^/]*)?$",
+        re.IGNORECASE,
+    )
 
-    # ID pattern: TEAM-123 format (same as Jira, handled after platform detection)
+    # ID pattern: TEAM-123 format (alphanumeric team key like ENG, G2, A1)
+    # Uses fullmatch-equivalent $ anchor to prevent partial matches like "ENG-123abc"
     _ID_PATTERN = re.compile(r"^(?P<ticket_id>[A-Z][A-Z0-9]*-\d+)$", re.IGNORECASE)
 
     def __init__(
@@ -300,12 +317,15 @@ class LinearProvider(IssueTrackerProvider):
         """Check if this provider can handle the given input.
 
         Recognizes:
-        - Linear URLs: https://linear.app/team/issue/TEAM-123
-        - Linear URLs with title: https://linear.app/team/issue/TEAM-123/title-slug
-        - Ticket IDs: TEAM-123 format (case-insensitive)
+        - Linear URLs: https://linear.app/org/issue/TEAM-123
+        - Linear URLs with title: https://linear.app/org/issue/TEAM-123/title-slug
+        - Ticket IDs: TEAM-123 format (alphanumeric team key, case-insensitive)
 
         Note: TEAM-123 format is ambiguous with Jira. The PlatformDetector
         handles disambiguation; this method reports if the format is compatible.
+
+        Uses fullmatch() for strict matching to prevent partial matches like
+        "ENG-123abc" or "AMI-18-implement-feature" from being accepted.
 
         Args:
             input_str: URL or ticket ID to check
@@ -315,14 +335,14 @@ class LinearProvider(IssueTrackerProvider):
         """
         input_str = input_str.strip()
 
-        # Check URL patterns (unambiguous Linear detection)
-        for pattern in self._URL_PATTERNS:
-            if pattern.match(input_str):
-                return True
+        # Check URL pattern (unambiguous Linear detection)
+        # Uses unified pattern with $ anchor for strict matching
+        if self._URL_PATTERN.fullmatch(input_str):
+            return True
 
         # Check ID pattern (TEAM-123) - ambiguous with Jira
-        # Returns True to allow PlatformDetector to include Linear as candidate
-        if self._ID_PATTERN.match(input_str):
+        # Uses fullmatch() for strict matching (rejects "ENG-123abc")
+        if self._ID_PATTERN.fullmatch(input_str):
             return True
 
         return False
@@ -334,21 +354,20 @@ class LinearProvider(IssueTrackerProvider):
             input_str: URL or ticket ID
 
         Returns:
-            Normalized ticket ID in uppercase (e.g., "TEAM-123")
+            Normalized ticket ID in uppercase (e.g., "TEAM-123", "G2-42")
 
         Raises:
             ValueError: If input cannot be parsed
         """
         input_str = input_str.strip()
 
-        # Try URL patterns first
-        for pattern in self._URL_PATTERNS:
-            match = pattern.match(input_str)
-            if match:
-                return match.group("ticket_id").upper()
+        # Try URL pattern first (unified pattern handles with/without slug)
+        match = self._URL_PATTERN.fullmatch(input_str)
+        if match:
+            return match.group("ticket_id").upper()
 
-        # Try ID pattern (TEAM-123)
-        match = self._ID_PATTERN.match(input_str)
+        # Try ID pattern (TEAM-123, G2-42, etc.)
+        match = self._ID_PATTERN.fullmatch(input_str)
         if match:
             return match.group("ticket_id").upper()
 
@@ -362,18 +381,29 @@ class LinearProvider(IssueTrackerProvider):
         """Convert raw Linear GraphQL data to GenericTicket.
 
         Handles nested GraphQL response structure (e.g., labels.nodes[]).
-        Uses defensive field handling for malformed API responses.
+        Uses safe_nested_get() for defensive field handling of malformed responses.
 
         Args:
             raw_data: Raw Linear GraphQL response (issue object)
 
         Returns:
             Populated GenericTicket with normalized fields
-        """
-        # Extract identifier (TEAM-123)
-        ticket_id = raw_data.get("identifier", "")
 
-        # Extract state - prefer state.type for reliable mapping
+        Raises:
+            ValueError: If ticket ID (identifier) is empty or missing.
+                Do not create "ghost" tickets without valid IDs.
+        """
+        # Extract and validate identifier (TEAM-123)
+        ticket_id = raw_data.get("identifier", "")
+        if not ticket_id or not isinstance(ticket_id, str) or not ticket_id.strip():
+            raise ValueError(
+                "Cannot normalize Linear ticket: 'identifier' field is missing or empty. "
+                "A valid ticket ID is required."
+            )
+        ticket_id = ticket_id.strip()
+
+        # Extract state - check state.name FIRST for specific statuses like "In Review"
+        # because "In Review" often has type="started" but should map to REVIEW
         # Use safe_nested_get() for defensive handling of malformed responses
         state_obj = raw_data.get("state")
         state_type = self.safe_nested_get(state_obj, "type", "")

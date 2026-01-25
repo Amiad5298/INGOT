@@ -257,7 +257,7 @@ class TestJiraProviderNormalize:
         ticket = provider.normalize(sample_jira_response)
 
         assert ticket.platform_metadata["project_key"] == "PROJ"
-        assert ticket.platform_metadata["priority"] == "High"
+        assert ticket.platform_metadata["priority_label"] == "High"
         assert ticket.platform_metadata["epic_link"] == "PROJ-100"
         assert ticket.platform_metadata["story_points"] == 5
         assert ticket.platform_metadata["components"] == ["API"]

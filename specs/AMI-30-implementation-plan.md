@@ -170,21 +170,33 @@ Return ONLY a JSON object with these fields (no markdown, no explanation):
   "project": {{ "key": "PROJ", "name": "Project Name" }}
 }}""",
 
-    Platform.LINEAR: """Use your Linear tool to fetch issue {ticket_id}.
+    Platform.LINEAR: """Read Linear issue {ticket_id} and return the following as JSON.
 
 Return ONLY a JSON object with these fields (no markdown, no explanation):
 {{
-  "identifier": "TEAM-123",
-  "title": "issue title",
-  "description": "full description text",
-  "state": {{ "name": "Todo|In Progress|Done|etc" }},
-  "assignee": {{ "name": "username" }} or null,
-  "labels": {{ "nodes": [{{ "name": "label1" }}] }},
-  "createdAt": "ISO datetime",
-  "updatedAt": "ISO datetime",
-  "priority": 1-4,
-  "team": {{ "key": "TEAM" }},
-  "url": "https://linear.app/..."
+  "id": "<Linear internal UUID>",
+  "identifier": "<TEAM-123>",
+  "title": "<issue title>",
+  "description": "<description markdown or null>",
+  "url": "<Linear URL>",
+  "state": {{
+    "name": "<status name>",
+    "type": "<backlog|unstarted|started|completed|canceled>"
+  }},
+  "assignee": {{"name": "<assignee name>", "email": "<email>"}} or null,
+  "labels": {{
+    "nodes": [
+      {{"name": "<label1>"}},
+      {{"name": "<label2>"}}
+    ]
+  }},
+  "priority": <0-4 number>,
+  "priorityLabel": "<No priority|Urgent|High|Medium|Low>",
+  "team": {{"key": "<TEAM>", "name": "<Team Name>"}},
+  "cycle": {{"name": "<cycle name>"}} or null,
+  "parent": {{"identifier": "<parent TEAM-123>"}} or null,
+  "createdAt": "<ISO timestamp>",
+  "updatedAt": "<ISO timestamp>"
 }}""",
 
     Platform.GITHUB: """Use your GitHub API tool to fetch issue or PR {ticket_id}.
