@@ -142,6 +142,7 @@ class TestGitHubProviderCanHandle:
     )
     def test_can_handle_invalid_inputs(self, provider, input_str):
         """Provider rejects non-GitHub inputs."""
+        assert provider.can_handle(input_str) is False
 
 
 class TestGitHubProviderParseInput:

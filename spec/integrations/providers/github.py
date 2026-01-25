@@ -34,10 +34,6 @@ from spec.integrations.providers.base import (
     sanitize_title_for_branch,
 )
 from spec.integrations.providers.registry import ProviderRegistry
-from spec.integrations.providers.user_interaction import (
-    CLIUserInteraction,
-    UserInteractionInterface,
-)
 
 # Status mapping: GitHub state → TicketStatus
 # GitHub issues only have "open" or "closed" states; PRs can be "merged"
@@ -48,10 +44,12 @@ STATUS_MAPPING: dict[str, TicketStatus] = {
 
 # State reason mapping for closed issues (GitHub API v3)
 # state_reason indicates why an issue was closed
+# Note: "reopened" is NOT included here because:
+# - A reopened issue has state="open", not state="closed"
+# - This mapping is only consulted when state=="closed"
 STATE_REASON_MAPPING: dict[str, TicketStatus] = {
     "completed": TicketStatus.DONE,  # Issue resolved successfully
     "not_planned": TicketStatus.CLOSED,  # Closed without resolution (won't fix)
-    "reopened": TicketStatus.OPEN,  # Issue was reopened
 }
 
 # Label-based status enhancement
@@ -69,9 +67,10 @@ LABEL_STATUS_MAP: dict[str, TicketStatus] = {
 
 # Type inference keywords: keyword → TicketType
 # GitHub uses labels for categorization, so we infer type from label names
+# Note: Removed overly generic keywords like "new" and "issue" to reduce false positives
 TYPE_KEYWORDS: dict[TicketType, list[str]] = {
-    TicketType.BUG: ["bug", "defect", "fix", "error", "crash", "regression", "issue"],
-    TicketType.FEATURE: ["feature", "enhancement", "feat", "story", "request", "new"],
+    TicketType.BUG: ["bug", "defect", "fix", "error", "crash", "regression"],
+    TicketType.FEATURE: ["feature", "enhancement", "feat", "story", "request"],
     TicketType.TASK: ["task", "chore", "todo", "housekeeping", "spike"],
     TicketType.MAINTENANCE: [
         "maintenance",
@@ -151,24 +150,22 @@ class GitHubProvider(IssueTrackerProvider):
     # Bare issue number pattern: #123 (requires default owner/repo)
     _BARE_NUMBER_PATTERN = re.compile(r"^#(?P<number>\d+)$")
 
+    # Pattern to extract owner/repo from html_url (moved from normalize() for performance)
+    _REPO_FROM_URL_PATTERN = re.compile(r"https?://[^/]+/([^/]+)/([^/]+)/")
+
     def __init__(
         self,
-        user_interaction: UserInteractionInterface | None = None,
         default_owner: str | None = None,
         default_repo: str | None = None,
     ) -> None:
         """Initialize GitHubProvider.
 
         Args:
-            user_interaction: Optional user interaction interface for DI.
-                If not provided, uses CLIUserInteraction.
             default_owner: Default owner/org for bare issue references (#123).
                 If not provided, uses GITHUB_DEFAULT_OWNER env var.
             default_repo: Default repository for bare issue references (#123).
                 If not provided, uses GITHUB_DEFAULT_REPO env var.
         """
-        self._user_interaction = user_interaction or CLIUserInteraction()
-
         # Track whether defaults were explicitly configured
         env_owner = os.environ.get("GITHUB_DEFAULT_OWNER")
         env_repo = os.environ.get("GITHUB_DEFAULT_REPO")
@@ -199,6 +196,12 @@ class GitHubProvider(IssueTrackerProvider):
         - Short references: owner/repo#123
         - Bare issue numbers: #123 (ONLY if default owner/repo are configured)
 
+        GitHub Enterprise Behavior:
+            When GITHUB_BASE_URL is set, the catch-all URL pattern validates that
+            the host matches the configured base URL. If GITHUB_BASE_URL is not set,
+            the provider uses permissive matching for any domain with /issues/ or
+            /pull/ paths.
+
         Args:
             input_str: URL or ticket reference to check
 
@@ -207,10 +210,31 @@ class GitHubProvider(IssueTrackerProvider):
         """
         input_str = input_str.strip()
 
+        # Check GitHub Enterprise URL constraint if GITHUB_BASE_URL is set
+        github_base_url = os.environ.get("GITHUB_BASE_URL")
+
         # Check URL patterns (unambiguous GitHub detection)
-        for pattern in self._URL_PATTERNS:
-            if pattern.match(input_str):
-                return True
+        for i, pattern in enumerate(self._URL_PATTERNS):
+            match = pattern.match(input_str)
+            if match:
+                # First pattern is github.com-specific, always accept
+                if i == 0:
+                    return True
+                # Second pattern is the catch-all for GitHub Enterprise
+                # If GITHUB_BASE_URL is set, validate the host matches
+                if github_base_url:
+                    host = match.group("host")
+                    # Extract host from base URL (e.g., "https://github.mycompany.com" -> "github.mycompany.com")
+                    base_host_match = re.match(r"https?://([^/]+)", github_base_url)
+                    if base_host_match:
+                        expected_host = base_host_match.group(1)
+                        if host.lower() == expected_host.lower():
+                            return True
+                    # Host doesn't match configured base URL, skip
+                else:
+                    # GITHUB_BASE_URL not set - permissive behavior for backward compatibility
+                    # WARNING: This accepts any domain with GitHub-like URL structure
+                    return True
 
         # Check short reference pattern (owner/repo#123)
         if self._SHORT_REF_PATTERN.match(input_str):
@@ -276,14 +300,17 @@ class GitHubProvider(IssueTrackerProvider):
         """
         # Extract repository info for ticket ID
         # The repository field may come from different structures depending on source
-        repo_obj = raw_data.get("repository", {})
+        # Use `or {}` to protect against API explicitly returning null for repository
+        repo_obj = raw_data.get("repository") or {}
         repo_full_name = self.safe_nested_get(repo_obj, "full_name", "")
+
+        # Get html_url for fallback repo detection and PR detection
+        html_url = raw_data.get("html_url", "")
 
         # Fallback: construct from html_url if repository not provided
         if not repo_full_name:
-            html_url = raw_data.get("html_url", "")
-            # Parse owner/repo from URL: https://github.com/owner/repo/issues/123
-            url_match = re.match(r"https?://[^/]+/([^/]+)/([^/]+)/", html_url)
+            # Use pre-compiled class constant pattern for performance
+            url_match = self._REPO_FROM_URL_PATTERN.match(html_url)
             if url_match:
                 repo_full_name = f"{url_match.group(1)}/{url_match.group(2)}"
 
@@ -294,8 +321,12 @@ class GitHubProvider(IssueTrackerProvider):
         state = raw_data.get("state", "").lower()
         state_reason = raw_data.get("state_reason", "")
 
-        # Check if PR was merged (for merged PRs, state is "closed" but merged_at is set)
+        # Check if this is a PR
+        # Primary: check pull_request field; Fallback: check if /pull/ in html_url
+        # This handles cases where data source (like an LLM) might omit the pull_request field
         is_pr = raw_data.get("pull_request") is not None
+        if not is_pr and "/pull/" in html_url:
+            is_pr = True
         merged_at = raw_data.get("merged_at")
 
         status = self._map_status(state, state_reason, is_pr, merged_at)
