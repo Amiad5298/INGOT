@@ -188,6 +188,7 @@ class PlatformMetadata(TypedDict, total=False):
     issue_number: int
     is_pull_request: bool
     state_reason: str
+    author: str
 
     # Linear-specific
     team_key: str
