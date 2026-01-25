@@ -1,4 +1,13 @@
-"""Linear GraphQL API handler."""
+"""Linear GraphQL API handler.
+
+Linear API Reference:
+    https://developers.linear.app/docs/graphql/working-with-the-graphql-api
+
+Authentication:
+    Linear uses a simple API key authentication. The key should be passed
+    in the Authorization header directly (not as "Bearer <key>").
+    See: https://developers.linear.app/docs/graphql/working-with-the-graphql-api#authentication
+"""
 
 from __future__ import annotations
 
@@ -11,8 +20,12 @@ from spec.integrations.fetchers.exceptions import PlatformApiError, PlatformNotF
 
 from .base import PlatformHandler
 
-# Use issueByIdentifier for team-scoped identifiers (e.g., "AMI-31")
+# Linear GraphQL Query for fetching issues by team-scoped identifier
+# Uses issueByIdentifier for team-scoped identifiers (e.g., "AMI-31")
 # NOT issue(id:) which requires a UUID
+#
+# API Reference: https://developers.linear.app/docs/graphql/working-with-the-graphql-api
+# Query Reference: https://studio.apollographql.com/public/Linear-API/home
 ISSUE_QUERY = """
 query GetIssue($identifier: String!) {
   issueByIdentifier(identifier: $identifier) {
@@ -37,9 +50,14 @@ class LinearHandler(PlatformHandler):
     """Handler for Linear GraphQL API.
 
     Credential keys (from AuthenticationManager):
-        - api_key: Linear API key
+        - api_key: Linear API key (personal or OAuth token)
 
     Ticket ID format: Team-scoped identifier (e.g., "AMI-31", "PROJ-123")
+
+    Authentication:
+        Linear accepts the API key directly in the Authorization header,
+        without the "Bearer" prefix. This is per Linear's API documentation.
+        See: https://developers.linear.app/docs/graphql/working-with-the-graphql-api#authentication
     """
 
     API_URL = "https://api.linear.app/graphql"
@@ -66,7 +84,7 @@ class LinearHandler(PlatformHandler):
         Args:
             ticket_id: Linear issue identifier (e.g., "AMI-31")
             credentials: Must contain 'api_key'
-            timeout_seconds: Request timeout (ignored if http_client provided)
+            timeout_seconds: Request timeout (per-request override for shared client)
             http_client: Shared HTTP client from DirectAPIFetcher
 
         Returns:
@@ -74,13 +92,20 @@ class LinearHandler(PlatformHandler):
 
         Raises:
             CredentialValidationError: If required credentials are missing
-            PlatformApiError: If GraphQL returns errors or issue not found
+            PlatformNotFoundError: If the issue is not found
+            PlatformApiError: If GraphQL returns errors
             httpx.HTTPError: For HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
 
         api_key = credentials["api_key"]
+
+        # Linear API Authentication:
+        # Linear uses the API key directly in the Authorization header.
+        # Per Linear's documentation, the format is just the key itself,
+        # NOT "Bearer <key>". This differs from most OAuth2 APIs.
+        # Ref: https://developers.linear.app/docs/graphql/working-with-the-graphql-api#authentication
         headers = {
             "Authorization": api_key,
             "Content-Type": "application/json",
@@ -91,6 +116,7 @@ class LinearHandler(PlatformHandler):
         }
 
         # Use base class helper for HTTP request execution
+        # ticket_id passed for harmonized 404 context in error messages
         response = await self._execute_request(
             method="POST",
             url=self.API_URL,
@@ -98,19 +124,30 @@ class LinearHandler(PlatformHandler):
             timeout_seconds=timeout_seconds,
             headers=headers,
             json_data=payload,
+            ticket_id=ticket_id,
         )
 
-        data: dict[str, Any] = response.json()
+        response_data: dict[str, Any] = response.json()
 
-        # Check for GraphQL errors
-        if "errors" in data:
+        # GraphQL Safety: Check for GraphQL-level errors
+        if "errors" in response_data:
             raise PlatformApiError(
                 platform_name=self.platform_name,
-                error_details=f"GraphQL errors: {data['errors']}",
+                error_details=f"GraphQL errors: {response_data['errors']}",
                 ticket_id=ticket_id,
             )
 
-        issue = data.get("data", {}).get("issueByIdentifier")
+        # GraphQL Safety: Check for None data before accessing nested keys
+        # This prevents TypeError if the API returns {"data": null}
+        data = response_data.get("data")
+        if data is None:
+            raise PlatformApiError(
+                platform_name=self.platform_name,
+                error_details="GraphQL response contains null data",
+                ticket_id=ticket_id,
+            )
+
+        issue = data.get("issueByIdentifier")
         if issue is None:
             raise PlatformNotFoundError(
                 platform_name=self.platform_name,

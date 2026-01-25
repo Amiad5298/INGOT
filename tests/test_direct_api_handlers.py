@@ -16,6 +16,12 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
+from spec.integrations.fetchers.exceptions import (
+    CredentialValidationError,
+    PlatformApiError,
+    PlatformNotFoundError,
+    TicketIdFormatError,
+)
 from spec.integrations.fetchers.handlers import (
     AzureDevOpsHandler,
     GitHubHandler,
@@ -33,11 +39,17 @@ from spec.integrations.fetchers.handlers import (
 
 @pytest.fixture
 def mock_http_client():
-    """Create a mock httpx.AsyncClient."""
+    """Create a mock httpx.AsyncClient.
+
+    Note: The mock response must include status_code attribute for
+    the _check_not_found() method in base.py to work correctly.
+    """
     client = AsyncMock(spec=httpx.AsyncClient)
     response = MagicMock(spec=httpx.Response)
     response.json.return_value = {"id": "test"}
     response.raise_for_status = MagicMock()
+    # Required for _check_not_found() in base.py
+    response.status_code = 200
     client.get.return_value = response
     client.post.return_value = response
     return client
@@ -169,7 +181,7 @@ class TestJiraHandler:
         handler = JiraHandler()
         incomplete_creds = {"url": "https://example.com", "email": "user@example.com"}
 
-        with pytest.raises(ValueError, match="token"):
+        with pytest.raises(CredentialValidationError, match="token"):
             handler._validate_credentials(incomplete_creds)
 
     @pytest.mark.asyncio
@@ -197,10 +209,10 @@ class TestJiraHandler:
         await handler.fetch("PROJ-123", jira_credentials, http_client=mock_http_client)
 
         call_args = mock_http_client.get.call_args
-        # Jira uses httpx auth parameter (email, token) for Basic auth
+        # Jira uses httpx.BasicAuth for authentication
         assert "auth" in call_args[1]
         auth = call_args[1]["auth"]
-        assert auth == ("user@example.com", "jira-api-token")
+        assert isinstance(auth, httpx.BasicAuth)
 
 
 # =============================================================================
@@ -230,7 +242,7 @@ class TestLinearHandler:
         """Validation fails with missing key."""
         handler = LinearHandler()
 
-        with pytest.raises(ValueError, match="api_key"):
+        with pytest.raises(CredentialValidationError, match="api_key"):
             handler._validate_credentials({})
 
     @pytest.mark.asyncio
@@ -254,13 +266,13 @@ class TestLinearHandler:
 
     @pytest.mark.asyncio
     async def test_fetch_graphql_error(self, mock_http_client, linear_credentials):
-        """Raises ValueError on GraphQL errors."""
+        """Raises PlatformApiError on GraphQL errors."""
         mock_http_client.post.return_value.json.return_value = {
             "errors": [{"message": "Issue not found"}]
         }
         handler = LinearHandler()
 
-        with pytest.raises(ValueError, match="GraphQL errors"):
+        with pytest.raises(PlatformApiError, match="GraphQL errors"):
             await handler.fetch("TEAM-999", linear_credentials, http_client=mock_http_client)
 
 
@@ -292,10 +304,10 @@ class TestGitHubHandler:
         assert number == 12345
 
     def test_parse_ticket_id_invalid(self):
-        """Raises ValueError for invalid format."""
+        """Raises TicketIdFormatError for invalid format."""
         handler = GitHubHandler()
 
-        with pytest.raises(ValueError, match="Invalid GitHub ticket format"):
+        with pytest.raises(TicketIdFormatError, match="Invalid GitHub ticket format"):
             handler._parse_ticket_id("invalid-format")
 
     @pytest.mark.asyncio
@@ -355,10 +367,10 @@ class TestAzureDevOpsHandler:
         assert work_item_id == 12345
 
     def test_parse_ticket_id_invalid(self):
-        """Raises ValueError for invalid format."""
+        """Raises TicketIdFormatError for invalid format."""
         handler = AzureDevOpsHandler()
 
-        with pytest.raises(ValueError, match="Invalid Azure DevOps ticket format"):
+        with pytest.raises(TicketIdFormatError, match="Invalid Azure DevOps ticket format"):
             handler._parse_ticket_id("invalid")
 
     @pytest.mark.asyncio
@@ -387,9 +399,10 @@ class TestAzureDevOpsHandler:
         await handler.fetch("Project/1", azure_devops_credentials, http_client=mock_http_client)
 
         call_args = mock_http_client.get.call_args
-        headers = call_args[1]["headers"]
-        assert "Authorization" in headers
-        assert headers["Authorization"].startswith("Basic ")
+        # Azure DevOps uses httpx.BasicAuth for authentication (empty username, PAT as password)
+        assert "auth" in call_args[1]
+        auth = call_args[1]["auth"]
+        assert isinstance(auth, httpx.BasicAuth)
 
 
 # =============================================================================
@@ -484,20 +497,20 @@ class TestMondayHandler:
 
     @pytest.mark.asyncio
     async def test_fetch_graphql_error(self, mock_http_client, monday_credentials):
-        """Raises ValueError on GraphQL errors."""
+        """Raises PlatformApiError on GraphQL errors."""
         mock_http_client.post.return_value.json.return_value = {
             "errors": [{"message": "Item not found"}]
         }
         handler = MondayHandler()
 
-        with pytest.raises(ValueError, match="GraphQL errors"):
+        with pytest.raises(PlatformApiError, match="GraphQL errors"):
             await handler.fetch("99999", monday_credentials, http_client=mock_http_client)
 
     @pytest.mark.asyncio
     async def test_fetch_item_not_found(self, mock_http_client, monday_credentials):
-        """Raises ValueError when item not found."""
+        """Raises PlatformNotFoundError when item not found."""
         mock_http_client.post.return_value.json.return_value = {"data": {"items": []}}
         handler = MondayHandler()
 
-        with pytest.raises(ValueError, match="Item not found"):
+        with pytest.raises(PlatformNotFoundError):
             await handler.fetch("99999", monday_credentials, http_client=mock_http_client)

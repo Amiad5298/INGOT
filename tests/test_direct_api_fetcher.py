@@ -24,7 +24,6 @@ from spec.integrations.auth import AuthenticationManager, PlatformCredentials
 from spec.integrations.fetchers import (
     AgentFetchError,
     AgentIntegrationError,
-    AgentResponseParseError,
     DirectAPIFetcher,
 )
 from spec.integrations.fetchers.exceptions import PlatformApiError
@@ -135,15 +134,15 @@ class TestDirectAPIFetcherSupport:
 
     def test_supports_platform_when_configured(self, mock_auth_manager):
         """Returns True when credentials are fully configured."""
-        # mock_auth_manager already returns is_configured=True by default
+        # mock_auth_manager already returns has_fallback_configured=True by default
         fetcher = DirectAPIFetcher(mock_auth_manager)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
-        mock_auth_manager.get_credentials.assert_called_with(Platform.JIRA)
+        mock_auth_manager.has_fallback_configured.assert_called_with(Platform.JIRA)
 
     def test_supports_platform_when_not_configured(self, mock_auth_manager_no_creds):
         """Returns False when credentials are not configured."""
-        # mock_auth_manager_no_creds returns is_configured=False
+        # mock_auth_manager_no_creds returns has_fallback_configured=False
         fetcher = DirectAPIFetcher(mock_auth_manager_no_creds)
 
         assert fetcher.supports_platform(Platform.GITHUB) is False
@@ -155,7 +154,7 @@ class TestDirectAPIFetcherSupport:
         for platform in Platform:
             fetcher.supports_platform(platform)
 
-        assert mock_auth_manager.get_credentials.call_count == len(Platform)
+        assert mock_auth_manager.has_fallback_configured.call_count == len(Platform)
 
 
 # =============================================================================
@@ -434,11 +433,16 @@ class TestDirectAPIFetcherRetry:
 
     @pytest.mark.asyncio
     async def test_no_retry_on_platform_api_error(self, mock_auth_manager):
-        """Does not retry on PlatformApiError (GraphQL/API errors)."""
+        """Does not retry on PlatformApiError (GraphQL/API errors).
+
+        Note: PlatformApiError is now mapped to AgentFetchError (not AgentResponseParseError)
+        because it represents a logical API error, not a parsing failure.
+        """
         fetcher = DirectAPIFetcher(mock_auth_manager)
         fetcher._performance = FetchPerformanceConfig(max_retries=3, retry_delay_seconds=0.01)
 
         mock_handler = MagicMock()
+        mock_handler.platform_name = "Linear"
         mock_handler.fetch = AsyncMock(
             side_effect=PlatformApiError(
                 platform_name="Linear",
@@ -447,7 +451,7 @@ class TestDirectAPIFetcherRetry:
             )
         )
 
-        with pytest.raises(AgentResponseParseError) as exc_info:
+        with pytest.raises(AgentFetchError) as exc_info:
             await fetcher._fetch_with_retry(
                 handler=mock_handler,
                 ticket_id="PROJ-123",

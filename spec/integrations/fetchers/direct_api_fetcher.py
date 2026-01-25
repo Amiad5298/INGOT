@@ -15,6 +15,10 @@ Resource Management:
 
         async with DirectAPIFetcher(auth_manager) as fetcher:
             data = await fetcher.fetch(ticket_id, platform)
+
+Testability:
+    The fetcher supports injected sleeper callable for deterministic testing.
+    Pass a no-op sleeper to eliminate timing dependencies in tests.
 """
 
 from __future__ import annotations
@@ -22,7 +26,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from collections.abc import Mapping
+import weakref
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
@@ -39,7 +44,7 @@ from spec.integrations.fetchers.exceptions import (
     PlatformNotFoundError,
     TicketIdFormatError,
 )
-from spec.integrations.fetchers.handlers import PlatformHandler
+from spec.integrations.fetchers.handlers import PlatformHandler, create_handler
 from spec.integrations.providers.base import Platform
 
 if TYPE_CHECKING:
@@ -50,6 +55,25 @@ logger = logging.getLogger(__name__)
 
 # HTTP status code for rate limiting
 HTTP_TOO_MANY_REQUESTS = 429
+
+# Maximum length for error response body in exception messages
+# Prevents PII leakage and huge HTML payloads in logs
+MAX_ERROR_BODY_LENGTH = 200
+
+# Type alias for async sleep functions (for dependency injection in tests)
+AsyncSleeper = Callable[[float], Awaitable[None]]
+
+
+def _default_jitter_generator(max_jitter: float) -> float:
+    """Generate random jitter for retry delays.
+
+    Args:
+        max_jitter: Maximum jitter value
+
+    Returns:
+        Random jitter between 0 and max_jitter
+    """
+    return random.uniform(0, max_jitter)
 
 
 class DirectAPIFetcher(TicketFetcher):
@@ -74,6 +98,19 @@ class DirectAPIFetcher(TicketFetcher):
             finally:
                 await fetcher.close()
 
+    Testability:
+        For deterministic testing, inject a custom sleeper callable and/or
+        jitter generator to eliminate timing dependencies:
+
+            async def no_sleep(seconds: float) -> None:
+                pass  # No-op for tests
+
+            fetcher = DirectAPIFetcher(
+                auth_manager,
+                sleeper=no_sleep,
+                jitter_generator=lambda _: 0.0,  # No jitter
+            )
+
     Attributes:
         _auth: AuthenticationManager for credential retrieval
         _config: Optional ConfigManager for performance settings
@@ -81,6 +118,9 @@ class DirectAPIFetcher(TicketFetcher):
         _performance: FetchPerformanceConfig for retry settings
         _handlers: Lazily-created platform handlers (true lazy loading)
         _http_client: Shared HTTP client for connection pooling
+        _sleeper: Async sleep callable (injectable for testing)
+        _jitter_generator: Jitter generator callable (injectable for testing)
+        _closed: Tracks whether close() has been called
     """
 
     def __init__(
@@ -88,6 +128,9 @@ class DirectAPIFetcher(TicketFetcher):
         auth_manager: AuthenticationManager,
         config_manager: ConfigManager | None = None,
         timeout_seconds: float | None = None,
+        *,
+        sleeper: AsyncSleeper | None = None,
+        jitter_generator: Callable[[float], float] | None = None,
     ) -> None:
         """Initialize with AuthenticationManager.
 
@@ -95,6 +138,8 @@ class DirectAPIFetcher(TicketFetcher):
             auth_manager: AuthenticationManager instance (from AMI-22)
             config_manager: Optional ConfigManager for performance settings
             timeout_seconds: Optional timeout override (uses config default otherwise)
+            sleeper: Optional async sleep callable for testing (defaults to asyncio.sleep)
+            jitter_generator: Optional jitter generator for testing (defaults to random.uniform)
         """
         self._auth = auth_manager
         self._config = config_manager
@@ -118,6 +163,42 @@ class DirectAPIFetcher(TicketFetcher):
             timeout_seconds if timeout_seconds is not None else self._performance.timeout_seconds
         )
 
+        # Testability: Injectable sleeper and jitter for deterministic tests
+        self._sleeper: AsyncSleeper = sleeper if sleeper is not None else asyncio.sleep
+        self._jitter_generator = (
+            jitter_generator if jitter_generator is not None else _default_jitter_generator
+        )
+
+        # Track resource lifecycle
+        self._closed = False
+
+        # Lifecycle Safety: Register weak reference finalizer to warn about resource leaks
+        # This logs a warning if the fetcher is garbage collected without being closed
+        self._ensure_cleanup_warning()
+
+    def _ensure_cleanup_warning(self) -> None:
+        """Set up a weak reference finalizer to warn about unclosed clients.
+
+        Architecture Decision: Lifecycle Safety
+            Uses weakref.finalize to detect when the fetcher is garbage collected
+            without close() being called. This helps identify resource leaks during
+            development without breaking production code.
+        """
+        # Capture only the data we need for the warning, not self
+        client_ref = id(self)
+
+        def _warn_on_gc() -> None:
+            if not self._closed:
+                logger.warning(
+                    "DirectAPIFetcher (id=%s) was garbage collected without close() being called. "
+                    "This may indicate a resource leak. Use 'async with' context manager "
+                    "or call close() explicitly.",
+                    client_ref,
+                )
+
+        # Note: weakref.finalize holds a weak reference to self
+        weakref.finalize(self, _warn_on_gc)
+
     async def __aenter__(self) -> DirectAPIFetcher:
         """Enter async context manager, ensuring HTTP client is initialized."""
         await self._get_http_client()
@@ -133,6 +214,7 @@ class DirectAPIFetcher(TicketFetcher):
         Call this when done using the fetcher to release resources.
         Safe to call multiple times.
         """
+        self._closed = True
         if self._http_client is not None:
             await self._http_client.aclose()
             self._http_client = None
@@ -259,9 +341,19 @@ class DirectAPIFetcher(TicketFetcher):
             - Retries on timeouts and server errors (5xx)
             - Retries on 429 Too Many Requests (respects Retry-After header)
             - Does NOT retry on other client errors (4xx except 429)
+
+        Testability:
+            Uses injected sleeper and jitter_generator for deterministic testing.
+
+        Security:
+            Truncates error response bodies to prevent PII leakage in logs.
         """
         last_error: Exception | None = None
         http_client = await self._get_http_client()
+        platform = handler.platform_name
+
+        # Contextual logging: Include platform and ticket_id in all log messages
+        log_context = {"platform": platform, "ticket_id": ticket_id}
 
         for attempt in range(self._performance.max_retries + 1):
             try:
@@ -298,11 +390,11 @@ class DirectAPIFetcher(TicketFetcher):
             except httpx.TimeoutException as e:
                 last_error = e
                 logger.warning(
-                    "Timeout fetching %s (attempt %d/%d): %s",
-                    ticket_id,
+                    "Timeout fetching ticket (attempt %d/%d): %s",
                     attempt + 1,
                     self._performance.max_retries + 1,
                     e,
+                    extra=log_context,
                 )
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
@@ -312,22 +404,34 @@ class DirectAPIFetcher(TicketFetcher):
                     last_error = e
                     retry_delay = self._get_retry_after_delay(e.response, attempt)
                     logger.warning(
-                        "Rate limited fetching %s (attempt %d/%d), waiting %.1fs",
-                        ticket_id,
+                        "Rate limited (attempt %d/%d), waiting %.1fs",
                         attempt + 1,
                         self._performance.max_retries + 1,
                         retry_delay,
+                        extra=log_context,
                     )
                     if attempt < self._performance.max_retries:
-                        await asyncio.sleep(retry_delay)
+                        await self._sleeper(retry_delay)
                     continue
 
                 # Defensive Retry Logic: Explicitly exclude 429 from the 4xx non-retry check.
                 # This prevents future regressions if the order of conditions changes,
                 # ensuring 429 is always retried regardless of code structure.
                 if 400 <= status_code < 500 and status_code != HTTP_TOO_MANY_REQUESTS:
+                    # Security: Truncate error body to prevent PII leakage
+                    # Full body is logged at DEBUG level for troubleshooting
+                    error_body = e.response.text
+                    truncated_body = self._truncate_error_body(error_body)
+
+                    logger.debug(
+                        "Full API error response for %s/%s: %s",
+                        platform,
+                        ticket_id,
+                        error_body,
+                    )
+
                     raise AgentFetchError(
-                        message=f"API request failed: {status_code} {e.response.text}",
+                        message=f"API request failed: {status_code} {truncated_body}",
                         agent_name=self.name,
                         original_error=e,
                     ) from e
@@ -335,27 +439,28 @@ class DirectAPIFetcher(TicketFetcher):
                 # Retry server errors (5xx)
                 last_error = e
                 logger.warning(
-                    "HTTP error fetching %s (attempt %d/%d): %s",
-                    ticket_id,
+                    "HTTP error (attempt %d/%d): status=%d",
                     attempt + 1,
                     self._performance.max_retries + 1,
-                    e,
+                    status_code,
+                    extra=log_context,
                 )
             except httpx.HTTPError as e:
                 last_error = e
                 logger.warning(
-                    "Network error fetching %s (attempt %d/%d): %s",
-                    ticket_id,
+                    "Network error (attempt %d/%d): %s",
                     attempt + 1,
                     self._performance.max_retries + 1,
                     e,
+                    extra=log_context,
                 )
 
             # Calculate delay with jitter for next retry
+            # Uses injected sleeper and jitter_generator for testability
             if attempt < self._performance.max_retries:
                 delay = self._performance.retry_delay_seconds * (2**attempt)
-                jitter = random.uniform(0, delay * 0.1)
-                await asyncio.sleep(delay + jitter)
+                jitter = self._jitter_generator(delay * 0.1)
+                await self._sleeper(delay + jitter)
 
         # All retries exhausted
         raise AgentFetchError(
@@ -363,6 +468,26 @@ class DirectAPIFetcher(TicketFetcher):
             agent_name=self.name,
             original_error=last_error,
         )
+
+    def _truncate_error_body(self, body: str) -> str:
+        """Truncate error response body to prevent PII leakage.
+
+        Security Decision: Log Sanitization
+            Error response bodies may contain sensitive information (PII, auth tokens,
+            large HTML pages). Truncating to a reasonable length prevents:
+            1. PII leakage in standard logs
+            2. Log bloat from huge HTML error pages
+            3. Potential security issues from exposing internal details
+
+        Args:
+            body: Raw error response body
+
+        Returns:
+            Truncated body (max MAX_ERROR_BODY_LENGTH chars) with indicator if truncated
+        """
+        if len(body) <= MAX_ERROR_BODY_LENGTH:
+            return body
+        return body[:MAX_ERROR_BODY_LENGTH] + "... [truncated]"
 
     def _get_retry_after_delay(self, response: httpx.Response, attempt: int) -> float:
         """Extract Retry-After delay from response, or calculate default.
@@ -431,35 +556,21 @@ class DirectAPIFetcher(TicketFetcher):
     def _create_handler(self, platform: Platform) -> PlatformHandler | None:
         """Create a handler instance for the given platform.
 
+        Architecture Decision: Handler Registry Pattern
+            Uses the centralized handler registry from handlers/__init__.py
+            instead of inline imports. This improves:
+            1. Static analysis support (linters can trace imports)
+            2. Code maintainability (single source of truth)
+            3. Testability (registry can be mocked)
+
         Args:
             platform: Platform to create handler for
 
         Returns:
             Handler instance, or None if platform not supported
         """
-        # Import handlers here to avoid circular imports and enable lazy loading
-        from spec.integrations.fetchers.handlers import (
-            AzureDevOpsHandler,
-            GitHubHandler,
-            JiraHandler,
-            LinearHandler,
-            MondayHandler,
-            TrelloHandler,
-        )
-
-        handler_classes: dict[Platform, type[PlatformHandler]] = {
-            Platform.JIRA: JiraHandler,
-            Platform.LINEAR: LinearHandler,
-            Platform.GITHUB: GitHubHandler,
-            Platform.AZURE_DEVOPS: AzureDevOpsHandler,
-            Platform.TRELLO: TrelloHandler,
-            Platform.MONDAY: MondayHandler,
-        }
-
-        handler_class = handler_classes.get(platform)
-        if handler_class is None:
-            return None
-        return handler_class()
+        # Use the centralized handler registry
+        return create_handler(platform)
 
     def _resolve_platform(self, platform: str) -> Platform:
         """Resolve a platform string to Platform enum.
