@@ -10,6 +10,7 @@ Classes:
     TicketFetcher: Abstract base class for all fetchers
     AgentMediatedFetcher: Base class for AI agent-mediated fetching
     AuggieMediatedFetcher: Fetcher using Auggie's MCP integrations
+    DirectAPIFetcher: Fallback fetcher using direct REST/GraphQL API calls
 
 Exceptions:
     TicketFetchError: Base exception for fetch failures
@@ -24,6 +25,7 @@ from spec.integrations.fetchers.base import (
     AgentMediatedFetcher,
     TicketFetcher,
 )
+from spec.integrations.fetchers.direct_api_fetcher import DirectAPIFetcher
 from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
     AgentIntegrationError,
@@ -38,6 +40,7 @@ __all__ = [
     "AgentMediatedFetcher",
     # Concrete fetchers
     "AuggieMediatedFetcher",
+    "DirectAPIFetcher",
     # Exceptions
     "TicketFetchError",
     "PlatformNotSupportedError",

@@ -6,6 +6,11 @@ This module defines the exception hierarchy for the fetchers package:
 - AgentIntegrationError: Agent integration (e.g., MCP) failure
 - AgentFetchError: Tool execution failed during fetch
 - AgentResponseParseError: JSON output was malformed
+
+Handler-specific exceptions (raised by PlatformHandler implementations):
+- CredentialValidationError: Missing or invalid credential keys
+- TicketIdFormatError: Invalid ticket ID format for platform
+- PlatformApiError: Platform API returned an error (GraphQL errors, etc.)
 """
 
 from __future__ import annotations
@@ -19,6 +24,157 @@ class TicketFetchError(Exception):
     """
 
     pass
+
+
+# ============================================================================
+# Handler-specific exceptions (raised by PlatformHandler implementations)
+# ============================================================================
+
+
+class CredentialValidationError(TicketFetchError):
+    """Raised when credential validation fails in a handler.
+
+    This indicates missing or invalid credential keys required by the platform.
+
+    Attributes:
+        platform_name: Name of the platform (e.g., "Jira", "GitHub")
+        missing_keys: Set of credential keys that are missing
+    """
+
+    def __init__(
+        self,
+        platform_name: str,
+        missing_keys: set[str] | frozenset[str],
+        message: str | None = None,
+    ) -> None:
+        """Initialize CredentialValidationError.
+
+        Args:
+            platform_name: The platform that requires the credentials
+            missing_keys: Set of missing credential key names
+            message: Optional custom message (auto-generated if not provided)
+        """
+        self.platform_name = platform_name
+        self.missing_keys = missing_keys
+        if message is None:
+            message = (
+                f"{platform_name} handler missing required credentials: " f"{sorted(missing_keys)}"
+            )
+        super().__init__(message)
+
+
+class TicketIdFormatError(TicketFetchError):
+    """Raised when ticket ID format is invalid for the platform.
+
+    Each platform has specific ticket ID format requirements
+    (e.g., "owner/repo#number" for GitHub).
+
+    Attributes:
+        platform_name: Name of the platform
+        ticket_id: The invalid ticket ID that was provided
+        expected_format: Description of expected format (optional)
+    """
+
+    def __init__(
+        self,
+        platform_name: str,
+        ticket_id: str,
+        expected_format: str | None = None,
+        message: str | None = None,
+    ) -> None:
+        """Initialize TicketIdFormatError.
+
+        Args:
+            platform_name: The platform that rejected the ticket ID
+            ticket_id: The invalid ticket ID
+            expected_format: Optional description of expected format
+            message: Optional custom message (auto-generated if not provided)
+        """
+        self.platform_name = platform_name
+        self.ticket_id = ticket_id
+        self.expected_format = expected_format
+        if message is None:
+            message = f"Invalid {platform_name} ticket format: {ticket_id}"
+            if expected_format:
+                message += f" (expected: {expected_format})"
+        super().__init__(message)
+
+
+class PlatformApiError(TicketFetchError):
+    """Raised when platform API returns a logical error.
+
+    This is for API-level errors that are not HTTP status errors,
+    such as GraphQL errors in successful HTTP calls, etc.
+
+    Note: For "not found" scenarios (empty list, null result), use
+    PlatformNotFoundError instead.
+
+    Attributes:
+        platform_name: Name of the platform
+        error_details: Details about the API error
+        ticket_id: Optional ticket ID related to the error
+    """
+
+    def __init__(
+        self,
+        platform_name: str,
+        error_details: str,
+        ticket_id: str | None = None,
+        message: str | None = None,
+    ) -> None:
+        """Initialize PlatformApiError.
+
+        Args:
+            platform_name: The platform that returned the error
+            error_details: Details about what went wrong
+            ticket_id: Optional related ticket ID
+            message: Optional custom message (auto-generated if not provided)
+        """
+        self.platform_name = platform_name
+        self.error_details = error_details
+        self.ticket_id = ticket_id
+        if message is None:
+            message = f"{platform_name} API error: {error_details}"
+            if ticket_id:
+                message = f"{platform_name} API error for {ticket_id}: {error_details}"
+        super().__init__(message)
+
+
+class PlatformNotFoundError(PlatformApiError):
+    """Raised when a ticket/item is not found on the platform.
+
+    This is a semantic subclass of PlatformApiError specifically for
+    "not found" scenarios (e.g., empty list, null result in GraphQL).
+
+    Use this instead of PlatformApiError when the API successfully responded
+    but the requested item does not exist.
+
+    Attributes:
+        platform_name: Name of the platform
+        ticket_id: The ticket ID that was not found
+    """
+
+    def __init__(
+        self,
+        platform_name: str,
+        ticket_id: str,
+        message: str | None = None,
+    ) -> None:
+        """Initialize PlatformNotFoundError.
+
+        Args:
+            platform_name: The platform that was queried
+            ticket_id: The ticket ID that was not found
+            message: Optional custom message (auto-generated if not provided)
+        """
+        if message is None:
+            message = f"{platform_name}: Ticket '{ticket_id}' not found"
+        super().__init__(
+            platform_name=platform_name,
+            error_details="Ticket not found",
+            ticket_id=ticket_id,
+            message=message,
+        )
 
 
 class PlatformNotSupportedError(TicketFetchError):
