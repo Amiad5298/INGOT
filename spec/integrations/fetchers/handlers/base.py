@@ -10,6 +10,7 @@ import httpx
 
 from spec.integrations.fetchers.exceptions import (
     CredentialValidationError,
+    PlatformApiError,
     PlatformNotFoundError,
 )
 
@@ -203,3 +204,119 @@ class PlatformHandler(ABC):
                 platform_name=self.platform_name,
                 ticket_id=ticket_id or "unknown",
             )
+
+
+class GraphQLPlatformHandler(PlatformHandler):
+    """Base class for platform handlers using GraphQL APIs.
+
+    This class provides common functionality for GraphQL-based platforms:
+    - GraphQL error checking (errors array in response)
+    - Null data checking
+    - Common request execution pattern
+
+    Subclasses must implement:
+    - platform_name: Human-readable platform name
+    - required_credential_keys: Set of required credential keys
+    - fetch(): Main fetch method (can use helper methods from this class)
+    - _extract_entity(): Extract the entity from GraphQL data response
+    """
+
+    @abstractmethod
+    def _extract_entity(
+        self,
+        data: dict[str, Any],
+        ticket_id: str,
+    ) -> dict[str, Any]:
+        """Extract the entity from GraphQL data response.
+
+        Subclasses implement this to extract the platform-specific entity
+        from the GraphQL data object (e.g., issueByIdentifier for Linear,
+        items[0] for Monday).
+
+        Args:
+            data: The 'data' object from GraphQL response (guaranteed non-null)
+            ticket_id: Ticket ID for error context
+
+        Returns:
+            The extracted entity data
+
+        Raises:
+            PlatformNotFoundError: If the entity is not found in the data
+        """
+        pass
+
+    def _check_graphql_errors(
+        self,
+        response_data: dict[str, Any],
+        ticket_id: str,
+    ) -> None:
+        """Check for GraphQL-level errors in the response.
+
+        Args:
+            response_data: Full GraphQL response
+            ticket_id: Ticket ID for error context
+
+        Raises:
+            PlatformApiError: If GraphQL errors are present
+        """
+        if "errors" in response_data:
+            raise PlatformApiError(
+                platform_name=self.platform_name,
+                error_details=f"GraphQL errors: {response_data['errors']}",
+                ticket_id=ticket_id,
+            )
+
+    def _check_null_data(
+        self,
+        response_data: dict[str, Any],
+        ticket_id: str,
+    ) -> dict[str, Any]:
+        """Check for null data in GraphQL response and return data if valid.
+
+        Args:
+            response_data: Full GraphQL response
+            ticket_id: Ticket ID for error context
+
+        Returns:
+            The 'data' object from the response
+
+        Raises:
+            PlatformApiError: If data is null or missing
+        """
+        data = response_data.get("data")
+        if data is None:
+            raise PlatformApiError(
+                platform_name=self.platform_name,
+                error_details="GraphQL response contains null data",
+                ticket_id=ticket_id,
+            )
+        # Type assertion: data is guaranteed to be a dict at this point
+        result: dict[str, Any] = data
+        return result
+
+    def _validate_graphql_response(
+        self,
+        response_data: dict[str, Any],
+        ticket_id: str,
+    ) -> dict[str, Any]:
+        """Validate GraphQL response and extract entity.
+
+        Performs all GraphQL safety checks and extracts the entity:
+        1. Checks for GraphQL errors
+        2. Checks for null data
+        3. Extracts entity using subclass implementation
+
+        Args:
+            response_data: Full GraphQL response
+            ticket_id: Ticket ID for error context
+
+        Returns:
+            The extracted entity data
+
+        Raises:
+            PlatformApiError: If GraphQL errors or null data
+            PlatformNotFoundError: If entity not found
+        """
+        self._check_graphql_errors(response_data, ticket_id)
+        data = self._check_null_data(response_data, ticket_id)
+        return self._extract_entity(data, ticket_id)

@@ -2,6 +2,7 @@
 
 Tests cover:
 - PlatformHandler ABC contract
+- GraphQLPlatformHandler base class
 - All 6 platform handlers (Jira, Linear, GitHub, Azure DevOps, Trello, Monday)
 - Credential validation
 - Ticket ID parsing
@@ -25,6 +26,7 @@ from spec.integrations.fetchers.exceptions import (
 from spec.integrations.fetchers.handlers import (
     AzureDevOpsHandler,
     GitHubHandler,
+    GraphQLPlatformHandler,
     JiraHandler,
     LinearHandler,
     MondayHandler,
@@ -150,6 +152,175 @@ class TestPlatformHandlerABC:
 
         with pytest.raises(TypeError, match="abstract"):
             IncompleteFetcher()
+
+
+# =============================================================================
+# GraphQLPlatformHandler Tests
+# =============================================================================
+
+
+class TestGraphQLPlatformHandler:
+    """Tests for GraphQLPlatformHandler base class."""
+
+    def test_cannot_instantiate_without_extract_entity(self):
+        """Subclass must implement _extract_entity method."""
+
+        class IncompleteGraphQLHandler(GraphQLPlatformHandler):
+            @property
+            def platform_name(self) -> str:
+                return "TestGraphQL"
+
+            @property
+            def required_credential_keys(self) -> frozenset[str]:
+                return frozenset({"api_key"})
+
+            async def fetch(self, ticket_id, credentials, timeout_seconds=None, http_client=None):
+                return {}
+
+        with pytest.raises(TypeError, match="abstract"):
+            IncompleteGraphQLHandler()
+
+    def test_check_graphql_errors_raises_on_errors(self):
+        """_check_graphql_errors raises PlatformApiError when errors present."""
+
+        class TestHandler(GraphQLPlatformHandler):
+            @property
+            def platform_name(self) -> str:
+                return "TestGraphQL"
+
+            @property
+            def required_credential_keys(self) -> frozenset[str]:
+                return frozenset({"api_key"})
+
+            def _extract_entity(self, data, ticket_id):
+                return data.get("item")
+
+            async def fetch(self, ticket_id, credentials, timeout_seconds=None, http_client=None):
+                return {}
+
+        handler = TestHandler()
+        response_with_errors = {"errors": [{"message": "Some error"}]}
+
+        with pytest.raises(PlatformApiError, match="GraphQL errors"):
+            handler._check_graphql_errors(response_with_errors, "TEST-1")
+
+    def test_check_graphql_errors_passes_when_no_errors(self):
+        """_check_graphql_errors does not raise when no errors."""
+
+        class TestHandler(GraphQLPlatformHandler):
+            @property
+            def platform_name(self) -> str:
+                return "TestGraphQL"
+
+            @property
+            def required_credential_keys(self) -> frozenset[str]:
+                return frozenset({"api_key"})
+
+            def _extract_entity(self, data, ticket_id):
+                return data.get("item")
+
+            async def fetch(self, ticket_id, credentials, timeout_seconds=None, http_client=None):
+                return {}
+
+        handler = TestHandler()
+        response_without_errors = {"data": {"item": {"id": "1"}}}
+
+        # Should not raise
+        handler._check_graphql_errors(response_without_errors, "TEST-1")
+
+    def test_check_null_data_raises_on_null(self):
+        """_check_null_data raises PlatformApiError when data is null."""
+
+        class TestHandler(GraphQLPlatformHandler):
+            @property
+            def platform_name(self) -> str:
+                return "TestGraphQL"
+
+            @property
+            def required_credential_keys(self) -> frozenset[str]:
+                return frozenset({"api_key"})
+
+            def _extract_entity(self, data, ticket_id):
+                return data.get("item")
+
+            async def fetch(self, ticket_id, credentials, timeout_seconds=None, http_client=None):
+                return {}
+
+        handler = TestHandler()
+        response_with_null_data = {"data": None}
+
+        with pytest.raises(PlatformApiError, match="null data"):
+            handler._check_null_data(response_with_null_data, "TEST-1")
+
+    def test_check_null_data_returns_data_when_valid(self):
+        """_check_null_data returns data when it's valid."""
+
+        class TestHandler(GraphQLPlatformHandler):
+            @property
+            def platform_name(self) -> str:
+                return "TestGraphQL"
+
+            @property
+            def required_credential_keys(self) -> frozenset[str]:
+                return frozenset({"api_key"})
+
+            def _extract_entity(self, data, ticket_id):
+                return data.get("item")
+
+            async def fetch(self, ticket_id, credentials, timeout_seconds=None, http_client=None):
+                return {}
+
+        handler = TestHandler()
+        response_with_valid_data = {"data": {"item": {"id": "1"}}}
+
+        data = handler._check_null_data(response_with_valid_data, "TEST-1")
+        assert data == {"item": {"id": "1"}}
+
+    def test_validate_graphql_response_full_flow(self):
+        """_validate_graphql_response performs full validation and extraction."""
+
+        class TestHandler(GraphQLPlatformHandler):
+            @property
+            def platform_name(self) -> str:
+                return "TestGraphQL"
+
+            @property
+            def required_credential_keys(self) -> frozenset[str]:
+                return frozenset({"api_key"})
+
+            def _extract_entity(self, data, ticket_id):
+                item = data.get("item")
+                if item is None:
+                    raise PlatformNotFoundError(
+                        platform_name=self.platform_name,
+                        ticket_id=ticket_id,
+                    )
+                return item
+
+            async def fetch(self, ticket_id, credentials, timeout_seconds=None, http_client=None):
+                return {}
+
+        handler = TestHandler()
+
+        # Valid response
+        valid_response = {"data": {"item": {"id": "123", "name": "Test"}}}
+        result = handler._validate_graphql_response(valid_response, "TEST-1")
+        assert result == {"id": "123", "name": "Test"}
+
+        # Response with errors
+        error_response = {"errors": [{"message": "Error"}]}
+        with pytest.raises(PlatformApiError, match="GraphQL errors"):
+            handler._validate_graphql_response(error_response, "TEST-1")
+
+        # Response with null data
+        null_data_response = {"data": None}
+        with pytest.raises(PlatformApiError, match="null data"):
+            handler._validate_graphql_response(null_data_response, "TEST-1")
+
+        # Response with missing entity
+        missing_entity_response = {"data": {"item": None}}
+        with pytest.raises(PlatformNotFoundError):
+            handler._validate_graphql_response(missing_entity_response, "TEST-1")
 
 
 # =============================================================================

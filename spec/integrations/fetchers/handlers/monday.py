@@ -29,9 +29,9 @@ from typing import Any
 
 import httpx
 
-from spec.integrations.fetchers.exceptions import PlatformApiError, PlatformNotFoundError
+from spec.integrations.fetchers.exceptions import PlatformNotFoundError
 
-from .base import PlatformHandler
+from .base import GraphQLPlatformHandler
 
 # Monday.com GraphQL Query for fetching items by ID
 # API Reference: https://developer.monday.com/api-reference/reference/items
@@ -65,7 +65,7 @@ query GetItem($itemId: ID!) {
 """
 
 
-class MondayHandler(PlatformHandler):
+class MondayHandler(GraphQLPlatformHandler):
     """Handler for Monday.com GraphQL API.
 
     Credential keys (from AuthenticationManager):
@@ -88,6 +88,33 @@ class MondayHandler(PlatformHandler):
     @property
     def required_credential_keys(self) -> frozenset[str]:
         return frozenset({"api_key"})
+
+    def _extract_entity(
+        self,
+        data: dict[str, Any],
+        ticket_id: str,
+    ) -> dict[str, Any]:
+        """Extract item from Monday GraphQL response.
+
+        Args:
+            data: The 'data' object from GraphQL response
+            ticket_id: Ticket ID for error context
+
+        Returns:
+            The first item from the items array
+
+        Raises:
+            PlatformNotFoundError: If items array is empty or missing
+        """
+        items = data.get("items")
+        if items is None or len(items) == 0:
+            raise PlatformNotFoundError(
+                platform_name=self.platform_name,
+                ticket_id=ticket_id,
+            )
+        # Type assertion: items[0] is guaranteed to be a dict at this point
+        result: dict[str, Any] = items[0]
+        return result
 
     async def fetch(
         self,
@@ -145,30 +172,5 @@ class MondayHandler(PlatformHandler):
 
         response_data: dict[str, Any] = response.json()
 
-        # GraphQL Safety: Check for GraphQL-level errors
-        if "errors" in response_data:
-            raise PlatformApiError(
-                platform_name=self.platform_name,
-                error_details=f"GraphQL errors: {response_data['errors']}",
-                ticket_id=ticket_id,
-            )
-
-        # GraphQL Safety: Check for None data before accessing nested keys
-        # This prevents TypeError if the API returns {"data": null}
-        data = response_data.get("data")
-        if data is None:
-            raise PlatformApiError(
-                platform_name=self.platform_name,
-                error_details="GraphQL response contains null data",
-                ticket_id=ticket_id,
-            )
-
-        items = data.get("items")
-        if items is None or len(items) == 0:
-            raise PlatformNotFoundError(
-                platform_name=self.platform_name,
-                ticket_id=ticket_id,
-            )
-
-        result: dict[str, Any] = items[0]
-        return result
+        # Use base class GraphQL validation and entity extraction
+        return self._validate_graphql_response(response_data, ticket_id)

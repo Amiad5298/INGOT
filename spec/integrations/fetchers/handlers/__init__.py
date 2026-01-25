@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from spec.integrations.fetchers.handlers.azure_devops import AzureDevOpsHandler
-from spec.integrations.fetchers.handlers.base import PlatformHandler
+from spec.integrations.fetchers.handlers.base import GraphQLPlatformHandler, PlatformHandler
 from spec.integrations.fetchers.handlers.github import GitHubHandler
 from spec.integrations.fetchers.handlers.jira import JiraHandler
 from spec.integrations.fetchers.handlers.linear import LinearHandler
@@ -98,8 +98,9 @@ def create_handler(platform: Platform) -> PlatformHandler | None:
 
 
 __all__ = [
-    # Base class
+    # Base classes
     "PlatformHandler",
+    "GraphQLPlatformHandler",
     # Handler classes
     "JiraHandler",
     "LinearHandler",
