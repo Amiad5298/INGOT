@@ -238,6 +238,59 @@ class TestGitHubEnterpriseWithoutScheme:
         url = "https://github.mycompany.com/owner/repo/issues/99"
         assert provider_with_ghe_trailing_slash.can_handle(url) is True
 
+    @pytest.fixture
+    def provider_with_ghe_whitespace(self, monkeypatch):
+        """Create a GitHubProvider with GITHUB_BASE_URL with leading/trailing whitespace."""
+        monkeypatch.setenv("GITHUB_BASE_URL", "  https://github.mycompany.com  ")
+        return GitHubProvider()
+
+    def test_handles_whitespace_in_base_url(self, provider_with_ghe_whitespace):
+        """Provider handles GITHUB_BASE_URL with leading/trailing whitespace."""
+        url = "https://github.mycompany.com/owner/repo/issues/99"
+        assert provider_with_ghe_whitespace.can_handle(url) is True
+
+    def test_parse_with_whitespace_in_base_url(self, provider_with_ghe_whitespace):
+        """Parse Enterprise URL when GITHUB_BASE_URL has whitespace."""
+        url = "https://github.mycompany.com/org/project/issues/42"
+        assert provider_with_ghe_whitespace.parse_input(url) == "org/project#42"
+
+    @pytest.fixture
+    def provider_with_ghe_port(self, monkeypatch):
+        """Create a GitHubProvider with GITHUB_BASE_URL containing a port."""
+        monkeypatch.setenv("GITHUB_BASE_URL", "https://github.company.com:8443")
+        return GitHubProvider()
+
+    def test_handles_port_in_base_url_matches_url_without_port(self, provider_with_ghe_port):
+        """Provider with port in config matches URL without port (same hostname)."""
+        url = "https://github.company.com/owner/repo/issues/99"
+        assert provider_with_ghe_port.can_handle(url) is True
+
+    def test_handles_port_in_base_url_matches_url_with_different_port(self, provider_with_ghe_port):
+        """Provider with port in config matches URL with different port (same hostname)."""
+        url = "https://github.company.com:9000/owner/repo/issues/99"
+        assert provider_with_ghe_port.can_handle(url) is True
+
+    def test_parse_with_port_in_base_url(self, provider_with_ghe_port):
+        """Parse Enterprise URL when GITHUB_BASE_URL has port."""
+        url = "https://github.company.com/org/project/issues/42"
+        assert provider_with_ghe_port.parse_input(url) == "org/project#42"
+
+    @pytest.fixture
+    def provider_with_ghe_no_port(self, monkeypatch):
+        """Create a GitHubProvider with GITHUB_BASE_URL without a port."""
+        monkeypatch.setenv("GITHUB_BASE_URL", "https://github.company.com")
+        return GitHubProvider()
+
+    def test_config_without_port_matches_url_with_port(self, provider_with_ghe_no_port):
+        """Provider without port in config matches URL with port (same hostname)."""
+        url = "https://github.company.com:8443/owner/repo/issues/99"
+        assert provider_with_ghe_no_port.can_handle(url) is True
+
+    def test_parse_url_with_port_when_config_has_no_port(self, provider_with_ghe_no_port):
+        """Parse Enterprise URL with port when config has no port."""
+        url = "https://github.company.com:8443/org/project/issues/42"
+        assert provider_with_ghe_no_port.parse_input(url) == "org/project#42"
+
 
 class TestGitHubProviderParseInput:
     """Test parse_input() method."""

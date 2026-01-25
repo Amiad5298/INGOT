@@ -273,21 +273,17 @@ class GitHubProvider(IssueTrackerProvider):
 
     def __init__(
         self,
-        user_interaction: UserInteractionInterface | None = None,
         default_owner: str | None = None,
         default_repo: str | None = None,
     ) -> None:
         """Initialize GitHubProvider.
 
         Args:
-            user_interaction: Optional user interaction interface for DI.
-                If not provided, uses CLIUserInteraction.
             default_owner: Default owner/org for bare issue references (#123).
                 If not provided, uses GITHUB_DEFAULT_OWNER env var.
             default_repo: Default repository for bare issue references (#123).
                 If not provided, uses GITHUB_DEFAULT_REPO env var.
         """
-        self._user_interaction = user_interaction or CLIUserInteraction()
 
         # Track whether defaults were explicitly configured
         env_owner = os.environ.get("GITHUB_DEFAULT_OWNER")
@@ -1299,7 +1295,7 @@ def test_isolated_provider():
 >
 > 1. **AMI-17 Alignment Verification** - The constructor contract, `PLATFORM` class attribute, and `@ProviderRegistry.register` decorator pattern all follow the AMI-17 provider infrastructure specifications.
 >
-> 2. **Constructor Contract** - The `GitHubProvider.__init__()` accepts optional `user_interaction` parameter for dependency injection during testing, plus `default_owner` and `default_repo` parameters for bare issue number support.
+> 2. **Constructor Contract** - The `GitHubProvider.__init__()` accepts optional `default_owner` and `default_repo` parameters for bare issue number support. The `user_interaction` parameter is intentionally omitted since GitHubProvider doesn't require interactive user prompts - all fetching is delegated to the hybrid architecture.
 >
 > 3. **Test Isolation Pattern** - Tests should use the `reset_registry` fixture (shown in Testing Strategy) to ensure clean registry state. This prevents cross-test pollution when using the `@ProviderRegistry.register` decorator.
 >
@@ -1323,4 +1319,3 @@ def test_isolated_provider():
 ---
 
 *End of Implementation Plan*
-

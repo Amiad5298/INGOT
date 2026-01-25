@@ -187,12 +187,20 @@ class GitHubProvider(IssueTrackerProvider):
     def _get_allowed_hosts(self) -> set[str]:
         """Return the set of allowed hosts for URL validation.
 
+        Handles edge cases in GITHUB_BASE_URL:
+        - Whitespace: Leading/trailing whitespace is stripped
+        - Ports: Port numbers are removed to allow flexible matching
+          (e.g., "github.company.com:8443" matches URLs with or without port)
+
         Returns:
             Set containing 'github.com' and optionally the configured Enterprise host.
         """
         allowed = {"github.com"}
         github_base_url = os.environ.get("GITHUB_BASE_URL")
         if github_base_url:
+            # Strip leading/trailing whitespace to handle configuration errors
+            github_base_url = github_base_url.strip()
+
             # Handle URLs with or without scheme (e.g., "https://github.mycompany.com" or "github.mycompany.com")
             # Strip scheme if present
             host = github_base_url
@@ -200,8 +208,15 @@ class GitHubProvider(IssueTrackerProvider):
                 host = host[8:]
             elif host.startswith("http://"):
                 host = host[7:]
+
             # Strip trailing slashes and take the host part (before any path)
             host = host.rstrip("/").split("/")[0]
+
+            # Strip port number if present (e.g., "github.company.com:8443" -> "github.company.com")
+            # This ensures host matching works regardless of port in config or URL
+            if ":" in host:
+                host = host.split(":")[0]
+
             if host:
                 allowed.add(host.lower())
         return allowed
@@ -227,6 +242,9 @@ class GitHubProvider(IssueTrackerProvider):
         match = self._GENERIC_URL_PATTERN.match(input_str)
         if match:
             host = match.group("host").lower()
+            # Strip port from URL host for comparison (e.g., "github.company.com:8443" -> "github.company.com")
+            if ":" in host:
+                host = host.split(":")[0]
             allowed_hosts = self._get_allowed_hosts()
             if host in allowed_hosts:
                 return True, match
