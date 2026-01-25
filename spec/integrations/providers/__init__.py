@@ -37,6 +37,7 @@ from spec.integrations.providers.exceptions import (
     RateLimitError,
     TicketNotFoundError,
 )
+from spec.integrations.providers.github import GitHubProvider
 from spec.integrations.providers.jira import JiraProvider
 from spec.integrations.providers.registry import ProviderRegistry
 from spec.integrations.providers.user_interaction import (
@@ -76,5 +77,6 @@ __all__ = [
     # Registry
     "ProviderRegistry",
     # Providers
+    "GitHubProvider",
     "JiraProvider",
 ]
