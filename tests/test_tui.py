@@ -663,17 +663,98 @@ class TestSpinnerCaching:
         # Spinner for task 1 should be the same object
         assert tui._spinners[1] is spinner_1
 
-    def test_spinner_cache_none_creates_new_spinners(self, records):
-        """When spinners=None, new spinners are created each render (no caching)."""
-        # First render without cache
-        panel1 = render_task_list(records, spinners=None)
+    def test_spinner_cache_none_uses_static_fallback(self, records):
+        """When spinners=None, static Text fallback is used (prevents animation freeze).
 
-        # Second render without cache - should work fine (no errors)
-        panel2 = render_task_list(records, spinners=None)
+        This test verifies that when no spinner cache is provided, the render
+        function uses a static Text icon instead of creating a new Spinner.
+        Creating a new Spinner each render would reset the frame counter and
+        freeze the animation.
+        """
+        from rich.spinner import Spinner
+        from rich.table import Table
+        from rich.text import Text
 
-        # Both should render successfully (no assertion needed, just verify no crash)
-        assert panel1 is not None
-        assert panel2 is not None
+        # Render with spinners=None - should use static Text fallback for running task
+        panel = render_task_list(records, spinners=None)
+        assert panel is not None
+
+        # Extract the table from the panel to inspect status cells
+        table = panel.renderable
+        assert isinstance(table, Table)
+
+        # The records fixture has task at index 1 as RUNNING
+        # Verify the status cell for the running task is Text, NOT Spinner
+        # Table rows are stored in table.rows, each row has cells
+        running_task_row = table.rows[1]  # Index 1 is the RUNNING task
+        status_cell = running_task_row._cells[0]  # First column is status
+
+        # Critical assertion: status_cell must be Text, not Spinner
+        # If it were a Spinner, animation would freeze due to frame counter reset
+        assert isinstance(status_cell, Text), (
+            f"Expected Text fallback for running task without cached spinner, "
+            f"got {type(status_cell).__name__}. This would cause animation freeze."
+        )
+        assert not isinstance(status_cell, Spinner), (
+            "Spinner should NOT be created during render - this causes animation freeze"
+        )
+
+        # Verify the fallback icon is the running/loading icon "⟳"
+        assert "⟳" in status_cell.plain, (
+            f"Expected running icon '⟳' in fallback Text, got '{status_cell.plain}'"
+        )
+
+    def test_spinner_cache_empty_uses_static_fallback(self, records):
+        """When spinner cache is empty, static Text fallback is used."""
+        from rich.spinner import Spinner
+        from rich.table import Table
+        from rich.text import Text
+
+        # Render with empty spinner cache
+        panel = render_task_list(records, spinners={})
+        assert panel is not None
+
+        table = panel.renderable
+        assert isinstance(table, Table)
+
+        # Verify running task uses Text fallback
+        running_task_row = table.rows[1]
+        status_cell = running_task_row._cells[0]
+
+        assert isinstance(status_cell, Text)
+        assert not isinstance(status_cell, Spinner)
+        assert "⟳" in status_cell.plain
+
+    def test_spinner_cache_hit_uses_cached_spinner(self, records):
+        """When spinner is in cache, the cached Spinner instance is used."""
+        from rich.spinner import Spinner
+        from rich.table import Table
+        from rich.text import Text
+
+        # Create a spinner and put it in cache for the running task (index 1)
+        cached_spinner = Spinner("dots", style="bold cyan")
+        spinners_cache = {1: cached_spinner}
+
+        panel = render_task_list(records, spinners=spinners_cache)
+        assert panel is not None
+
+        table = panel.renderable
+        assert isinstance(table, Table)
+
+        # Verify running task uses the cached Spinner
+        running_task_row = table.rows[1]
+        status_cell = running_task_row._cells[0]
+
+        assert isinstance(status_cell, Spinner)
+        assert status_cell is cached_spinner, (
+            "Expected the exact cached Spinner instance to be used"
+        )
+
+        # Verify non-running tasks still use Text
+        pending_task_row = table.rows[0]
+        pending_status_cell = pending_task_row._cells[0]
+        assert isinstance(pending_status_cell, Text)
+        assert not isinstance(pending_status_cell, Spinner)
 
     def test_tui_uses_spinner_cache(self, tui):
         """TaskRunnerUI maintains spinner cache across refreshes."""

@@ -135,17 +135,21 @@ def render_task_list(
         icon = record.get_status_icon()
         color = record.get_status_color()
 
-        # Use spinner for running tasks - retrieve from cache (read-only)
-        # Spinners are created in _handle_task_started and removed in _handle_task_finished
-        status_cell: Spinner | Text
-        if record.status == TaskRunStatus.RUNNING:
-            # Retrieve existing spinner created by the event handler
-            # Do NOT instantiate a new Spinner("dots") here if missing,
-            # or it will freeze the animation.
-            spinner = spinners.get(record.task_index) if spinners is not None else None
-            status_cell = spinner if spinner else Spinner("dots", style=color)
-        else:
-            status_cell = Text(icon, style=color)
+        # Determine status cell: use cached spinner for running tasks, static Text otherwise.
+        # IMPORTANT: Do NOT instantiate a new Spinner("dots") here if missing from cache,
+        # as Rich's Spinner tracks an internal frame counter that resets on instantiation.
+        # Creating a new Spinner each render cycle would freeze the animation at frame 0.
+        # Spinners are created in _handle_task_started and removed in _handle_task_finished.
+        # Check status first to skip dictionary lookup for non-running tasks.
+        cached_spinner = (
+            spinners.get(record.task_index)
+            if record.status == TaskRunStatus.RUNNING and spinners
+            else None
+        )
+        # Use cached spinner if available; otherwise fall back to static Text icon.
+        # For RUNNING tasks without a cached spinner (rare race condition), the icon
+        # is "⟳" which clearly indicates a loading/in-progress state.
+        status_cell: Spinner | Text = cached_spinner if cached_spinner else Text(icon, style=color)
 
         # Task name with optional selection highlight
         name_style = ""
