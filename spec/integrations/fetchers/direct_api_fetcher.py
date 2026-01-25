@@ -35,6 +35,7 @@ from spec.integrations.fetchers.exceptions import (
     AgentResponseParseError,
     CredentialValidationError,
     PlatformApiError,
+    PlatformNotFoundError,
     TicketIdFormatError,
 )
 from spec.integrations.fetchers.handlers import PlatformHandler
@@ -103,6 +104,9 @@ class DirectAPIFetcher(TicketFetcher):
         # Shared HTTP client (created lazily on first request)
         self._http_client: httpx.AsyncClient | None = None
 
+        # Lock for thread-safe client initialization
+        self._client_lock = asyncio.Lock()
+
         # Get performance config for defaults
         if config_manager:
             self._performance = config_manager.get_fetch_performance_config()
@@ -114,7 +118,8 @@ class DirectAPIFetcher(TicketFetcher):
         )
 
     async def __aenter__(self) -> DirectAPIFetcher:
-        """Enter async context manager."""
+        """Enter async context manager, ensuring HTTP client is initialized."""
+        await self._get_http_client()
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -131,14 +136,18 @@ class DirectAPIFetcher(TicketFetcher):
             await self._http_client.aclose()
             self._http_client = None
 
-    def _get_http_client(self) -> httpx.AsyncClient:
+    async def _get_http_client(self) -> httpx.AsyncClient:
         """Get or create the shared HTTP client.
 
+        Uses double-check locking pattern for thread/concurrency safety.
         Creates a new client on first call with configured timeout.
         """
         if self._http_client is None:
-            timeout = httpx.Timeout(self._timeout_seconds)
-            self._http_client = httpx.AsyncClient(timeout=timeout)
+            async with self._client_lock:
+                # Double-check locking pattern
+                if self._http_client is None:
+                    timeout = httpx.Timeout(self._timeout_seconds)
+                    self._http_client = httpx.AsyncClient(timeout=timeout)
         return self._http_client
 
     @property
@@ -147,20 +156,18 @@ class DirectAPIFetcher(TicketFetcher):
         return "Direct API Fetcher"
 
     def supports_platform(self, platform: Platform) -> bool:
-        """Check if valid fallback credentials exist for this platform.
+        """Check if fallback credentials are configured for this platform.
 
-        Performs a robust check by verifying that credentials are fully
-        configured (not just that some config exists).
+        Uses a lightweight check to avoid expensive credential decryption.
+        Full validation happens during fetch_raw when credentials are used.
 
         Args:
             platform: Platform enum value
 
         Returns:
-            True if valid fallback credentials are configured
+            True if fallback credentials are configured for the platform
         """
-        # Use get_credentials for robust validation instead of quick check
-        creds = self._auth.get_credentials(platform)
-        return creds.is_configured
+        return self._auth.has_fallback_configured(platform)
 
     async def fetch(
         self,
@@ -253,7 +260,7 @@ class DirectAPIFetcher(TicketFetcher):
             - Does NOT retry on other client errors (4xx except 429)
         """
         last_error: Exception | None = None
-        http_client = self._get_http_client()
+        http_client = await self._get_http_client()
 
         for attempt in range(self._performance.max_retries + 1):
             try:
@@ -270,8 +277,15 @@ class DirectAPIFetcher(TicketFetcher):
                     agent_name=self.name,
                     original_error=e,
                 ) from e
+            except PlatformNotFoundError as e:
+                # Ticket not found - semantic "not found" error, don't retry
+                raise AgentFetchError(
+                    message=str(e),
+                    agent_name=self.name,
+                    original_error=e,
+                ) from e
             except PlatformApiError as e:
-                # GraphQL errors, not found in successful response, etc.
+                # GraphQL errors and other API-level errors
                 raise AgentResponseParseError(
                     message=str(e),
                     agent_name=self.name,

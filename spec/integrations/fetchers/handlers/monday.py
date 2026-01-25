@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from spec.integrations.fetchers.exceptions import PlatformApiError
+from spec.integrations.fetchers.exceptions import PlatformApiError, PlatformNotFoundError
 
 from .base import PlatformHandler
 
@@ -108,9 +108,8 @@ class MondayHandler(PlatformHandler):
 
         items = data.get("data", {}).get("items", [])
         if not items:
-            raise PlatformApiError(
+            raise PlatformNotFoundError(
                 platform_name=self.platform_name,
-                error_details="Item not found",
                 ticket_id=ticket_id,
             )
 

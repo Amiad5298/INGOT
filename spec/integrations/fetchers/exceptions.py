@@ -104,7 +104,10 @@ class PlatformApiError(TicketFetchError):
     """Raised when platform API returns a logical error.
 
     This is for API-level errors that are not HTTP status errors,
-    such as GraphQL errors, not found responses in successful HTTP calls, etc.
+    such as GraphQL errors in successful HTTP calls, etc.
+
+    Note: For "not found" scenarios (empty list, null result), use
+    PlatformNotFoundError instead.
 
     Attributes:
         platform_name: Name of the platform
@@ -135,6 +138,43 @@ class PlatformApiError(TicketFetchError):
             if ticket_id:
                 message = f"{platform_name} API error for {ticket_id}: {error_details}"
         super().__init__(message)
+
+
+class PlatformNotFoundError(PlatformApiError):
+    """Raised when a ticket/item is not found on the platform.
+
+    This is a semantic subclass of PlatformApiError specifically for
+    "not found" scenarios (e.g., empty list, null result in GraphQL).
+
+    Use this instead of PlatformApiError when the API successfully responded
+    but the requested item does not exist.
+
+    Attributes:
+        platform_name: Name of the platform
+        ticket_id: The ticket ID that was not found
+    """
+
+    def __init__(
+        self,
+        platform_name: str,
+        ticket_id: str,
+        message: str | None = None,
+    ) -> None:
+        """Initialize PlatformNotFoundError.
+
+        Args:
+            platform_name: The platform that was queried
+            ticket_id: The ticket ID that was not found
+            message: Optional custom message (auto-generated if not provided)
+        """
+        if message is None:
+            message = f"{platform_name}: Ticket '{ticket_id}' not found"
+        super().__init__(
+            platform_name=platform_name,
+            error_details="Ticket not found",
+            ticket_id=ticket_id,
+            message=message,
+        )
 
 
 class PlatformNotSupportedError(TicketFetchError):

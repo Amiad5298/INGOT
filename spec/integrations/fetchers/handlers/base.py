@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import httpx
 
 from spec.integrations.fetchers.exceptions import CredentialValidationError
-
-if TYPE_CHECKING:
-    from httpx._types import AuthTypes
 
 
 class PlatformHandler(ABC):
@@ -99,7 +96,7 @@ class PlatformHandler(ABC):
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
         json_data: dict[str, Any] | None = None,
-        auth: AuthTypes | None = None,
+        auth: httpx.Auth | None = None,
     ) -> httpx.Response:
         """Execute HTTP request using shared client or create new one.
 
@@ -123,8 +120,12 @@ class PlatformHandler(ABC):
             httpx.HTTPError: For HTTP-level failures
             httpx.TimeoutException: For timeout failures
         """
-        # Build kwargs, only including auth if provided
-        kwargs: dict[str, Any] = {"headers": headers, "params": params}
+        # Build kwargs dynamically - only include non-None values
+        kwargs: dict[str, Any] = {}
+        if headers is not None:
+            kwargs["headers"] = headers
+        if params is not None:
+            kwargs["params"] = params
         if auth is not None:
             kwargs["auth"] = auth
 

@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from spec.integrations.fetchers.exceptions import PlatformApiError
+from spec.integrations.fetchers.exceptions import PlatformApiError, PlatformNotFoundError
 
 from .base import PlatformHandler
 
@@ -112,9 +112,8 @@ class LinearHandler(PlatformHandler):
 
         issue = data.get("data", {}).get("issueByIdentifier")
         if issue is None:
-            raise PlatformApiError(
+            raise PlatformNotFoundError(
                 platform_name=self.platform_name,
-                error_details="Issue not found",
                 ticket_id=ticket_id,
             )
 
