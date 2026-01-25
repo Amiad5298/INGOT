@@ -40,6 +40,19 @@ class TrelloHandler(PlatformHandler):
         """Fetch card from Trello REST API.
 
         API endpoint: GET /1/cards/{id}
+
+        Args:
+            ticket_id: Trello card ID or shortLink
+            credentials: Must contain 'api_key', 'token'
+            timeout_seconds: Request timeout (ignored if http_client provided)
+            http_client: Shared HTTP client from DirectAPIFetcher
+
+        Returns:
+            Raw Trello card data
+
+        Raises:
+            CredentialValidationError: If required credentials are missing
+            httpx.HTTPError: For HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -50,15 +63,14 @@ class TrelloHandler(PlatformHandler):
         endpoint = f"{self.API_URL}/cards/{ticket_id}"
         params = {"key": api_key, "token": token}
 
-        # Use injected client or create new one
-        if http_client is not None:
-            response = await http_client.get(endpoint, params=params)
-            response.raise_for_status()
-            result: dict[str, Any] = response.json()
-            return result
-        else:
-            async with self._get_http_client(timeout_seconds) as client:
-                response = await client.get(endpoint, params=params)
-                response.raise_for_status()
-                result = response.json()
-                return result
+        # Use base class helper for HTTP request execution
+        response = await self._execute_request(
+            method="GET",
+            url=endpoint,
+            http_client=http_client,
+            timeout_seconds=timeout_seconds,
+            params=params,
+        )
+
+        result: dict[str, Any] = response.json()
+        return result

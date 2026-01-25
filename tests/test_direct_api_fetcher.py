@@ -27,6 +27,7 @@ from spec.integrations.fetchers import (
     AgentResponseParseError,
     DirectAPIFetcher,
 )
+from spec.integrations.fetchers.exceptions import PlatformApiError
 from spec.integrations.providers.base import Platform
 
 # =============================================================================
@@ -133,17 +134,17 @@ class TestDirectAPIFetcherSupport:
     """Tests for supports_platform method."""
 
     def test_supports_platform_when_configured(self, mock_auth_manager):
-        """Returns True when AuthenticationManager has fallback configured."""
-        mock_auth_manager.has_fallback_configured.return_value = True
+        """Returns True when credentials are fully configured."""
+        # mock_auth_manager already returns is_configured=True by default
         fetcher = DirectAPIFetcher(mock_auth_manager)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
-        mock_auth_manager.has_fallback_configured.assert_called_with(Platform.JIRA)
+        mock_auth_manager.get_credentials.assert_called_with(Platform.JIRA)
 
-    def test_supports_platform_when_not_configured(self, mock_auth_manager):
-        """Returns False when no fallback configured."""
-        mock_auth_manager.has_fallback_configured.return_value = False
-        fetcher = DirectAPIFetcher(mock_auth_manager)
+    def test_supports_platform_when_not_configured(self, mock_auth_manager_no_creds):
+        """Returns False when credentials are not configured."""
+        # mock_auth_manager_no_creds returns is_configured=False
+        fetcher = DirectAPIFetcher(mock_auth_manager_no_creds)
 
         assert fetcher.supports_platform(Platform.GITHUB) is False
 
@@ -154,7 +155,7 @@ class TestDirectAPIFetcherSupport:
         for platform in Platform:
             fetcher.supports_platform(platform)
 
-        assert mock_auth_manager.has_fallback_configured.call_count == len(Platform)
+        assert mock_auth_manager.get_credentials.call_count == len(Platform)
 
 
 # =============================================================================
@@ -432,13 +433,19 @@ class TestDirectAPIFetcherRetry:
         assert mock_handler.fetch.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_no_retry_on_value_error(self, mock_auth_manager):
-        """Does not retry on ValueError (parse errors)."""
+    async def test_no_retry_on_platform_api_error(self, mock_auth_manager):
+        """Does not retry on PlatformApiError (GraphQL/API errors)."""
         fetcher = DirectAPIFetcher(mock_auth_manager)
         fetcher._performance = FetchPerformanceConfig(max_retries=3, retry_delay_seconds=0.01)
 
         mock_handler = MagicMock()
-        mock_handler.fetch = AsyncMock(side_effect=ValueError("GraphQL errors"))
+        mock_handler.fetch = AsyncMock(
+            side_effect=PlatformApiError(
+                platform_name="Linear",
+                error_details="GraphQL errors",
+                ticket_id="PROJ-123",
+            )
+        )
 
         with pytest.raises(AgentResponseParseError) as exc_info:
             await fetcher._fetch_with_retry(

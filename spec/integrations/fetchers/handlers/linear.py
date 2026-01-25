@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from spec.integrations.fetchers.exceptions import PlatformApiError
+
 from .base import PlatformHandler
 
 # Use issueByIdentifier for team-scoped identifiers (e.g., "AMI-31")
@@ -60,6 +62,20 @@ class LinearHandler(PlatformHandler):
         """Fetch issue from Linear GraphQL API.
 
         Uses issueByIdentifier query for team-scoped identifiers.
+
+        Args:
+            ticket_id: Linear issue identifier (e.g., "AMI-31")
+            credentials: Must contain 'api_key'
+            timeout_seconds: Request timeout (ignored if http_client provided)
+            http_client: Shared HTTP client from DirectAPIFetcher
+
+        Returns:
+            Raw Linear issue data
+
+        Raises:
+            CredentialValidationError: If required credentials are missing
+            PlatformApiError: If GraphQL returns errors or issue not found
+            httpx.HTTPError: For HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -74,31 +90,33 @@ class LinearHandler(PlatformHandler):
             "variables": {"identifier": ticket_id},
         }
 
-        # Use injected client or create new one
-        if http_client is not None:
-            response = await http_client.post(
-                self.API_URL,
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-        else:
-            async with self._get_http_client(timeout_seconds) as client:
-                response = await client.post(
-                    self.API_URL,
-                    headers=headers,
-                    json=payload,
-                )
-                response.raise_for_status()
-                data = response.json()
+        # Use base class helper for HTTP request execution
+        response = await self._execute_request(
+            method="POST",
+            url=self.API_URL,
+            http_client=http_client,
+            timeout_seconds=timeout_seconds,
+            headers=headers,
+            json_data=payload,
+        )
 
-        # Extract issue from GraphQL response
+        data: dict[str, Any] = response.json()
+
+        # Check for GraphQL errors
         if "errors" in data:
-            raise ValueError(f"GraphQL errors: {data['errors']}")
+            raise PlatformApiError(
+                platform_name=self.platform_name,
+                error_details=f"GraphQL errors: {data['errors']}",
+                ticket_id=ticket_id,
+            )
 
         issue = data.get("data", {}).get("issueByIdentifier")
         if issue is None:
-            raise ValueError(f"Issue not found: {ticket_id}")
+            raise PlatformApiError(
+                platform_name=self.platform_name,
+                error_details="Issue not found",
+                ticket_id=ticket_id,
+            )
+
         result: dict[str, Any] = issue
         return result

@@ -17,6 +17,12 @@ class JiraHandler(PlatformHandler):
         - url: Jira instance URL (e.g., https://company.atlassian.net)
         - email: User email for authentication
         - token: API token
+
+    URL Handling:
+        The handler normalizes the base URL by stripping trailing slashes
+        to ensure consistent endpoint construction regardless of whether
+        the user provides "https://company.atlassian.net" or
+        "https://company.atlassian.net/".
     """
 
     @property
@@ -37,33 +43,40 @@ class JiraHandler(PlatformHandler):
         """Fetch issue from Jira REST API.
 
         API endpoint: GET /rest/api/3/issue/{issueIdOrKey}
+
+        Args:
+            ticket_id: Jira issue key (e.g., "PROJ-123")
+            credentials: Must contain 'url', 'email', 'token'
+            timeout_seconds: Request timeout (ignored if http_client provided)
+            http_client: Shared HTTP client from DirectAPIFetcher
+
+        Returns:
+            Raw Jira issue data
+
+        Raises:
+            CredentialValidationError: If required credentials are missing
+            httpx.HTTPError: For HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
 
-        url = credentials["url"].rstrip("/")
+        # Normalize base URL (strip trailing slashes for consistent endpoint building)
+        base_url = credentials["url"].rstrip("/")
         email = credentials["email"]
         token = credentials["token"]
 
-        endpoint = f"{url}/rest/api/3/issue/{ticket_id}"
+        endpoint = f"{base_url}/rest/api/3/issue/{ticket_id}"
+        headers = {"Accept": "application/json"}
 
-        # Use injected client or create new one
-        if http_client is not None:
-            response = await http_client.get(
-                endpoint,
-                auth=(email, token),
-                headers={"Accept": "application/json"},
-            )
-            response.raise_for_status()
-            result: dict[str, Any] = response.json()
-            return result
-        else:
-            async with self._get_http_client(timeout_seconds) as client:
-                response = await client.get(
-                    endpoint,
-                    auth=(email, token),
-                    headers={"Accept": "application/json"},
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result
+        # Use base class helper for HTTP request execution
+        response = await self._execute_request(
+            method="GET",
+            url=endpoint,
+            http_client=http_client,
+            timeout_seconds=timeout_seconds,
+            headers=headers,
+            auth=httpx.BasicAuth(email, token),
+        )
+
+        result: dict[str, Any] = response.json()
+        return result

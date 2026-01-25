@@ -8,6 +8,13 @@ The fetcher uses:
 - AuthenticationManager (AMI-22) for credential retrieval
 - FetchPerformanceConfig (AMI-33) for timeout/retry settings
 - Platform-specific handlers for API implementation
+
+Resource Management:
+    DirectAPIFetcher manages a shared HTTP client for connection pooling.
+    Use as an async context manager for proper cleanup:
+
+        async with DirectAPIFetcher(auth_manager) as fetcher:
+            data = await fetcher.fetch(ticket_id, platform)
 """
 
 from __future__ import annotations
@@ -15,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -25,16 +33,11 @@ from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
     AgentIntegrationError,
     AgentResponseParseError,
+    CredentialValidationError,
+    PlatformApiError,
+    TicketIdFormatError,
 )
-from spec.integrations.fetchers.handlers import (
-    AzureDevOpsHandler,
-    GitHubHandler,
-    JiraHandler,
-    LinearHandler,
-    MondayHandler,
-    PlatformHandler,
-    TrelloHandler,
-)
+from spec.integrations.fetchers.handlers import PlatformHandler
 from spec.integrations.providers.base import Platform
 
 if TYPE_CHECKING:
@@ -42,6 +45,9 @@ if TYPE_CHECKING:
     from spec.integrations.auth import AuthenticationManager
 
 logger = logging.getLogger(__name__)
+
+# HTTP status code for rate limiting
+HTTP_TOO_MANY_REQUESTS = 429
 
 
 class DirectAPIFetcher(TicketFetcher):
@@ -51,12 +57,28 @@ class DirectAPIFetcher(TicketFetcher):
     fetching fails or is unavailable. Supports all 6 platforms with
     platform-specific handlers.
 
+    Resource Management:
+        This class manages a shared HTTP client for connection pooling.
+        Use as an async context manager for proper cleanup:
+
+            async with DirectAPIFetcher(auth_manager) as fetcher:
+                data = await fetcher.fetch(ticket_id, platform)
+
+        Alternatively, call close() explicitly when done:
+
+            fetcher = DirectAPIFetcher(auth_manager)
+            try:
+                data = await fetcher.fetch(ticket_id, platform)
+            finally:
+                await fetcher.close()
+
     Attributes:
         _auth: AuthenticationManager for credential retrieval
         _config: Optional ConfigManager for performance settings
         _timeout_seconds: Default request timeout
         _performance: FetchPerformanceConfig for retry settings
-        _handlers: Lazily-created platform handlers (instance-level)
+        _handlers: Lazily-created platform handlers (true lazy loading)
+        _http_client: Shared HTTP client for connection pooling
     """
 
     def __init__(
@@ -75,8 +97,11 @@ class DirectAPIFetcher(TicketFetcher):
         self._auth = auth_manager
         self._config = config_manager
 
-        # Handler instances (created lazily, instance-level to avoid shared state)
-        self._handlers: dict[Platform, PlatformHandler] | None = None
+        # Handler instances (created lazily per-platform, not all at once)
+        self._handlers: dict[Platform, PlatformHandler] = {}
+
+        # Shared HTTP client (created lazily on first request)
+        self._http_client: httpx.AsyncClient | None = None
 
         # Get performance config for defaults
         if config_manager:
@@ -88,23 +113,54 @@ class DirectAPIFetcher(TicketFetcher):
             timeout_seconds if timeout_seconds is not None else self._performance.timeout_seconds
         )
 
+    async def __aenter__(self) -> DirectAPIFetcher:
+        """Enter async context manager."""
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit async context manager, closing HTTP client."""
+        await self.close()
+
+    async def close(self) -> None:
+        """Close the shared HTTP client.
+
+        Call this when done using the fetcher to release resources.
+        Safe to call multiple times.
+        """
+        if self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """Get or create the shared HTTP client.
+
+        Creates a new client on first call with configured timeout.
+        """
+        if self._http_client is None:
+            timeout = httpx.Timeout(self._timeout_seconds)
+            self._http_client = httpx.AsyncClient(timeout=timeout)
+        return self._http_client
+
     @property
     def name(self) -> str:
         """Human-readable fetcher name."""
         return "Direct API Fetcher"
 
     def supports_platform(self, platform: Platform) -> bool:
-        """Check if fallback credentials exist for this platform.
+        """Check if valid fallback credentials exist for this platform.
 
-        Uses AuthenticationManager.has_fallback_configured() from AMI-22.
+        Performs a robust check by verifying that credentials are fully
+        configured (not just that some config exists).
 
         Args:
             platform: Platform enum value
 
         Returns:
-            True if fallback credentials are configured
+            True if valid fallback credentials are configured
         """
-        return self._auth.has_fallback_configured(platform)
+        # Use get_credentials for robust validation instead of quick check
+        creds = self._auth.get_credentials(platform)
+        return creds.is_configured
 
     async def fetch(
         self,
@@ -150,7 +206,8 @@ class DirectAPIFetcher(TicketFetcher):
             Raw API response data
 
         Raises:
-            AgentIntegrationError: If no credentials configured for platform
+            AgentIntegrationError: If no credentials configured for platform,
+                or credential/ticket format validation fails
             AgentFetchError: If API request fails (with retry exhaustion)
             AgentResponseParseError: If response parsing fails
         """
@@ -171,10 +228,11 @@ class DirectAPIFetcher(TicketFetcher):
         )
 
         # Execute with retry logic
+        # Keep credentials as Mapping[str, str] to respect immutability
         return await self._fetch_with_retry(
             handler=handler,
             ticket_id=ticket_id,
-            credentials=dict(creds.credentials),
+            credentials=creds.credentials,
             timeout_seconds=effective_timeout,
         )
 
@@ -182,18 +240,43 @@ class DirectAPIFetcher(TicketFetcher):
         self,
         handler: PlatformHandler,
         ticket_id: str,
-        credentials: dict[str, str],
+        credentials: Mapping[str, str],
         timeout_seconds: float,
     ) -> dict[str, Any]:
         """Execute fetch with exponential backoff retry.
 
         Uses FetchPerformanceConfig settings for max_retries and retry_delay.
+
+        Retry Policy:
+            - Retries on timeouts and server errors (5xx)
+            - Retries on 429 Too Many Requests (respects Retry-After header)
+            - Does NOT retry on other client errors (4xx except 429)
         """
         last_error: Exception | None = None
+        http_client = self._get_http_client()
 
         for attempt in range(self._performance.max_retries + 1):
             try:
-                return await handler.fetch(ticket_id, credentials, timeout_seconds)
+                return await handler.fetch(
+                    ticket_id,
+                    credentials,
+                    timeout_seconds,
+                    http_client=http_client,
+                )
+            except (CredentialValidationError, TicketIdFormatError) as e:
+                # Configuration/input errors - don't retry, map to integration error
+                raise AgentIntegrationError(
+                    message=str(e),
+                    agent_name=self.name,
+                    original_error=e,
+                ) from e
+            except PlatformApiError as e:
+                # GraphQL errors, not found in successful response, etc.
+                raise AgentResponseParseError(
+                    message=str(e),
+                    agent_name=self.name,
+                    original_error=e,
+                ) from e
             except httpx.TimeoutException as e:
                 last_error = e
                 logger.warning(
@@ -204,13 +287,32 @@ class DirectAPIFetcher(TicketFetcher):
                     e,
                 )
             except httpx.HTTPStatusError as e:
-                # Don't retry client errors (4xx)
-                if 400 <= e.response.status_code < 500:
+                status_code = e.response.status_code
+
+                # Handle 429 Too Many Requests - retry with Retry-After
+                if status_code == HTTP_TOO_MANY_REQUESTS:
+                    last_error = e
+                    retry_delay = self._get_retry_after_delay(e.response, attempt)
+                    logger.warning(
+                        "Rate limited fetching %s (attempt %d/%d), waiting %.1fs",
+                        ticket_id,
+                        attempt + 1,
+                        self._performance.max_retries + 1,
+                        retry_delay,
+                    )
+                    if attempt < self._performance.max_retries:
+                        await asyncio.sleep(retry_delay)
+                    continue
+
+                # Don't retry other client errors (4xx)
+                if 400 <= status_code < 500:
                     raise AgentFetchError(
-                        message=f"API request failed: {e.response.status_code} {e.response.text}",
+                        message=f"API request failed: {status_code} {e.response.text}",
                         agent_name=self.name,
                         original_error=e,
                     ) from e
+
+                # Retry server errors (5xx)
                 last_error = e
                 logger.warning(
                     "HTTP error fetching %s (attempt %d/%d): %s",
@@ -228,13 +330,6 @@ class DirectAPIFetcher(TicketFetcher):
                     self._performance.max_retries + 1,
                     e,
                 )
-            except ValueError as e:
-                # GraphQL errors or parse errors
-                raise AgentResponseParseError(
-                    message=str(e),
-                    agent_name=self.name,
-                    original_error=e,
-                ) from e
 
             # Calculate delay with jitter for next retry
             if attempt < self._performance.max_retries:
@@ -249,28 +344,82 @@ class DirectAPIFetcher(TicketFetcher):
             original_error=last_error,
         )
 
+    def _get_retry_after_delay(self, response: httpx.Response, attempt: int) -> float:
+        """Extract Retry-After delay from response, or calculate default.
+
+        Args:
+            response: HTTP response with 429 status
+            attempt: Current attempt number (0-based)
+
+        Returns:
+            Number of seconds to wait before retrying
+        """
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                # Retry-After can be seconds (integer) or HTTP-date
+                # We only handle the integer case for simplicity
+                return float(retry_after)
+            except ValueError:
+                pass
+
+        # Default: exponential backoff
+        delay: float = self._performance.retry_delay_seconds * (2**attempt)
+        return delay
+
     def _get_platform_handler(self, platform: Platform) -> PlatformHandler:
         """Get the handler for a specific platform.
 
-        Lazily creates handlers on first access.
+        True lazy loading: Only instantiates the requested handler,
+        not all handlers at once.
         """
-        if self._handlers is None:
-            self._handlers = {
-                Platform.JIRA: JiraHandler(),
-                Platform.LINEAR: LinearHandler(),
-                Platform.GITHUB: GitHubHandler(),
-                Platform.AZURE_DEVOPS: AzureDevOpsHandler(),
-                Platform.TRELLO: TrelloHandler(),
-                Platform.MONDAY: MondayHandler(),
-            }
+        # Check if handler already exists
+        if platform in self._handlers:
+            return self._handlers[platform]
 
-        handler = self._handlers.get(platform)
-        if not handler:
+        # Create handler on demand (true lazy loading)
+        handler = self._create_handler(platform)
+        if handler is None:
             raise AgentIntegrationError(
                 message=f"No handler for platform: {platform.name}",
                 agent_name=self.name,
             )
+
+        self._handlers[platform] = handler
         return handler
+
+    def _create_handler(self, platform: Platform) -> PlatformHandler | None:
+        """Create a handler instance for the given platform.
+
+        Args:
+            platform: Platform to create handler for
+
+        Returns:
+            Handler instance, or None if platform not supported
+        """
+        # Import handlers here to avoid circular imports and enable lazy loading
+        from spec.integrations.fetchers.handlers import (
+            AzureDevOpsHandler,
+            GitHubHandler,
+            JiraHandler,
+            LinearHandler,
+            MondayHandler,
+            TrelloHandler,
+        )
+
+        handler_classes: dict[Platform, type[PlatformHandler]] = {
+            Platform.JIRA: JiraHandler,
+            Platform.LINEAR: LinearHandler,
+            Platform.GITHUB: GitHubHandler,
+            Platform.AZURE_DEVOPS: AzureDevOpsHandler,
+            Platform.TRELLO: TrelloHandler,
+            Platform.MONDAY: MondayHandler,
+        }
+
+        handler_class = handler_classes.get(platform)
+        if handler_class is None:
+            return None
+        return handler_class()
 
     def _resolve_platform(self, platform: str) -> Platform:
         """Resolve a platform string to Platform enum.

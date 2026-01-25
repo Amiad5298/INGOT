@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from spec.integrations.fetchers.exceptions import PlatformApiError
+
 from .base import PlatformHandler
 
 ITEM_QUERY = """
@@ -55,7 +57,22 @@ class MondayHandler(PlatformHandler):
         timeout_seconds: float | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> dict[str, Any]:
-        """Fetch item from Monday GraphQL API."""
+        """Fetch item from Monday GraphQL API.
+
+        Args:
+            ticket_id: Monday item ID (numeric string)
+            credentials: Must contain 'api_key'
+            timeout_seconds: Request timeout (ignored if http_client provided)
+            http_client: Shared HTTP client from DirectAPIFetcher
+
+        Returns:
+            Raw Monday item data
+
+        Raises:
+            CredentialValidationError: If required credentials are missing
+            PlatformApiError: If GraphQL returns errors or item not found
+            httpx.HTTPError: For HTTP-level failures
+        """
         # Validate required credentials are present
         self._validate_credentials(credentials)
 
@@ -69,30 +86,33 @@ class MondayHandler(PlatformHandler):
             "variables": {"itemId": ticket_id},
         }
 
-        # Use injected client or create new one
-        if http_client is not None:
-            response = await http_client.post(
-                self.API_URL,
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-        else:
-            async with self._get_http_client(timeout_seconds) as client:
-                response = await client.post(
-                    self.API_URL,
-                    headers=headers,
-                    json=payload,
-                )
-                response.raise_for_status()
-                data = response.json()
+        # Use base class helper for HTTP request execution
+        response = await self._execute_request(
+            method="POST",
+            url=self.API_URL,
+            http_client=http_client,
+            timeout_seconds=timeout_seconds,
+            headers=headers,
+            json_data=payload,
+        )
 
+        data: dict[str, Any] = response.json()
+
+        # Check for GraphQL errors
         if "errors" in data:
-            raise ValueError(f"GraphQL errors: {data['errors']}")
+            raise PlatformApiError(
+                platform_name=self.platform_name,
+                error_details=f"GraphQL errors: {data['errors']}",
+                ticket_id=ticket_id,
+            )
 
         items = data.get("data", {}).get("items", [])
         if not items:
-            raise ValueError(f"Item not found: {ticket_id}")
+            raise PlatformApiError(
+                platform_name=self.platform_name,
+                error_details="Item not found",
+                ticket_id=ticket_id,
+            )
+
         result: dict[str, Any] = items[0]
         return result

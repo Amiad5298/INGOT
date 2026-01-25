@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import base64
 from collections.abc import Mapping
 from typing import Any
 
 import httpx
+
+from spec.integrations.fetchers.exceptions import TicketIdFormatError
 
 from .base import PlatformHandler
 
@@ -34,10 +35,17 @@ class AzureDevOpsHandler(PlatformHandler):
 
         Returns:
             Tuple of (project, work_item_id)
+
+        Raises:
+            TicketIdFormatError: If ticket ID format is invalid
         """
         parts = ticket_id.split("/")
         if len(parts) != 2 or not parts[1].isdigit():
-            raise ValueError(f"Invalid Azure DevOps ticket format: {ticket_id}")
+            raise TicketIdFormatError(
+                platform_name=self.platform_name,
+                ticket_id=ticket_id,
+                expected_format="Project/WorkItemID",
+            )
         return parts[0], int(parts[1])
 
     async def fetch(
@@ -50,6 +58,20 @@ class AzureDevOpsHandler(PlatformHandler):
         """Fetch work item from Azure DevOps REST API.
 
         API endpoint: GET /{organization}/{project}/_apis/wit/workitems/{id}
+
+        Args:
+            ticket_id: Azure DevOps work item in "Project/ID" format
+            credentials: Must contain 'organization', 'pat'
+            timeout_seconds: Request timeout (ignored if http_client provided)
+            http_client: Shared HTTP client from DirectAPIFetcher
+
+        Returns:
+            Raw Azure DevOps work item data
+
+        Raises:
+            CredentialValidationError: If required credentials are missing
+            TicketIdFormatError: If ticket ID format is invalid
+            httpx.HTTPError: For HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -58,27 +80,22 @@ class AzureDevOpsHandler(PlatformHandler):
         organization = credentials["organization"]
         pat = credentials["pat"]
 
-        # Azure DevOps uses Basic auth with PAT as password
-        auth_bytes = base64.b64encode(f":{pat}".encode()).decode()
-
         endpoint = (
             f"https://dev.azure.com/{organization}/{project}/"
             f"_apis/wit/workitems/{work_item_id}?api-version=7.0"
         )
-        headers = {
-            "Authorization": f"Basic {auth_bytes}",
-            "Accept": "application/json",
-        }
+        headers = {"Accept": "application/json"}
 
-        # Use injected client or create new one
-        if http_client is not None:
-            response = await http_client.get(endpoint, headers=headers)
-            response.raise_for_status()
-            result: dict[str, Any] = response.json()
-            return result
-        else:
-            async with self._get_http_client(timeout_seconds) as client:
-                response = await client.get(endpoint, headers=headers)
-                response.raise_for_status()
-                result = response.json()
-                return result
+        # Use base class helper for HTTP request execution
+        # Azure DevOps uses Basic auth with empty username and PAT as password
+        response = await self._execute_request(
+            method="GET",
+            url=endpoint,
+            http_client=http_client,
+            timeout_seconds=timeout_seconds,
+            headers=headers,
+            auth=httpx.BasicAuth("", pat),
+        )
+
+        result: dict[str, Any] = response.json()
+        return result

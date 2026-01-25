@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
+
+from spec.integrations.fetchers.exceptions import CredentialValidationError
+
+if TYPE_CHECKING:
+    from httpx._types import AuthTypes
 
 
 class PlatformHandler(ABC):
@@ -15,10 +20,13 @@ class PlatformHandler(ABC):
     Each handler encapsulates the API-specific logic for fetching
     ticket data from a particular platform.
 
-    HTTP Client Injection:
-        Handlers accept an optional `http_client` parameter for testability.
-        When provided, the handler uses the injected client instead of
-        creating a new one. This enables easy mocking in unit tests.
+    HTTP Client Sharing:
+        Handlers receive a shared HTTP client from DirectAPIFetcher via
+        the fetch() method. This enables connection pooling and proper
+        resource management.
+
+        For testing, handlers can still work without an injected client
+        by falling back to creating a new client per request.
     """
 
     @property
@@ -50,14 +58,16 @@ class PlatformHandler(ABC):
         Args:
             ticket_id: The ticket identifier
             credentials: Immutable credential mapping from AuthenticationManager
-            timeout_seconds: Optional request timeout
-            http_client: Optional injected HTTP client for testing
+            timeout_seconds: Optional request timeout (ignored if http_client provided)
+            http_client: Shared HTTP client from DirectAPIFetcher
 
         Returns:
             Raw API response as dictionary
 
         Raises:
-            ValueError: If required credential keys are missing
+            CredentialValidationError: If required credential keys are missing
+            TicketIdFormatError: If ticket ID format is invalid
+            PlatformApiError: If platform API returns a logical error
             httpx.HTTPError: For HTTP-level failures
             httpx.TimeoutException: For timeout failures
         """
@@ -70,15 +80,69 @@ class PlatformHandler(ABC):
             credentials: Credential mapping to validate
 
         Raises:
-            ValueError: If any required keys are missing
+            CredentialValidationError: If any required keys are missing
         """
         missing = self.required_credential_keys - set(credentials.keys())
         if missing:
-            raise ValueError(
-                f"{self.platform_name} handler missing required credentials: {sorted(missing)}"
+            raise CredentialValidationError(
+                platform_name=self.platform_name,
+                missing_keys=missing,
             )
 
-    def _get_http_client(self, timeout_seconds: float | None = None) -> httpx.AsyncClient:
-        """Create configured HTTP client with timeout."""
-        timeout = httpx.Timeout(timeout_seconds or 30.0)
-        return httpx.AsyncClient(timeout=timeout)
+    async def _execute_request(
+        self,
+        method: Literal["GET", "POST"],
+        url: str,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+        timeout_seconds: float | None = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, str] | None = None,
+        json_data: dict[str, Any] | None = None,
+        auth: AuthTypes | None = None,
+    ) -> httpx.Response:
+        """Execute HTTP request using shared client or create new one.
+
+        This method centralizes the "use injected client vs create new one"
+        logic to avoid duplication across all handlers.
+
+        Args:
+            method: HTTP method ("GET" or "POST")
+            url: Request URL
+            http_client: Optional shared HTTP client
+            timeout_seconds: Timeout for new client (ignored if http_client provided)
+            headers: Optional request headers
+            params: Optional query parameters
+            json_data: Optional JSON body (for POST requests)
+            auth: Optional authentication (e.g., httpx.BasicAuth)
+
+        Returns:
+            HTTP response object
+
+        Raises:
+            httpx.HTTPError: For HTTP-level failures
+            httpx.TimeoutException: For timeout failures
+        """
+        # Build kwargs, only including auth if provided
+        kwargs: dict[str, Any] = {"headers": headers, "params": params}
+        if auth is not None:
+            kwargs["auth"] = auth
+
+        if http_client is not None:
+            # Use the shared client from DirectAPIFetcher
+            if method == "GET":
+                response = await http_client.get(url, **kwargs)
+            else:  # POST
+                response = await http_client.post(url, json=json_data, **kwargs)
+            response.raise_for_status()
+            return response
+        else:
+            # Fallback: create a new client for this request
+            timeout = httpx.Timeout(timeout_seconds or 30.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                if method == "GET":
+                    response = await client.get(url, **kwargs)
+                else:  # POST
+                    response = await client.post(url, json=json_data, **kwargs)
+                response.raise_for_status()
+                return response

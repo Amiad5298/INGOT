@@ -8,6 +8,8 @@ from typing import Any
 
 import httpx
 
+from spec.integrations.fetchers.exceptions import TicketIdFormatError
+
 from .base import PlatformHandler
 
 
@@ -35,10 +37,17 @@ class GitHubHandler(PlatformHandler):
 
         Returns:
             Tuple of (owner, repo, issue_number)
+
+        Raises:
+            TicketIdFormatError: If ticket ID format is invalid
         """
         match = re.match(r"^([^/]+)/([^#]+)#(\d+)$", ticket_id)
         if not match:
-            raise ValueError(f"Invalid GitHub ticket format: {ticket_id}")
+            raise TicketIdFormatError(
+                platform_name=self.platform_name,
+                ticket_id=ticket_id,
+                expected_format="owner/repo#number",
+            )
         return match.group(1), match.group(2), int(match.group(3))
 
     async def fetch(
@@ -51,6 +60,20 @@ class GitHubHandler(PlatformHandler):
         """Fetch issue/PR from GitHub REST API.
 
         API endpoint: GET /repos/{owner}/{repo}/issues/{issue_number}
+
+        Args:
+            ticket_id: GitHub issue ID in "owner/repo#number" format
+            credentials: Must contain 'token'
+            timeout_seconds: Request timeout (ignored if http_client provided)
+            http_client: Shared HTTP client from DirectAPIFetcher
+
+        Returns:
+            Raw GitHub issue data
+
+        Raises:
+            CredentialValidationError: If required credentials are missing
+            TicketIdFormatError: If ticket ID format is invalid
+            httpx.HTTPError: For HTTP-level failures
         """
         # Validate required credentials are present
         self._validate_credentials(credentials)
@@ -64,15 +87,14 @@ class GitHubHandler(PlatformHandler):
             "Accept": "application/vnd.github.v3+json",
         }
 
-        # Use injected client or create new one
-        if http_client is not None:
-            response = await http_client.get(endpoint, headers=headers)
-            response.raise_for_status()
-            result: dict[str, Any] = response.json()
-            return result
-        else:
-            async with self._get_http_client(timeout_seconds) as client:
-                response = await client.get(endpoint, headers=headers)
-                response.raise_for_status()
-                result = response.json()
-                return result
+        # Use base class helper for HTTP request execution
+        response = await self._execute_request(
+            method="GET",
+            url=endpoint,
+            http_client=http_client,
+            timeout_seconds=timeout_seconds,
+            headers=headers,
+        )
+
+        result: dict[str, Any] = response.json()
+        return result
