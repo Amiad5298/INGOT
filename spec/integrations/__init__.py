@@ -4,6 +4,7 @@ This package contains:
 - git: Git operations (branch management, commits, etc.)
 - jira: Jira ticket parsing and integration checking
 - auggie: Auggie CLI wrapper and model management
+- auth: Authentication management for fallback credentials
 """
 
 from spec.integrations.auggie import (
@@ -18,6 +19,10 @@ from spec.integrations.auggie import (
     install_auggie,
     list_models,
     version_gte,
+)
+from spec.integrations.auth import (
+    AuthenticationManager,
+    PlatformCredentials,
 )
 from spec.integrations.git import (
     DirtyStateAction,
@@ -42,6 +47,9 @@ from spec.integrations.jira import (
 )
 
 __all__ = [
+    # Authentication
+    "AuthenticationManager",
+    "PlatformCredentials",
     # Git
     "DirtyStateAction",
     "is_git_repo",
@@ -75,4 +83,3 @@ __all__ = [
     "SPECFLOW_AGENT_IMPLEMENTER",
     "SPECFLOW_AGENT_REVIEWER",
 ]
-
