@@ -1,8 +1,9 @@
 # Implementation Plan: AMI-30 - Implement AuggieMediatedFetcher with Structured JSON Prompts
 
 **Ticket:** [AMI-30](https://linear.app/amiadspec/issue/AMI-30/implement-auggiemediatedfetcher-with-structured-json-prompts)
-**Status:** Draft
+**Status:** ✅ Implemented (PR #22)
 **Date:** 2026-01-24
+**Last Updated:** 2026-01-24
 
 ---
 
@@ -14,6 +15,10 @@ The fetcher extends `AgentMediatedFetcher` (implemented in AMI-29) and implement
 1. **Platform-specific prompt templates** - Structured JSON prompts for Jira, Linear, and GitHub
 2. **Auggie tool execution** - Integration with `AuggieClient` for MCP tool invocations
 3. **Platform support checking** - Uses `AgentConfig.supports_platform()` from AMI-33
+4. **String-based `fetch()` interface** - Simplified API for TicketService integration (added during implementation)
+5. **Response validation** - Required field validation per platform (added during implementation)
+6. **Timeout support** - Configurable timeout with per-request override (added during implementation)
+7. **Granular exception types** - `AgentFetchError` and `AgentResponseParseError` (added during implementation)
 
 ---
 
@@ -73,12 +78,16 @@ The fetcher uses `AuggieClient.run_print_quiet()` to invoke Auggie with structur
 | `AuggieMediatedFetcher` class | Fetches tickets via Auggie's MCP integrations |
 | `PLATFORM_PROMPT_TEMPLATES` dict | Platform-specific prompt templates |
 | `SUPPORTED_PLATFORMS` set | Platforms supported by Auggie MCP |
+| `DEFAULT_TIMEOUT_SECONDS` constant | Default timeout for agent execution (60s) |
+| `REQUIRED_FIELDS` dict | Required fields per platform for validation |
 
 ### Modified Files
 
 | File | Changes |
 |------|---------|
-| `spec/integrations/fetchers/__init__.py` | Export `AuggieMediatedFetcher` |
+| `spec/integrations/fetchers/__init__.py` | Export `AuggieMediatedFetcher`, `AgentFetchError`, `AgentResponseParseError` |
+| `spec/integrations/fetchers/exceptions.py` | Added `AgentFetchError`, `AgentResponseParseError` exception classes |
+| `spec/integrations/fetchers/base.py` | Updated to handle new exception types |
 
 ---
 
@@ -217,6 +226,143 @@ __all__ = [
 **File:** `tests/test_auggie_fetcher.py`
 
 Create comprehensive tests with mocked `AuggieClient`.
+
+---
+
+## Implementation Enhancements (Added in PR #22)
+
+The following features were added during implementation beyond the original plan:
+
+### Enhancement 1: String-Based `fetch()` Interface
+
+Added a `fetch()` method that accepts platform as a string for simpler TicketService integration:
+
+```python
+async def fetch(
+    self,
+    ticket_id: str,
+    platform: str,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Fetch raw ticket data using platform string.
+
+    This is the primary public interface for TicketService integration.
+    Accepts platform as a string and handles internal enum conversion.
+    """
+    platform_enum = self._resolve_platform(platform)
+    effective_timeout = timeout_seconds if timeout_seconds is not None else self._timeout_seconds
+    return await self.fetch_raw(ticket_id, platform_enum, timeout_seconds=effective_timeout)
+```
+
+### Enhancement 2: Platform Resolution Helper
+
+Added `_resolve_platform()` for safe string-to-enum conversion:
+
+```python
+def _resolve_platform(self, platform: str) -> Platform:
+    """Resolve a platform string to Platform enum and validate support.
+
+    Args:
+        platform: Platform name as string (case-insensitive)
+
+    Returns:
+        Platform enum value
+
+    Raises:
+        AgentIntegrationError: If platform string is invalid or not supported
+    """
+```
+
+### Enhancement 3: Response Validation
+
+Added `_validate_response()` with `REQUIRED_FIELDS` constant for robustness:
+
+```python
+REQUIRED_FIELDS: dict[Platform, set[str]] = {
+    Platform.JIRA: {"key", "summary"},
+    Platform.LINEAR: {"identifier", "title"},
+    Platform.GITHUB: {"number", "title"},
+}
+
+def _validate_response(self, data: dict[str, Any], platform: Platform) -> dict[str, Any]:
+    """Validate that required fields exist in the response.
+
+    Raises:
+        AgentResponseParseError: If required fields are missing
+    """
+```
+
+### Enhancement 4: Configurable Timeout Support
+
+Added timeout support at both instance and per-request levels:
+
+```python
+DEFAULT_TIMEOUT_SECONDS: float = 60.0
+
+class AuggieMediatedFetcher:
+    def __init__(
+        self,
+        auggie_client: AuggieClient,
+        config_manager: ConfigManager | None = None,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,  # NEW
+    ) -> None:
+        self._timeout_seconds = timeout_seconds
+
+    async def fetch(
+        self,
+        ticket_id: str,
+        platform: str,
+        timeout_seconds: float | None = None,  # Per-request override
+    ) -> dict[str, Any]:
+        effective_timeout = timeout_seconds if timeout_seconds is not None else self._timeout_seconds
+```
+
+### Enhancement 5: New Exception Types
+
+Added `AgentFetchError` and `AgentResponseParseError` for granular error handling:
+
+**File:** `spec/integrations/fetchers/exceptions.py`
+
+```python
+class AgentFetchError(TicketFetchError):
+    """Raised when agent tool execution fails.
+
+    This indicates the agent was invoked but the tool execution
+    failed - e.g., network error, API error, timeout.
+    """
+    def __init__(
+        self,
+        message: str,
+        agent_name: str | None = None,
+        original_error: Exception | None = None,
+    ) -> None: ...
+
+
+class AgentResponseParseError(TicketFetchError):
+    """Raised when agent response cannot be parsed.
+
+    This indicates the agent returned a response but it could
+    not be parsed as valid JSON or is missing required fields.
+    """
+    def __init__(
+        self,
+        message: str,
+        agent_name: str | None = None,
+        raw_response: str | None = None,
+        original_error: Exception | None = None,
+    ) -> None: ...
+```
+
+### Enhancement 6: Stateless Operations
+
+Uses `dont_save_session=True` for all fetch operations to avoid side effects:
+
+```python
+result = await loop.run_in_executor(
+    None,
+    lambda: self._auggie.run_print_quiet(prompt, dont_save_session=True),
+)
+```
 
 ---
 
@@ -534,48 +680,92 @@ Fetchers are used **BY providers** via `TicketService`, not directly through `Pr
 
 ## Acceptance Criteria Checklist
 
-From the ticket:
+From the ticket (all items verified in PR #22):
 
-- [ ] `AuggieMediatedFetcher` class extending `AgentMediatedFetcher`
-- [ ] `supports_platform()` uses `AgentConfig.supports_platform()` from AMI-33
-- [ ] `_execute_fetch_prompt()` invokes Auggie CLI via `run_print_quiet()`
-- [ ] `_get_prompt_template()` returns platform-specific structured JSON prompts
-- [ ] Platform support for Jira, Linear, GitHub
-- [ ] Error handling for unsupported platforms (`PlatformNotSupportedError`)
-- [ ] Error handling for Auggie CLI failures (`AgentIntegrationError`)
-- [ ] Async interface compliance (wraps sync Auggie calls)
-- [ ] Unit tests with mocked `AuggieClient`
-- [ ] Integration test with real Auggie (manual)
-- [ ] Exports added to `fetchers/__init__.py`
-- [ ] Type hints and docstrings for all public methods
+- [x] `AuggieMediatedFetcher` class extending `AgentMediatedFetcher`
+- [x] `supports_platform()` uses `AgentConfig.supports_platform()` from AMI-33
+- [x] `_execute_fetch_prompt()` invokes Auggie CLI via `run_print_quiet()`
+- [x] `_get_prompt_template()` returns platform-specific structured JSON prompts
+- [x] Platform support for Jira, Linear, GitHub
+- [x] Error handling for unsupported platforms (`PlatformNotSupportedError`)
+- [x] Error handling for Auggie CLI failures (`AgentIntegrationError`)
+- [x] Async interface compliance (wraps sync Auggie calls)
+- [x] Unit tests with mocked `AuggieClient` (29 tests in `tests/test_auggie_fetcher.py`)
+- [x] Integration test with real Auggie (manual)
+- [x] Exports added to `fetchers/__init__.py`
+- [x] Type hints and docstrings for all public methods
+
+### Additional Features Implemented (Beyond Original Plan)
+
+- [x] `fetch()` method with string platform parameter for TicketService integration
+- [x] `_resolve_platform()` helper for safe string-to-enum conversion
+- [x] `_validate_response()` method with `REQUIRED_FIELDS` constant for response validation
+- [x] Configurable timeout support (`timeout_seconds` parameter at instance and per-request level)
+- [x] `AgentFetchError` exception for tool execution failures
+- [x] `AgentResponseParseError` exception for parse/validation failures
+- [x] Stateless operations with `dont_save_session=True`
 
 ---
 
 ## Example Usage
 
-### Basic Usage (Future TicketService Integration)
+### Basic Usage with String-Based Interface (Recommended)
 
 ```python
 from spec.config import ConfigManager
 from spec.integrations.auggie import AuggieClient
-from spec.integrations.fetchers import AuggieMediatedFetcher
-from spec.integrations.providers.base import Platform
+from spec.integrations.fetchers import (
+    AuggieMediatedFetcher,
+    AgentIntegrationError,
+    AgentFetchError,
+    AgentResponseParseError,
+)
 
-# Create fetcher with dependencies
+# Create fetcher with dependencies and optional timeout
 config_manager = ConfigManager()
 auggie_client = AuggieClient()
-fetcher = AuggieMediatedFetcher(auggie_client, config_manager)
+fetcher = AuggieMediatedFetcher(
+    auggie_client,
+    config_manager,
+    timeout_seconds=45.0,  # Custom default timeout
+)
 
-# Check platform support
+# Use the string-based fetch() interface (recommended for TicketService)
+try:
+    raw_data = await fetcher.fetch("PROJ-123", "jira")
+    # OR with per-request timeout override:
+    raw_data = await fetcher.fetch("PROJ-123", "jira", timeout_seconds=30.0)
+except AgentIntegrationError:
+    # Platform not supported or not configured
+    pass
+except AgentFetchError:
+    # Tool execution failed (timeout, CLI error)
+    pass
+except AgentResponseParseError:
+    # Response was invalid JSON or missing required fields
+    pass
+```
+
+### Using Platform Enum Interface
+
+```python
+from spec.integrations.providers.base import Platform
+
+# Check platform support before fetching
 if fetcher.supports_platform(Platform.JIRA):
-    # Fetch raw ticket data
     raw_data = await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
     # Returns: {"key": "PROJ-123", "summary": "...", ...}
 ```
 
-### With TicketService (AMI-32)
+### With TicketService (AMI-32) - Updated for New Interface
 
 ```python
+from spec.integrations.fetchers import (
+    AgentIntegrationError,
+    AgentFetchError,
+    AgentResponseParseError,
+)
+
 class TicketService:
     def __init__(
         self,
@@ -591,8 +781,15 @@ class TicketService:
         ticket_id = provider.parse_input(input_str)
         platform = provider.platform
 
-        # 2. Fetch raw data using fetcher
-        raw_data = await self._primary.fetch_raw(ticket_id, platform)
+        # 2. Fetch raw data using string-based interface
+        try:
+            raw_data = await self._primary.fetch(ticket_id, platform.value)
+        except (AgentIntegrationError, AgentFetchError, AgentResponseParseError) as e:
+            if self._fallback:
+                logger.warning(f"Primary fetcher failed: {e}, trying fallback")
+                raw_data = await self._fallback.fetch(ticket_id, platform.value)
+            else:
+                raise
 
         # 3. Provider normalizes to GenericTicket
         return provider.normalize(raw_data)
