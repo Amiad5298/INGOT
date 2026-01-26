@@ -108,21 +108,26 @@ class TestMondayProviderParseInput:
     """Test parse_input() method."""
 
     def test_parse_monday_url(self, provider):
-        """Parses monday.com URL to board:item format."""
+        """Parses monday.com URL to slug:board:item format."""
         result = provider.parse_input("https://myworkspace.monday.com/boards/123456/pulses/789")
-        assert result == "123456:789"
+        assert result == "myworkspace:123456:789"
 
     def test_parse_monday_url_with_view(self, provider):
-        """Parses monday.com URL with view segment to board:item format."""
+        """Parses monday.com URL with view segment to slug:board:item format."""
         result = provider.parse_input(
             "https://myworkspace.monday.com/boards/123456/views/789/pulses/456"
         )
-        assert result == "123456:456"
+        assert result == "myworkspace:123456:456"
 
     def test_parse_with_whitespace(self, provider):
         """Strips whitespace from input."""
         result = provider.parse_input("  https://team.monday.com/boards/1/pulses/2  ")
-        assert result == "1:2"
+        assert result == "team:1:2"
+
+    def test_parse_bare_monday_url(self, provider):
+        """Parses bare monday.com URL (no subdomain) to :board:item format."""
+        result = provider.parse_input("https://monday.com/boards/123456/pulses/789")
+        assert result == ":123456:789"
 
     def test_parse_invalid_raises_valueerror(self, provider):
         """Invalid input raises ValueError."""

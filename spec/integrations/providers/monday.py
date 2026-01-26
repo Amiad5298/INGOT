@@ -232,10 +232,18 @@ class MondayProvider(IssueTrackerProvider):
 
         Uses case-insensitive substring matching to handle variations
         like "Working on it" matching "working" keyword.
+
+        Special case: Empty label maps to OPEN (Monday.com default for new items).
         """
         label_lower = label.lower().strip()
+
+        # Special case: empty label maps to OPEN
+        if not label_lower:
+            return TicketStatus.OPEN
+
         for status, keywords in STATUS_KEYWORDS.items():
-            if any(kw in label_lower for kw in keywords):
+            # Skip empty string keyword - handled above
+            if any(kw and kw in label_lower for kw in keywords):
                 return status
         return TicketStatus.UNKNOWN
 
