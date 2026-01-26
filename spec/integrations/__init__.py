@@ -24,6 +24,16 @@ from spec.integrations.auth import (
     AuthenticationManager,
     PlatformCredentials,
 )
+from spec.integrations.cache import (
+    CachedTicket,
+    CacheKey,
+    FileBasedTicketCache,
+    InMemoryTicketCache,
+    TicketCache,
+    clear_global_cache,
+    get_global_cache,
+    set_global_cache,
+)
 from spec.integrations.git import (
     DirtyStateAction,
     add_to_gitignore,
@@ -50,6 +60,15 @@ __all__ = [
     # Authentication
     "AuthenticationManager",
     "PlatformCredentials",
+    # Cache
+    "CacheKey",
+    "CachedTicket",
+    "TicketCache",
+    "InMemoryTicketCache",
+    "FileBasedTicketCache",
+    "get_global_cache",
+    "set_global_cache",
+    "clear_global_cache",
     # Git
     "DirtyStateAction",
     "is_git_repo",
