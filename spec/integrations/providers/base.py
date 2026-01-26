@@ -161,9 +161,29 @@ class PlatformMetadata(TypedDict, total=False):
             state_name: Display name of the workflow state (e.g., "In Progress")
             state_type: Workflow state type (backlog/unstarted/started/completed/canceled)
         Azure DevOps:
+            organization: Azure DevOps organization name
+            project: Azure DevOps project name
             work_item_type: Azure work item type
             area_path: Area classification
             iteration_path: Iteration/sprint path
+            assigned_to_email: Assignee email address
+            revision: Work item revision number
+        Monday:
+            board_id: Monday.com board ID
+            board_name: Monday.com board name
+            group_title: Group/section title
+            creator_name: Item creator name
+            status_label: Raw status label from Monday
+            account_slug: Monday.com account subdomain
+        Trello:
+            board_id: Trello board ID
+            board_name: Trello board name
+            list_id: Trello list ID
+            list_name: Trello list name
+            due_date: Card due date
+            due_complete: Whether due date is marked complete
+            is_closed: Whether card is archived/closed
+            short_link: Trello short link identifier
     """
 
     # Common fields
@@ -201,9 +221,29 @@ class PlatformMetadata(TypedDict, total=False):
     state_type: str
 
     # Azure DevOps-specific
+    organization: str
+    project: str
     work_item_type: str
     area_path: str
     iteration_path: str
+    assigned_to_email: str
+    revision: int | None
+
+    # Monday-specific
+    board_id: str
+    board_name: str
+    group_title: str
+    creator_name: str
+    status_label: str
+    account_slug: str | None
+
+    # Trello-specific
+    list_id: str
+    list_name: str
+    due_date: str | None
+    due_complete: bool
+    is_closed: bool
+    short_link: str
 
 
 @dataclass

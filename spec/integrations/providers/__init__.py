@@ -16,6 +16,7 @@ Example usage:
     )
 """
 
+from spec.integrations.providers.azure_devops import AzureDevOpsProvider
 from spec.integrations.providers.base import (
     GenericTicket,
     IssueTrackerProvider,
@@ -40,7 +41,9 @@ from spec.integrations.providers.exceptions import (
 from spec.integrations.providers.github import GitHubProvider
 from spec.integrations.providers.jira import JiraProvider
 from spec.integrations.providers.linear import LinearProvider
+from spec.integrations.providers.monday import MondayProvider
 from spec.integrations.providers.registry import ProviderRegistry
+from spec.integrations.providers.trello import TrelloProvider
 from spec.integrations.providers.user_interaction import (
     CLIUserInteraction,
     NonInteractiveUserInteraction,
@@ -78,7 +81,10 @@ __all__ = [
     # Registry
     "ProviderRegistry",
     # Providers
+    "AzureDevOpsProvider",
     "GitHubProvider",
     "JiraProvider",
     "LinearProvider",
+    "MondayProvider",
+    "TrelloProvider",
 ]
