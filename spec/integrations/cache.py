@@ -4,6 +4,14 @@ This module provides efficient caching of ticket data to minimize API calls
 and improve responsiveness. Caching is owned by TicketService (AMI-32),
 not individual providers.
 
+Concurrency Model:
+    - InMemoryTicketCache: Uses threading.Lock for thread-safe access.
+      Performs deepcopy outside the lock to minimize contention.
+    - FileBasedTicketCache: Uses threading.Lock for thread-safe access within
+      a single process. Uses atomic writes (tempfile + os.replace) for
+      crash-safety, but is optimistic for multi-process scenarios.
+    - Global singleton: Protected by _cache_lock for thread-safe initialization.
+
 See specs/00_Architecture_Refactor_Spec.md Section 8 for design details.
 """
 
@@ -13,11 +21,14 @@ import copy
 import hashlib
 import json
 import logging
+import os
+import random
+import tempfile
 import threading
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -68,9 +79,12 @@ class CachedTicket:
 
     Attributes:
         ticket: The cached GenericTicket
-        cached_at: Timestamp when the ticket was cached
-        expires_at: Timestamp when the cache entry expires
+        cached_at: Timestamp when the ticket was cached (UTC)
+        expires_at: Timestamp when the cache entry expires (UTC)
         etag: Optional ETag for conditional requests (e.g., GitHub)
+
+    Note:
+        All timestamps use UTC to avoid DST and system clock ambiguity.
     """
 
     ticket: GenericTicket
@@ -80,13 +94,19 @@ class CachedTicket:
 
     @property
     def is_expired(self) -> bool:
-        """Check if this cache entry has expired."""
-        return datetime.now() > self.expires_at
+        """Check if this cache entry has expired.
+
+        Uses UTC time for consistent behavior across timezones.
+        """
+        return datetime.now(UTC) > self.expires_at
 
     @property
     def ttl_remaining(self) -> timedelta:
-        """Get remaining time-to-live for this entry."""
-        remaining = self.expires_at - datetime.now()
+        """Get remaining time-to-live for this entry.
+
+        Uses UTC time for consistent behavior across timezones.
+        """
+        remaining = self.expires_at - datetime.now(UTC)
         return remaining if remaining.total_seconds() > 0 else timedelta(0)
 
 
@@ -177,6 +197,12 @@ class InMemoryTicketCache(TicketCache):
 
     This is the default implementation for process-local caching.
 
+    Concurrency Model:
+        - Uses threading.Lock for thread-safe access to the internal OrderedDict.
+        - Performs deepcopy OUTSIDE the lock to minimize contention.
+        - Stores a deepcopy on set() to prevent external mutation from
+          corrupting the cache.
+
     Attributes:
         default_ttl: Default TTL for cache entries
         max_size: Maximum number of entries (0 = unlimited)
@@ -207,7 +233,11 @@ class InMemoryTicketCache(TicketCache):
         """Retrieve full CachedTicket with metadata.
 
         Returns a deep copy to prevent callers from mutating cached data.
+        Lock is held only during dict access; deepcopy happens outside lock
+        to minimize contention.
         """
+        # Step 1: Lock -> Get item -> Validate expiry -> Move to end -> Unlock
+        cached: CachedTicket | None = None
         with self._lock:
             key_str = str(key)
             cached = self._cache.get(key_str)
@@ -224,8 +254,9 @@ class InMemoryTicketCache(TicketCache):
             # Move to end for LRU tracking
             self._cache.move_to_end(key_str)
             logger.debug(f"Cache hit for {key}")
-            # Return deep copy to prevent mutation of cached data
-            return copy.deepcopy(cached)
+
+        # Step 2: Deepcopy OUTSIDE the lock to reduce contention
+        return copy.deepcopy(cached)
 
     def set(
         self,
@@ -233,13 +264,18 @@ class InMemoryTicketCache(TicketCache):
         ttl: timedelta | None = None,
         etag: str | None = None,
     ) -> None:
-        """Store ticket in cache."""
+        """Store ticket in cache.
+
+        Stores a deep copy of the ticket to prevent external mutation
+        from corrupting the cache.
+        """
         key = CacheKey.from_ticket(ticket)
         effective_ttl = ttl if ttl is not None else self.default_ttl
-        now = datetime.now()
+        now = datetime.now(UTC)
 
+        # Create CachedTicket with a deep copy of the ticket (P0 fix)
         cached = CachedTicket(
-            ticket=ticket,
+            ticket=copy.deepcopy(ticket),
             cached_at=now,
             expires_at=now + effective_ttl,
             etag=etag,
@@ -311,11 +347,28 @@ class FileBasedTicketCache(TicketCache):
     Stores cache in ~/.specflow-cache/ directory for persistence across sessions.
     Each ticket is stored as a separate JSON file with platform_ticketId hash.
 
+    Concurrency Model:
+        - Uses threading.Lock for thread-safe access within a single process.
+        - Uses atomic writes (tempfile + os.replace) for crash-safety.
+        - For multi-process scenarios, this cache is optimistic: the last writer
+          wins, but partial/corrupted writes are prevented by atomic rename.
+        - LRU eviction uses file modification time; get() updates mtime to ensure
+          recently accessed items are retained.
+
+    Lazy Eviction Strategy:
+        - Eviction only runs probabilistically (10% chance per write) when cache
+          size exceeds max_size * 1.1 (110% threshold).
+        - This avoids O(N) disk scan on every set() operation.
+
     Attributes:
         cache_dir: Directory for cache files
         default_ttl: Default TTL for cache entries
         max_size: Maximum number of entries (0 = unlimited)
     """
+
+    # Eviction probability and threshold constants
+    _EVICTION_THRESHOLD_RATIO: float = 1.1  # Evict when size > max_size * 1.1
+    _EVICTION_PROBABILITY: float = 0.1  # 10% chance of checking eviction
 
     def __init__(
         self,
@@ -335,59 +388,42 @@ class FileBasedTicketCache(TicketCache):
         self.max_size = max_size
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        # Approximate cache size to avoid frequent disk scans
+        self._approx_size: int | None = None
 
     def _get_path(self, key: CacheKey) -> Path:
         """Get file path for cache key.
 
-        Uses SHA256 hash of ticket_id to create safe filenames that avoid
-        filesystem issues with special characters while preventing collisions.
+        Uses SHA256 hash (32 chars) of ticket_id to create safe filenames
+        that avoid filesystem issues with special characters while minimizing
+        collision risk.
         """
-        safe_id = hashlib.sha256(key.ticket_id.encode()).hexdigest()[:16]
+        # Increased from 16 to 32 characters for reduced collision risk
+        safe_id = hashlib.sha256(key.ticket_id.encode()).hexdigest()[:32]
         return self.cache_dir / f"{key.platform.name}_{safe_id}.json"
 
-    def _serialize_ticket(self, cached: CachedTicket) -> dict:
-        """Serialize CachedTicket to JSON-compatible dict."""
-        ticket_dict = asdict(cached.ticket)
-        # Convert enums to strings for JSON
-        # Platform uses auto() so we use .name; Status/Type have string values
-        ticket_dict["platform"] = cached.ticket.platform.name
-        ticket_dict["status"] = cached.ticket.status.value
-        ticket_dict["type"] = cached.ticket.type.value
-        # Convert datetime to ISO format
-        if cached.ticket.created_at:
-            ticket_dict["created_at"] = cached.ticket.created_at.isoformat()
-        if cached.ticket.updated_at:
-            ticket_dict["updated_at"] = cached.ticket.updated_at.isoformat()
+    def _serialize_ticket(self, cached: CachedTicket) -> dict[str, Any]:
+        """Serialize CachedTicket to JSON-compatible dict.
 
+        Uses GenericTicket.to_dict() for clean encapsulation.
+        """
         return {
-            "ticket": ticket_dict,
+            "ticket": cached.ticket.to_dict(),
             "cached_at": cached.cached_at.isoformat(),
             "expires_at": cached.expires_at.isoformat(),
             "etag": cached.etag,
         }
 
-    def _deserialize_ticket(self, data: dict) -> CachedTicket | None:
-        """Deserialize JSON dict to CachedTicket."""
-        from spec.integrations.providers.base import (
-            GenericTicket,
-            Platform,
-            TicketStatus,
-            TicketType,
-        )
+    def _deserialize_ticket(self, data: dict[str, Any]) -> CachedTicket | None:
+        """Deserialize JSON dict to CachedTicket.
+
+        Uses GenericTicket.from_dict() for resilient deserialization.
+        """
+        from spec.integrations.providers.base import GenericTicket
 
         try:
             ticket_data = data["ticket"]
-            # Convert string values back to enums
-            ticket_data["platform"] = Platform[ticket_data["platform"]]
-            ticket_data["status"] = TicketStatus(ticket_data["status"])
-            ticket_data["type"] = TicketType(ticket_data["type"])
-            # Convert ISO format back to datetime
-            if ticket_data.get("created_at"):
-                ticket_data["created_at"] = datetime.fromisoformat(ticket_data["created_at"])
-            if ticket_data.get("updated_at"):
-                ticket_data["updated_at"] = datetime.fromisoformat(ticket_data["updated_at"])
-
-            ticket = GenericTicket(**ticket_data)
+            ticket = GenericTicket.from_dict(ticket_data)
 
             return CachedTicket(
                 ticket=ticket,
@@ -395,7 +431,7 @@ class FileBasedTicketCache(TicketCache):
                 expires_at=datetime.fromisoformat(data["expires_at"]),
                 etag=data.get("etag"),
             )
-        except (KeyError, ValueError) as e:
+        except (KeyError, ValueError, TypeError) as e:
             logger.warning(f"Failed to deserialize cached ticket: {e}")
             return None
 
@@ -405,7 +441,11 @@ class FileBasedTicketCache(TicketCache):
         return cached.ticket if cached else None
 
     def get_cached_ticket(self, key: CacheKey) -> CachedTicket | None:
-        """Retrieve full CachedTicket with metadata."""
+        """Retrieve full CachedTicket with metadata.
+
+        Updates file modification time on cache hit to ensure LRU eviction
+        removes least recently used items (not just least recently written).
+        """
         path = self._get_path(key)
         with self._lock:
             if not path.exists():
@@ -417,19 +457,59 @@ class FileBasedTicketCache(TicketCache):
 
                 if cached is None:
                     path.unlink(missing_ok=True)
+                    self._approx_size = None  # Invalidate cache size estimate
                     return None
 
                 if cached.is_expired:
                     path.unlink(missing_ok=True)
+                    self._approx_size = None  # Invalidate cache size estimate
                     logger.debug(f"Cache expired for {key}")
                     return None
+
+                # P1 FIX: Update mtime on cache hit for true LRU behavior
+                # This ensures recently accessed items are retained, not just
+                # recently written ones.
+                try:
+                    path.touch()
+                except OSError:
+                    pass  # Non-critical, continue returning cached data
 
                 logger.debug(f"Cache hit for {key}")
                 return cached
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read cache file {path}: {e}")
-                path.unlink(missing_ok=True)
+                try:
+                    path.unlink(missing_ok=True)
+                    self._approx_size = None
+                except OSError:
+                    pass
                 return None
+
+    def _atomic_write(self, path: Path, data: dict[str, Any]) -> None:
+        """Write data to file atomically using temp file + rename.
+
+        This prevents partial/corrupted writes if the process crashes.
+        os.replace() is atomic on POSIX systems.
+        """
+        # Create temp file in same directory to ensure same filesystem
+        fd, tmp_path = tempfile.mkstemp(
+            suffix=".tmp",
+            prefix=".cache_",
+            dir=self.cache_dir,
+        )
+        try:
+            # Write to temp file
+            with os.fdopen(fd, "w") as f:
+                json.dump(data, f, indent=2)
+            # Atomic rename (os.replace is atomic on POSIX)
+            os.replace(tmp_path, path)
+        except OSError:
+            # Clean up temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def set(
         self,
@@ -437,13 +517,16 @@ class FileBasedTicketCache(TicketCache):
         ttl: timedelta | None = None,
         etag: str | None = None,
     ) -> None:
-        """Store ticket in cache."""
+        """Store ticket in cache with atomic write for crash safety.
+
+        Uses a deep copy of the ticket to prevent external mutation.
+        """
         key = CacheKey.from_ticket(ticket)
         effective_ttl = ttl if ttl is not None else self.default_ttl
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         cached = CachedTicket(
-            ticket=ticket,
+            ticket=copy.deepcopy(ticket),
             cached_at=now,
             expires_at=now + effective_ttl,
             etag=etag,
@@ -452,12 +535,20 @@ class FileBasedTicketCache(TicketCache):
         path = self._get_path(key)
         with self._lock:
             try:
+                is_new_file = not path.exists()
                 data = self._serialize_ticket(cached)
-                path.write_text(json.dumps(data, indent=2))
+
+                # P0 FIX: Atomic write using temp file + rename
+                self._atomic_write(path, data)
                 logger.debug(f"Cached {key} to {path}")
 
-                # Evict oldest entries if over max_size
-                self._evict_lru()
+                # Update approximate size counter
+                if is_new_file:
+                    if self._approx_size is not None:
+                        self._approx_size += 1
+
+                # Lazy eviction: probabilistic check to avoid O(N) on every write
+                self._maybe_evict_lru()
             except OSError as e:
                 logger.warning(f"Failed to write cache file {path}: {e}")
 
@@ -467,6 +558,7 @@ class FileBasedTicketCache(TicketCache):
         with self._lock:
             if path.exists():
                 path.unlink(missing_ok=True)
+                self._approx_size = None  # Invalidate cache size estimate
                 logger.debug(f"Invalidated cache for {key}")
 
     def clear(self) -> None:
@@ -476,6 +568,7 @@ class FileBasedTicketCache(TicketCache):
             for path in self.cache_dir.glob("*.json"):
                 path.unlink(missing_ok=True)
                 count += 1
+            self._approx_size = 0
             logger.debug(f"Cleared {count} cache files")
 
     def clear_platform(self, platform: Platform) -> None:
@@ -486,6 +579,7 @@ class FileBasedTicketCache(TicketCache):
             for path in self.cache_dir.glob(f"{prefix}*.json"):
                 path.unlink(missing_ok=True)
                 count += 1
+            self._approx_size = None  # Invalidate cache size estimate
             logger.debug(f"Cleared {count} cache files for {platform.name}")
 
     def get_etag(self, key: CacheKey) -> str | None:
@@ -494,9 +588,14 @@ class FileBasedTicketCache(TicketCache):
         return cached.etag if cached else None
 
     def size(self) -> int:
-        """Get current number of cached entries."""
+        """Get current number of cached entries.
+
+        Updates the approximate size cache for lazy eviction.
+        """
         with self._lock:
-            return len(list(self.cache_dir.glob("*.json")))
+            count = len(list(self.cache_dir.glob("*.json")))
+            self._approx_size = count
+            return count
 
     def stats(self) -> dict[str, int]:
         """Get cache statistics per platform."""
@@ -508,69 +607,146 @@ class FileBasedTicketCache(TicketCache):
                 stats[platform] = stats.get(platform, 0) + 1
             return stats
 
-    def _evict_lru(self) -> None:
-        """Evict least recently used entries if over max_size.
+    def _maybe_evict_lru(self) -> None:
+        """Probabilistically check and perform LRU eviction.
 
-        Uses file modification time as LRU indicator.
+        Lazy eviction strategy to avoid O(N) disk scan on every set():
+        - Only runs with _EVICTION_PROBABILITY (10%) chance
+        - Only evicts if size > max_size * _EVICTION_THRESHOLD_RATIO (110%)
+
+        This is called from set() with the lock already held.
+        """
+        if self.max_size <= 0:
+            return
+
+        # Quick check using approximate size if available
+        if self._approx_size is not None:
+            if self._approx_size <= self.max_size:
+                return  # Definitely not over threshold
+
+        # Probabilistic check: only scan 10% of the time
+        if random.random() > self._EVICTION_PROBABILITY:
+            return
+
+        # Perform actual eviction check
+        self._evict_lru()
+
+    def _evict_lru(self) -> None:
+        """Evict least recently used entries if over max_size threshold.
+
+        Uses file modification time as LRU indicator. Called with lock held.
+        Eviction threshold is max_size * 1.1 to avoid thrashing.
         """
         if self.max_size <= 0:
             return
 
         files = list(self.cache_dir.glob("*.json"))
-        if len(files) <= self.max_size:
+        current_size = len(files)
+        self._approx_size = current_size
+
+        # Use threshold to avoid evicting on every write when at capacity
+        threshold = int(self.max_size * self._EVICTION_THRESHOLD_RATIO)
+        if current_size <= threshold:
             return
 
         # Sort by modification time (oldest first)
         files.sort(key=lambda p: p.stat().st_mtime)
 
-        # Remove oldest files until under max_size
-        to_remove = len(files) - self.max_size
+        # Remove oldest files until at max_size (not threshold)
+        to_remove = current_size - self.max_size
         for path in files[:to_remove]:
-            path.unlink(missing_ok=True)
-            logger.debug(f"LRU evicted: {path.name}")
+            try:
+                path.unlink(missing_ok=True)
+                logger.debug(f"LRU evicted: {path.name}")
+            except OSError:
+                pass  # File may have been removed by another process
+
+        self._approx_size = self.max_size
+
+    def force_evict(self) -> None:
+        """Force LRU eviction check (for testing purposes).
+
+        This bypasses the probabilistic check and forces eviction.
+        """
+        with self._lock:
+            self._evict_lru()
 
 
 # Global cache singleton
 _global_cache: TicketCache | None = None
 _global_cache_type: str | None = None
+_global_cache_kwargs: dict[str, Any] | None = None
 _cache_lock = threading.Lock()
+
+
+class CacheConfigurationError(ValueError):
+    """Raised when get_global_cache is called with conflicting configuration.
+
+    This indicates that the global cache was already initialized with different
+    parameters than the ones being requested. Use clear_global_cache() first
+    to reinitialize with new settings.
+    """
+
+    pass
 
 
 def get_global_cache(
     cache_type: str = "memory",
+    strict: bool = True,
     **kwargs: Any,
 ) -> TicketCache:
     """Get or create the global cache singleton.
 
-    Note: After the first call, subsequent calls return the existing cache
-    instance. If different parameters are passed, a warning is logged but
-    the existing cache is still returned. Use `clear_global_cache()` first
-    if you need to reinitialize with different settings.
-
     Args:
         cache_type: Type of cache ('memory' or 'file')
+        strict: If True (default), raise CacheConfigurationError when called
+            with different parameters than the existing cache. If False,
+            log a warning and return the existing cache.
         **kwargs: Additional arguments passed to cache constructor
 
     Returns:
         Global TicketCache instance
+
+    Raises:
+        CacheConfigurationError: If strict=True and the cache was already
+            initialized with different parameters.
     """
-    global _global_cache, _global_cache_type
+    global _global_cache, _global_cache_type, _global_cache_kwargs
 
     with _cache_lock:
         if _global_cache is None:
             _global_cache_type = cache_type
+            _global_cache_kwargs = kwargs.copy()
             if cache_type == "file":
                 _global_cache = FileBasedTicketCache(**kwargs)
                 logger.info("Initialized file-based ticket cache")
             else:
                 _global_cache = InMemoryTicketCache(**kwargs)
                 logger.info("Initialized in-memory ticket cache")
-        elif cache_type != _global_cache_type:
-            logger.warning(
-                f"get_global_cache() called with cache_type='{cache_type}' but "
-                f"global cache already initialized as '{_global_cache_type}'. "
-                "Returning existing cache. Use clear_global_cache() to reinitialize."
-            )
+        else:
+            # Check for configuration mismatch
+            type_mismatch = cache_type != _global_cache_type
+            kwargs_mismatch = kwargs != _global_cache_kwargs
+
+            if type_mismatch or kwargs_mismatch:
+                mismatch_details = []
+                if type_mismatch:
+                    mismatch_details.append(
+                        f"cache_type='{cache_type}' vs existing='{_global_cache_type}'"
+                    )
+                if kwargs_mismatch:
+                    mismatch_details.append(f"kwargs={kwargs} vs existing={_global_cache_kwargs}")
+
+                message = (
+                    f"get_global_cache() called with different configuration than "
+                    f"existing cache: {', '.join(mismatch_details)}. "
+                    f"Use clear_global_cache() to reinitialize with new settings."
+                )
+
+                if strict:
+                    raise CacheConfigurationError(message)
+                else:
+                    logger.warning(message)
 
         return _global_cache
 
@@ -581,7 +757,7 @@ def set_global_cache(cache: TicketCache) -> None:
     Args:
         cache: TicketCache instance to use globally
     """
-    global _global_cache, _global_cache_type
+    global _global_cache, _global_cache_type, _global_cache_kwargs
 
     with _cache_lock:
         _global_cache = cache
@@ -590,14 +766,17 @@ def set_global_cache(cache: TicketCache) -> None:
             _global_cache_type = "file"
         else:
             _global_cache_type = "memory"
+        # Clear kwargs since we don't know what was used to construct this cache
+        _global_cache_kwargs = {}
 
 
 def clear_global_cache() -> None:
     """Clear and reset the global cache singleton."""
-    global _global_cache, _global_cache_type
+    global _global_cache, _global_cache_type, _global_cache_kwargs
 
     with _cache_lock:
         if _global_cache is not None:
             _global_cache.clear()
             _global_cache = None
         _global_cache_type = None
+        _global_cache_kwargs = None

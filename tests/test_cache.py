@@ -1,12 +1,15 @@
 """Tests for ticket caching layer."""
 
+import os
+import queue
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from spec.integrations.cache import (
+    CacheConfigurationError,
     CachedTicket,
     CacheKey,
     FileBasedTicketCache,
@@ -91,35 +94,39 @@ class TestCachedTicket:
     """Test CachedTicket dataclass."""
 
     def test_is_expired_false(self, sample_ticket):
+        now = datetime.now(UTC)
         cached = CachedTicket(
             ticket=sample_ticket,
-            cached_at=datetime.now(),
-            expires_at=datetime.now() + timedelta(hours=1),
+            cached_at=now,
+            expires_at=now + timedelta(hours=1),
         )
         assert cached.is_expired is False
 
     def test_is_expired_true(self, sample_ticket):
+        now = datetime.now(UTC)
         cached = CachedTicket(
             ticket=sample_ticket,
-            cached_at=datetime.now() - timedelta(hours=2),
-            expires_at=datetime.now() - timedelta(hours=1),
+            cached_at=now - timedelta(hours=2),
+            expires_at=now - timedelta(hours=1),
         )
         assert cached.is_expired is True
 
     def test_ttl_remaining(self, sample_ticket):
+        now = datetime.now(UTC)
         cached = CachedTicket(
             ticket=sample_ticket,
-            cached_at=datetime.now(),
-            expires_at=datetime.now() + timedelta(minutes=30),
+            cached_at=now,
+            expires_at=now + timedelta(minutes=30),
         )
         assert cached.ttl_remaining.total_seconds() > 0
         assert cached.ttl_remaining.total_seconds() <= 30 * 60
 
     def test_ttl_remaining_expired(self, sample_ticket):
+        now = datetime.now(UTC)
         cached = CachedTicket(
             ticket=sample_ticket,
-            cached_at=datetime.now() - timedelta(hours=2),
-            expires_at=datetime.now() - timedelta(hours=1),
+            cached_at=now - timedelta(hours=2),
+            expires_at=now - timedelta(hours=1),
         )
         assert cached.ttl_remaining.total_seconds() == 0
 
@@ -238,10 +245,13 @@ class TestInMemoryTicketCache:
         assert retrieved2.title == original_title
 
     def test_thread_safety_no_exceptions(self, cache, sample_ticket):
-        """Test concurrent access doesn't raise exceptions."""
-        errors = []
+        """Test concurrent access doesn't raise exceptions.
 
-        def cache_operations():
+        Uses queue.Queue for thread-safe error collection.
+        """
+        error_queue: queue.Queue[Exception] = queue.Queue()
+
+        def cache_operations() -> None:
             try:
                 for _ in range(100):
                     cache.set(sample_ticket)
@@ -249,7 +259,7 @@ class TestInMemoryTicketCache:
                     cache.get(key)
                     cache.invalidate(key)
             except Exception as e:
-                errors.append(e)
+                error_queue.put(e)
 
         threads = [threading.Thread(target=cache_operations) for _ in range(10)]
         for t in threads:
@@ -257,16 +267,19 @@ class TestInMemoryTicketCache:
         for t in threads:
             t.join()
 
-        assert len(errors) == 0
+        assert error_queue.empty(), f"Errors occurred: {list(error_queue.queue)}"
 
     def test_thread_safety_data_integrity(self):
-        """Test concurrent writes maintain data integrity."""
+        """Test concurrent writes maintain data integrity.
+
+        Uses queue.Queue for thread-safe result collection.
+        """
         cache = InMemoryTicketCache(default_ttl=timedelta(hours=1))
-        results = []
+        result_queue: queue.Queue[tuple[int, int]] = queue.Queue()
         num_threads = 10
         iterations = 50
 
-        def write_unique_ticket(thread_id: int):
+        def write_unique_ticket(thread_id: int) -> None:
             """Each thread writes tickets with unique IDs."""
             for i in range(iterations):
                 ticket = GenericTicket(
@@ -286,14 +299,14 @@ class TestInMemoryTicketCache:
                 )
                 cache.set(ticket)
 
-        def verify_tickets(thread_id: int):
+        def verify_tickets(thread_id: int) -> None:
             """Verify all tickets from a thread are retrievable."""
             found = 0
             for i in range(iterations):
                 key = CacheKey(Platform.JIRA, f"THREAD{thread_id}-{i}")
                 if cache.get(key) is not None:
                     found += 1
-            results.append((thread_id, found))
+            result_queue.put((thread_id, found))
 
         # Write phase
         write_threads = [
@@ -312,6 +325,11 @@ class TestInMemoryTicketCache:
             t.start()
         for t in verify_threads:
             t.join()
+
+        # Collect results from queue
+        results = []
+        while not result_queue.empty():
+            results.append(result_queue.get())
 
         # All tickets should be found
         total_found = sum(count for _, count in results)
@@ -399,12 +417,20 @@ class TestFileBasedTicketCache:
         assert cache.get_etag(key) == "file-etag-123"
 
     def test_lru_eviction(self, sample_ticket, tmp_path):
+        """Test LRU eviction using deterministic file timestamps.
+
+        Uses os.utime() for explicit timestamp control instead of time.sleep()
+        to avoid flaky tests.
+        """
         cache = FileBasedTicketCache(
             cache_dir=tmp_path,
             default_ttl=timedelta(hours=1),
             max_size=2,
         )
-        # Add 3 tickets to trigger eviction
+        base_time = time.time()
+
+        # Add 3 tickets with explicit timestamps
+        tickets = []
         for i in range(3):
             ticket = GenericTicket(
                 id=f"PROJ-{i}",
@@ -422,7 +448,19 @@ class TestFileBasedTicketCache:
                 platform_metadata={},
             )
             cache.set(ticket)
-            time.sleep(0.01)  # Ensure different mtime for LRU ordering
+            tickets.append(ticket)
+
+        # Set explicit timestamps using os.utime for deterministic ordering
+        # PROJ-0 is oldest, PROJ-1 is middle, PROJ-2 is newest
+        for i, ticket in enumerate(tickets):
+            key = CacheKey.from_ticket(ticket)
+            path = cache._get_path(key)
+            # Set mtime to base_time + i seconds (older first)
+            file_time = base_time + i
+            os.utime(path, (file_time, file_time))
+
+        # Force eviction (bypasses probabilistic check)
+        cache.force_evict()
 
         assert cache.size() == 2
         # First ticket should be evicted (oldest mtime)
@@ -448,11 +486,14 @@ class TestFileBasedTicketCache:
         assert not path.exists()
 
     def test_thread_safety_file_cache(self, tmp_path, sample_ticket):
-        """Test concurrent access to file-based cache."""
-        cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
-        errors = []
+        """Test concurrent access to file-based cache.
 
-        def cache_operations(thread_id: int):
+        Uses queue.Queue for thread-safe error collection.
+        """
+        cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
+        error_queue: queue.Queue[Exception] = queue.Queue()
+
+        def cache_operations(thread_id: int) -> None:
             try:
                 for i in range(20):
                     ticket = GenericTicket(
@@ -474,7 +515,7 @@ class TestFileBasedTicketCache:
                     key = CacheKey.from_ticket(ticket)
                     cache.get(key)
             except Exception as e:
-                errors.append(e)
+                error_queue.put(e)
 
         threads = [threading.Thread(target=cache_operations, args=(i,)) for i in range(5)]
         for t in threads:
@@ -482,7 +523,7 @@ class TestFileBasedTicketCache:
         for t in threads:
             t.join()
 
-        assert len(errors) == 0
+        assert error_queue.empty(), f"Errors occurred: {list(error_queue.queue)}"
 
 
 class TestGlobalCache:
@@ -525,8 +566,22 @@ class TestGlobalCache:
         assert new_cache.size() == 0
         clear_global_cache()
 
-    def test_get_global_cache_type_mismatch_warning(self, tmp_path, caplog):
-        """Test that a warning is logged when cache type differs from initialized."""
+    def test_get_global_cache_type_mismatch_strict_raises(self, tmp_path):
+        """Test that strict mode raises CacheConfigurationError on type mismatch."""
+        clear_global_cache()
+        # Initialize as memory cache
+        cache1 = get_global_cache(cache_type="memory")
+        assert isinstance(cache1, InMemoryTicketCache)
+
+        # Try to get as file cache with strict=True (default) - should raise
+        with pytest.raises(CacheConfigurationError) as exc_info:
+            get_global_cache(cache_type="file", cache_dir=tmp_path)
+
+        assert "cache_type='file' vs existing='memory'" in str(exc_info.value)
+        clear_global_cache()
+
+    def test_get_global_cache_type_mismatch_non_strict_warning(self, tmp_path, caplog):
+        """Test that non-strict mode logs warning on type mismatch."""
         import logging
 
         clear_global_cache()
@@ -534,13 +589,27 @@ class TestGlobalCache:
         cache1 = get_global_cache(cache_type="memory")
         assert isinstance(cache1, InMemoryTicketCache)
 
-        # Try to get as file cache - should warn and return existing memory cache
+        # Try to get as file cache with strict=False - should warn and return existing
         with caplog.at_level(logging.WARNING):
-            cache2 = get_global_cache(cache_type="file", cache_dir=tmp_path)
+            cache2 = get_global_cache(cache_type="file", cache_dir=tmp_path, strict=False)
 
         assert cache2 is cache1  # Should return the same cache
         assert isinstance(cache2, InMemoryTicketCache)  # Still memory cache
-        assert "already initialized as 'memory'" in caplog.text
+        assert "different configuration" in caplog.text
+        clear_global_cache()
+
+    def test_get_global_cache_kwargs_mismatch_strict_raises(self):
+        """Test that strict mode raises CacheConfigurationError on kwargs mismatch."""
+        clear_global_cache()
+        # Initialize with max_size=100
+        cache1 = get_global_cache(cache_type="memory", max_size=100)
+        assert isinstance(cache1, InMemoryTicketCache)
+
+        # Try to get with different max_size - should raise
+        with pytest.raises(CacheConfigurationError) as exc_info:
+            get_global_cache(cache_type="memory", max_size=200)
+
+        assert "kwargs=" in str(exc_info.value)
         clear_global_cache()
 
     def test_set_global_cache_updates_type(self, tmp_path, caplog):
@@ -553,13 +622,17 @@ class TestGlobalCache:
         file_cache = FileBasedTicketCache(cache_dir=tmp_path)
         set_global_cache(file_cache)
 
-        # Verify the cache is the file cache we set
-        assert get_global_cache() is file_cache
+        # Verify the cache is the file cache we set (use file type to match)
+        assert get_global_cache(cache_type="file") is file_cache
 
-        # Getting with memory type should warn (cache is file type)
+        # Getting with memory type should raise (cache is file type)
+        with pytest.raises(CacheConfigurationError):
+            get_global_cache(cache_type="memory")
+
+        # With strict=False, should warn and return existing
         with caplog.at_level(logging.WARNING):
-            cache = get_global_cache(cache_type="memory")
+            cache = get_global_cache(cache_type="memory", strict=False)
 
         assert cache is file_cache  # Should return existing cache
-        assert "already initialized as 'file'" in caplog.text
+        assert "different configuration" in caplog.text
         clear_global_cache()
