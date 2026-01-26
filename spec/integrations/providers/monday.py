@@ -202,10 +202,17 @@ class MondayProvider(IssueTrackerProvider):
         )
 
     def _find_column_text(self, columns: list[Any], col_type: str) -> str:
-        """Find column text by type."""
+        """Find column text by type or id.
+
+        Checks both 'type' AND 'id' fields to handle cases where the column
+        id matches common names like 'status', 'person', 'tags', 'date'
+        even if the type differs (e.g., type='color' for status columns).
+        """
         for col in columns:
-            if isinstance(col, dict) and col.get("type") == col_type:
-                return str(col.get("text", "") or "")
+            if isinstance(col, dict):
+                # Check type OR id (common IDs: "status", "person", "tags", "date")
+                if col.get("type") == col_type or col.get("id") == col_type:
+                    return str(col.get("text", "") or "")
         return ""
 
     def _extract_description(self, item: dict[str, Any], columns: list[Any]) -> str:
