@@ -264,7 +264,7 @@ class JiraProvider(IssueTrackerProvider):
 
         raise ValueError(f"Cannot parse Jira ticket from input: {input_str}")
 
-    def normalize(self, raw_data: dict[str, Any]) -> GenericTicket:
+    def normalize(self, raw_data: dict[str, Any], ticket_id: str | None = None) -> GenericTicket:
         """Convert raw Jira data to GenericTicket.
 
         Handles edge cases gracefully:
@@ -274,6 +274,7 @@ class JiraProvider(IssueTrackerProvider):
 
         Args:
             raw_data: Raw Jira API response (issue object)
+            ticket_id: Optional ticket ID from parse_input (unused, for LSP compliance).
 
         Returns:
             Populated GenericTicket with normalized fields

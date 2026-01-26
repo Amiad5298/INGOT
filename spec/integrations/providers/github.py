@@ -337,7 +337,7 @@ class GitHubProvider(IssueTrackerProvider):
 
         raise ValueError(f"Cannot parse GitHub issue from input: {input_str}")
 
-    def normalize(self, raw_data: dict[str, Any]) -> GenericTicket:
+    def normalize(self, raw_data: dict[str, Any], ticket_id: str | None = None) -> GenericTicket:
         """Convert raw GitHub API data to GenericTicket.
 
         Handles nested API response structure and edge cases.
@@ -345,6 +345,7 @@ class GitHubProvider(IssueTrackerProvider):
 
         Args:
             raw_data: Raw GitHub REST API response (issue/PR object)
+            ticket_id: Optional ticket ID from parse_input (unused, for LSP compliance).
 
         Returns:
             Populated GenericTicket with normalized fields

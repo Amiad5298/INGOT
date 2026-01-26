@@ -260,7 +260,7 @@ class LinearProvider(IssueTrackerProvider):
 
         raise ValueError(f"Cannot parse Linear ticket from input: {input_str}")
 
-    def normalize(self, raw_data: dict[str, Any]) -> GenericTicket:
+    def normalize(self, raw_data: dict[str, Any], ticket_id: str | None = None) -> GenericTicket:
         """Convert raw Linear GraphQL data to GenericTicket.
 
         Handles nested GraphQL response structure (e.g., labels.nodes[]).
@@ -268,6 +268,7 @@ class LinearProvider(IssueTrackerProvider):
 
         Args:
             raw_data: Raw Linear GraphQL response (issue object)
+            ticket_id: Optional ticket ID from parse_input (unused, for LSP compliance).
 
         Returns:
             Populated GenericTicket with normalized fields
