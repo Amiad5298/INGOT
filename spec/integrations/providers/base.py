@@ -488,13 +488,19 @@ class GenericTicket:
 
         Raises:
             KeyError: If required fields are missing from data
+            ValueError: If platform string is unknown/invalid (prevents data corruption)
         """
         # Make a copy to avoid mutating the input
         ticket_data = data.copy()
 
-        # Resilient Platform enum conversion using getattr with fallback
+        # P1 FIX: Strict Platform enum conversion - unknown platforms raise ValueError
+        # to prevent data corruption (ticket identity depends on correct platform).
+        # This will be caught by FileBasedTicketCache._deserialize_ticket, causing
+        # a cache miss and deletion of the stale/corrupted cache file.
         platform_str = ticket_data.get("platform", "")
-        ticket_data["platform"] = getattr(Platform, platform_str, Platform.JIRA)
+        if not hasattr(Platform, platform_str):
+            raise ValueError(f"Unknown platform: {platform_str!r}")
+        ticket_data["platform"] = Platform[platform_str]
 
         # Resilient TicketStatus enum conversion
         status_str = ticket_data.get("status", "unknown")

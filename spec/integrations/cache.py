@@ -549,6 +549,10 @@ class FileBasedTicketCache(TicketCache):
 
                 # Lazy eviction: probabilistic check to avoid O(N) on every write
                 self._maybe_evict_lru()
+            except TypeError as e:
+                # P0 FIX: Handle non-JSON-serializable objects in platform_metadata
+                # (e.g., datetime objects). Log warning and skip caching.
+                logger.warning(f"Failed to cache ticket {key} due to serialization error: {e}")
             except OSError as e:
                 logger.warning(f"Failed to write cache file {path}: {e}")
 
