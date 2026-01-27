@@ -16,7 +16,7 @@ This specification describes enhancements to the AI Platform's task execution wo
 8. [CLI Changes](#cli-changes)
 9. [Configuration](#configuration)
 10. [Testing Requirements](#testing-requirements)
-11. [Migration Notes](#migration-notes)
+11. [Runtime Notes](#runtime-notes)
 12. [Performance Considerations](#performance-considerations)
 
 ---
@@ -142,11 +142,11 @@ New format includes categorization metadata in comments:
 @dataclass
 class WorkflowState:
     # ... existing fields ...
-    
+
     # Parallel execution configuration
     max_parallel_tasks: int = 3  # Default concurrency limit
     parallel_execution_enabled: bool = True
-    
+
     # Execution tracking
     parallel_tasks_completed: list[str] = field(default_factory=list)
     parallel_tasks_failed: list[str] = field(default_factory=list)
@@ -1421,19 +1421,13 @@ class TestParallelWorkflow:
 
 ---
 
-## Migration Notes
+## Runtime Notes
 
-### Backward Compatibility
+### Task List Handling
 
-1. **Legacy Task Lists**: Task lists without category metadata will be treated as all-fundamental (sequential execution)
+1. **Uncategorized Tasks**: Task lists without category metadata will be treated as all-fundamental (sequential execution)
 2. **CLI Defaults**: Parallel execution is enabled by default but can be disabled with `--no-parallel`
 3. **Config Override**: CLI flags override config file settings
-
-### Rollout Strategy
-
-1. **Phase 1**: Deploy with parallel execution disabled by default
-2. **Phase 2**: Enable parallel execution for new tickets only
-3. **Phase 3**: Full rollout with parallel execution enabled by default
 
 ---
 
@@ -1454,4 +1448,3 @@ Track these metrics:
 - Resource utilization during parallel execution
 - **Rate limit retries**: Count of 429 errors and retry attempts
 - **Retry wait time**: Total time spent waiting on rate limits
-

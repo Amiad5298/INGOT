@@ -97,14 +97,7 @@ If you cannot reliably map changed source files to specific tests AND cannot run
 If NO production files were changed AND NO test files were changed, report "No code changes detected that require testing" and STOP."""
 
 
-# Backwards-compatible alias (underscore-prefixed)
-_build_task_prompt = build_task_prompt
-
-
 __all__ = [
     "build_task_prompt",
     "POST_IMPLEMENTATION_TEST_PROMPT",
-    # Backwards-compatible alias
-    "_build_task_prompt",
 ]
-

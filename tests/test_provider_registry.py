@@ -59,17 +59,6 @@ class MockJiraProvider(IssueTrackerProvider):
     def parse_input(self, input_str: str) -> str:
         return input_str.upper()
 
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        return GenericTicket(
-            id=ticket_id,
-            platform=Platform.JIRA,
-            url=f"https://example.atlassian.net/browse/{ticket_id}",
-            title="Mock Ticket",
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        return True, "Connected"
-
     def normalize(self, raw_data: dict, ticket_id: str | None = None) -> GenericTicket:
         return GenericTicket(
             id=raw_data.get("key", ticket_id or "MOCK-1"),
@@ -97,17 +86,6 @@ class MockGitHubProvider(IssueTrackerProvider):
 
     def parse_input(self, input_str: str) -> str:
         return input_str
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        return GenericTicket(
-            id=ticket_id,
-            platform=Platform.GITHUB,
-            url=f"https://github.com/{ticket_id}",
-            title="Mock Issue",
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        return True, "Connected"
 
     def normalize(self, raw_data: dict, ticket_id: str | None = None) -> GenericTicket:
         return GenericTicket(
@@ -139,17 +117,6 @@ class MockLinearProviderWithDI(IssueTrackerProvider):
 
     def parse_input(self, input_str: str) -> str:
         return input_str
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        return GenericTicket(
-            id=ticket_id,
-            platform=Platform.LINEAR,
-            url=f"https://linear.app/team/issue/{ticket_id}",
-            title="Mock Linear Issue",
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        return True, "Connected"
 
     def normalize(self, raw_data: dict, ticket_id: str | None = None) -> GenericTicket:
         return GenericTicket(

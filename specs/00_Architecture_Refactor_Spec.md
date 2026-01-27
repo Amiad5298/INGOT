@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-This specification outlines the architectural refactoring required to transform SPECFLOW from a Jira-only integration into a **platform-agnostic issue tracker system**. The goal is to support GitHub Issues, Linear, Azure DevOps, Monday.com, and Trello while maintaining backward compatibility with existing Jira functionality.
+This specification outlines the architectural refactoring required to transform SPECFLOW from a Jira-only integration into a **platform-agnostic issue tracker system**. The goal is to support GitHub Issues, Linear, Azure DevOps, Monday.com, and Trello through a unified provider abstraction.
 
 ---
 
@@ -23,8 +23,7 @@ This specification outlines the architectural refactoring required to transform 
 6. [Provider Registry & Factory Pattern](#6-provider-registry--factory-pattern)
 7. [Configuration & Authentication](#7-configuration--authentication)
 8. [Caching Strategy](#8-caching-strategy)
-9. [Migration Path](#9-migration-path)
-10. [File Structure](#10-file-structure)
+9. [File Structure](#9-file-structure)
 
 ---
 
@@ -261,36 +260,6 @@ class GenericTicket:
             return f"{prefix}/{self.id.lower()}-{self.branch_summary}"
         return f"{prefix}/{self.id.lower()}"
 ```
-
-### 3.2 Backward Compatibility Bridge
-
-To maintain backward compatibility during migration, provide a bridge:
-
-```python
-def from_jira_ticket(jira_ticket: JiraTicket) -> GenericTicket:
-    """Convert legacy JiraTicket to GenericTicket."""
-    return GenericTicket(
-        id=jira_ticket.ticket_id,
-        platform=Platform.JIRA,
-        url=jira_ticket.ticket_url,
-        title=jira_ticket.title,
-        description=jira_ticket.description,
-        branch_summary=jira_ticket.summary,
-        full_info=jira_ticket.full_info,
-    )
-
-def to_jira_ticket(ticket: GenericTicket) -> JiraTicket:
-    """Convert GenericTicket to legacy JiraTicket for compatibility."""
-    return JiraTicket(
-        ticket_id=ticket.id,
-        ticket_url=ticket.url,
-        summary=ticket.branch_summary,
-        title=ticket.title,
-        description=ticket.description,
-        full_info=ticket.full_info,
-    )
-```
-
 
 ---
 
@@ -1346,85 +1315,48 @@ def get_provider_for_input(input_str: str) -> IssueTrackerProvider:
 
 ---
 
-## 10. Migration Path
+## 10. File Structure
 
-### 10.1 Phase 1: Create Abstractions (Non-Breaking)
-
-1. Create `specflow/integrations/providers/` package
-2. Define `GenericTicket`, `Platform`, `IssueTrackerProvider` in base module
-3. Create `JiraProvider` that wraps existing `jira.py` logic
-4. Add backward-compatible type aliases
-
-### 10.2 Phase 2: Parallel Support
-
-1. Update `WorkflowState.ticket` to accept `GenericTicket | JiraTicket`
-2. Add bridge functions for conversion
-3. Update `cli.py` to use `ProviderRegistry.get_provider_for_input()`
-4. Keep `parse_jira_ticket()` working for explicit Jira usage
-
-### 10.3 Phase 3: Full Migration
-
-1. Replace `JiraTicket` usage with `GenericTicket` throughout
-2. Remove direct Jira dependencies from workflow modules
-3. Deprecate legacy Jira functions (keep for 1 major version)
-4. Update all tests
-
-### 10.4 Phase 4: Add New Providers
-
-1. Implement GitHub provider
-2. Implement Linear provider
-3. Implement Azure DevOps provider
-4. Implement Monday provider
-5. Implement Trello provider
-
----
-
-## 11. File Structure
-
-### 11.1 Proposed Directory Layout
+### 10.1 Directory Layout
 
 ```
-specflow/
+spec/
 ├── integrations/
-│   ├── __init__.py              # Re-exports, backward compat
-│   ├── auggie.py                # Unchanged
-│   ├── git.py                   # Unchanged
-│   ├── jira.py                  # Deprecated, calls JiraProvider
+│   ├── __init__.py              # Re-exports
+│   ├── auggie.py                # Auggie AI client
+│   ├── git.py                   # Git integration
 │   └── providers/
 │       ├── __init__.py          # Exports base classes + registry
 │       ├── base.py              # GenericTicket, IssueTrackerProvider, Platform
 │       ├── exceptions.py        # Custom exceptions
-│       ├── registry.py          # ProviderRegistry, PlatformDetector
-│       ├── cache.py             # Caching layer
-│       ├── auth.py              # AuthenticationManager
-│       ├── user_interaction.py  # UserInteractionInterface + implementations
-│       ├── jira_provider.py     # @ProviderRegistry.register
-│       ├── github_provider.py   # @ProviderRegistry.register
-│       ├── linear_provider.py   # @ProviderRegistry.register
-│       ├── azure_provider.py    # @ProviderRegistry.register
-│       ├── monday_provider.py   # @ProviderRegistry.register
-│       └── trello_provider.py   # @ProviderRegistry.register
+│       ├── registry.py          # ProviderRegistry
+│       ├── jira.py              # @ProviderRegistry.register
+│       ├── github.py            # @ProviderRegistry.register
+│       ├── linear.py            # @ProviderRegistry.register
+│       ├── azure_devops.py      # @ProviderRegistry.register
+│       ├── monday.py            # @ProviderRegistry.register
+│       └── trello.py            # @ProviderRegistry.register
+│   └── fetchers/
+│       ├── __init__.py          # Exports fetcher classes
+│       ├── base.py              # TicketFetcher ABC
+│       └── auggie.py            # AuggieMediatedFetcher
 ├── config/
-│   ├── settings.py              # Add new platform settings
-│   └── manager.py               # ConfigManager with cascading hierarchy
+│   ├── settings.py              # Platform settings
+│   └── manager.py               # ConfigManager
 └── workflow/
     ├── state.py                 # ticket: GenericTicket
     └── runner.py                # Use provider abstraction
 ```
 
-### 11.2 Import Structure
+### 10.2 Import Structure
 
 ```python
-# After migration, imports look like:
-from specflow.integrations.providers import (
+from spec.integrations.providers import (
     GenericTicket,
     Platform,
     ProviderRegistry,
     IssueTrackerProvider,
 )
-
-# Backward compatible:
-from specflow.integrations import JiraTicket, parse_jira_ticket  # Still works
 ```
 
 ---

@@ -638,20 +638,6 @@ class AzureDevOpsProvider(IssueTrackerProvider):
         DirectAPIFetcher is the only fetch path.
         """
         return ""
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        warnings.warn(
-            "AzureDevOpsProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError(
-            "AzureDevOpsProvider.fetch_ticket() is deprecated in hybrid architecture."
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        return (True, "AzureDevOpsProvider ready - use TicketService for connection verification")
 ```
 
 ### Step 2: Create MondayProvider
@@ -847,18 +833,6 @@ class MondayProvider(IssueTrackerProvider):
         DirectAPIFetcher is the only fetch path.
         """
         return ""
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        warnings.warn(
-            "MondayProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError("MondayProvider.fetch_ticket() is deprecated.")
-
-    def check_connection(self) -> tuple[bool, str]:
-        return (True, "MondayProvider ready - use TicketService for connection verification")
 ```
 
 ### Step 3: Create TrelloProvider
@@ -1051,18 +1025,6 @@ class TrelloProvider(IssueTrackerProvider):
         DirectAPIFetcher is the only fetch path.
         """
         return ""
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        warnings.warn(
-            "TrelloProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError("TrelloProvider.fetch_ticket() is deprecated.")
-
-    def check_connection(self) -> tuple[bool, str]:
-        return (True, "TrelloProvider ready - use TicketService for connection verification")
 ```
 
 ### Step 4: Update Package Exports
@@ -1269,26 +1231,12 @@ provider = ProviderRegistry.get_provider_for_input(
 
 ---
 
-## Migration Considerations
-
-### Backward Compatibility
-
-- `fetch_ticket()` raises `NotImplementedError` with clear migration message
-- Existing code using direct platform integrations unchanged
-- Providers are opt-in via explicit import
-
-### No Auggie MCP Support
+## No Auggie MCP Support
 
 These three platforms do NOT have Auggie MCP integration:
 - `AuggieMediatedFetcher` is NOT available for these platforms
 - `DirectAPIFetcher` is the **ONLY** fetch path
 - `get_prompt_template()` returns empty string for all three providers
-
-### Gradual Migration Path
-
-1. **Phase 1 (This Ticket):** Implement providers with parse/normalize capabilities
-2. **Phase 2 (AMI-32):** Integrate with TicketService for unified access
-3. **Phase 3 (Future):** Add Auggie MCP support if available
 
 ---
 
@@ -1304,7 +1252,6 @@ From Linear ticket AMI-21:
 - [ ] `parse_input()` - extracts normalized ticket ID (org/project#id)
 - [ ] `normalize()` - converts Azure DevOps REST JSON to GenericTicket
 - [ ] `get_prompt_template()` - returns empty string (no Auggie MCP support)
-- [ ] `fetch_ticket()` - raises NotImplementedError with deprecation warning
 - [ ] STATUS_MAPPING covers common Azure DevOps states
 - [ ] TYPE_MAPPING covers common work item types
 - [ ] HTML description stripping implemented
@@ -1318,7 +1265,6 @@ From Linear ticket AMI-21:
 - [ ] `parse_input()` - extracts board_id:item_id format
 - [ ] `normalize()` - converts Monday.com GraphQL JSON to GenericTicket
 - [ ] `get_prompt_template()` - returns empty string (no Auggie MCP support)
-- [ ] `fetch_ticket()` - raises NotImplementedError with deprecation warning
 - [ ] STATUS_KEYWORDS maps customizable status labels
 - [ ] TYPE_KEYWORDS infers type from labels
 - [ ] Description extraction with cascading fallback
@@ -1332,7 +1278,6 @@ From Linear ticket AMI-21:
 - [ ] `parse_input()` - extracts short link
 - [ ] `normalize()` - converts Trello REST JSON to GenericTicket
 - [ ] `get_prompt_template()` - returns empty string (no Auggie MCP support)
-- [ ] `fetch_ticket()` - raises NotImplementedError with deprecation warning
 - [ ] LIST_STATUS_MAPPING maps list names to statuses
 - [ ] TYPE_KEYWORDS infers type from labels
 - [ ] Created date extraction from ObjectId
@@ -1426,7 +1371,6 @@ print(f"Type: {ticket.type}")  # TicketType.BUG
 >
 > 1. **Reference Patterns from JiraProvider (PR #26):**
 >    - Defensive field handling with `safe_nested_get()` used throughout
->    - Deprecation warning pattern in `fetch_ticket()` method
 >    - Test structure with `reset_registry` fixture
 >    - Labels/tags normalization to list of strings
 >

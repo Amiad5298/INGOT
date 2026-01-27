@@ -498,28 +498,6 @@ class TestJiraProviderMethods:
         assert "{ticket_id}" in template
         assert "Jira" in template
 
-    def test_fetch_ticket_raises_not_implemented_with_warning(self, provider):
-        """fetch_ticket raises NotImplementedError and issues DeprecationWarning."""
-        import warnings
-
-        with warnings.catch_warnings(record=True) as caught_warnings:
-            warnings.simplefilter("always")
-            with pytest.raises(NotImplementedError, match="deprecated"):
-                provider.fetch_ticket("PROJ-123")
-
-        # Verify deprecation warning was issued
-        deprecation_warnings = [
-            w for w in caught_warnings if issubclass(w.category, DeprecationWarning)
-        ]
-        assert len(deprecation_warnings) == 1
-        assert "deprecated" in str(deprecation_warnings[0].message).lower()
-
-    def test_check_connection_returns_ready(self, provider):
-        """check_connection returns ready status."""
-        success, message = provider.check_connection()
-        assert success is True
-        assert "ready" in message.lower()
-
 
 class TestJiraProviderTimestampParsing:
     """Test timestamp parsing."""

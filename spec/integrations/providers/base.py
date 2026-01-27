@@ -760,39 +760,21 @@ class IssueTrackerProvider(ABC):
         """
         pass
 
-    @abstractmethod
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket details from the platform.
-
-        This is the primary method for retrieving ticket information.
-        Providers should populate as many GenericTicket fields as possible.
-
-        Args:
-            ticket_id: Normalized ticket ID from parse_input()
-
-        Returns:
-            Populated GenericTicket with all available fields
-
-        Raises:
-            AuthenticationError: If credentials are invalid
-            TicketNotFoundError: If ticket doesn't exist
-            RateLimitError: If API rate limit is exceeded
-            IssueTrackerError: For other API errors
-        """
-        pass
-
-    @abstractmethod
     def check_connection(self) -> tuple[bool, str]:
         """Verify the integration is properly configured.
 
-        Should test API connectivity and credential validity.
+        In the hybrid architecture, connection checking is delegated to
+        TicketService via TicketFetcher implementations. This default
+        implementation returns a ready status.
+
+        Providers may override this for platform-specific checks.
 
         Returns:
             Tuple of (success: bool, message: str)
             - success: True if connection works
             - message: Human-readable status message
         """
-        pass
+        return (True, f"{self.__class__.__name__} ready")
 
     @abstractmethod
     def normalize(self, raw_data: dict[str, Any], ticket_id: str | None = None) -> GenericTicket:

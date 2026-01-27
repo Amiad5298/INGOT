@@ -178,24 +178,6 @@ __all__ = [
 
 ---
 
-## Migration Considerations
-
-### Backward Compatibility
-- **No breaking changes** - This is a new module with no existing dependents
-- Existing `jira.py` and `providers/` remain unchanged
-- Future tickets (AMI-27, AMI-28) will integrate with this abstraction
-
-### Dependencies
-- **None** - This is a foundation component
-- Uses only stdlib (`abc`, `re`, `json`) and existing `Platform` enum
-
-### Downstream Dependents (Future)
-- **AMI-27:** `AuggieMediatedFetcher` extends `AgentMediatedFetcher`
-- **AMI-28:** `DirectAPIFetcher` extends `TicketFetcher`
-- **AMI-29:** `TicketService` uses `TicketFetcher` instances
-
----
-
 ## Acceptance Criteria Checklist
 
 - [ ] `TicketFetcher` ABC with `fetch_raw()` and `supports_platform()` methods

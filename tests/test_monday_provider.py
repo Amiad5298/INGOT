@@ -9,10 +9,7 @@ Tests cover:
 - Type keyword mapping
 - Description extraction with cascading fallback
 - get_prompt_template() returns empty string (no Auggie MCP)
-- fetch_ticket() deprecation warning
 """
-
-import warnings
 
 import pytest
 
@@ -312,22 +309,3 @@ class TestPromptTemplate:
     def test_get_prompt_template_returns_empty_string(self, provider):
         """get_prompt_template returns empty string - no Auggie MCP support."""
         assert provider.get_prompt_template() == ""
-
-
-class TestFetchTicketDeprecation:
-    """Test fetch_ticket() deprecation."""
-
-    def test_fetch_ticket_raises_deprecation_warning(self, provider):
-        """fetch_ticket raises DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            with pytest.raises(NotImplementedError):
-                provider.fetch_ticket("123456:789")
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "deprecated" in str(w[0].message).lower()
-
-    def test_fetch_ticket_raises_not_implemented_error(self, provider):
-        """fetch_ticket raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="deprecated"):
-            provider.fetch_ticket("123456:789")

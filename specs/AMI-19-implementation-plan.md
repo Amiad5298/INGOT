@@ -83,7 +83,7 @@ The provider is responsible for:
 > - `normalize()` - Called by `DirectAPIFetcher` and `AuggieMediatedFetcher` to convert raw JSON to `GenericTicket`
 > - `get_prompt_template()` - Called by `AuggieMediatedFetcher` to get platform-specific structured prompts
 >
-> These methods are intentionally not part of the ABC to maintain backward compatibility and allow the hybrid architecture to be adopted gradually without breaking existing providers. They may be added to the ABC in a future refactor once all providers have been migrated to the hybrid pattern.
+> These methods may be added to the ABC in a future refactor once the hybrid pattern stabilizes.
 
 ### Defensive Field Handling
 
@@ -575,7 +575,7 @@ class GitHubProvider(IssueTrackerProvider):
             return None
 ```
 
-### Step 5: Add Remaining Methods
+### Step 5: Add Prompt Template Method
 
 ```python
     def get_prompt_template(self) -> str:
@@ -585,48 +585,6 @@ class GitHubProvider(IssueTrackerProvider):
             Prompt template string with {ticket_id} placeholder
         """
         return STRUCTURED_PROMPT_TEMPLATE
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket details from GitHub.
-
-        NOTE: This method is required by IssueTrackerProvider ABC but
-        in the hybrid architecture, fetching is delegated to TicketService
-        which uses TicketFetcher implementations. This method is kept for
-        backward compatibility and direct provider usage.
-
-        Args:
-            ticket_id: Normalized ticket ID from parse_input()
-
-        Returns:
-            Populated GenericTicket
-
-        Raises:
-            NotImplementedError: Fetching should use TicketService
-        """
-        warnings.warn(
-            "GitHubProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError(
-            "GitHubProvider.fetch_ticket() is deprecated in hybrid architecture. "
-            "Use TicketService.get_ticket() with AuggieMediatedFetcher or "
-            "DirectAPIFetcher instead."
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        """Verify GitHub integration is properly configured.
-
-        NOTE: Connection checking is delegated to TicketFetcher implementations
-        in the hybrid architecture.
-
-        Returns:
-            Tuple of (success: bool, message: str)
-        """
-        # In hybrid architecture, connection check is done by TicketService
-        # This method returns True as the provider itself doesn't manage connections
-        return (True, "GitHubProvider ready - use TicketService for connection verification")
 ```
 
 ### Step 6: Update Package Exports
@@ -1122,21 +1080,7 @@ provider = ProviderRegistry.get_provider_for_input("https://github.com/owner/rep
 
 ---
 
-## Migration Considerations
-
-### Backward Compatibility
-
-- `fetch_ticket()` raises `NotImplementedError` with clear migration message
-- Existing code using direct GitHub API unchanged
-- Provider is opt-in via explicit import
-
-### Gradual Migration Path
-
-1. **Phase 1 (This Ticket):** Implement GitHubProvider with parse/normalize capabilities
-2. **Phase 2 (AMI-32):** Integrate with TicketService for unified access
-3. **Phase 3 (Future):** Deprecate legacy direct REST API usage
-
-### URL Pattern Disambiguation
+## URL Pattern Disambiguation
 
 GitHub URLs are unambiguous due to distinct patterns:
 

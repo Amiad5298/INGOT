@@ -717,11 +717,8 @@ class TestIssueTrackerProviderABC:
             def parse_input(self, input_str):
                 return None
 
-            def fetch_ticket(self, ticket_id):
+            def normalize(self, raw_data, ticket_id=None):
                 return None
-
-            def check_connection(self):
-                return True
 
         with pytest.raises(TypeError):
             IncompleteProv()
@@ -740,11 +737,8 @@ class TestIssueTrackerProviderABC:
             def parse_input(self, input_str):
                 return None
 
-            def fetch_ticket(self, ticket_id):
+            def normalize(self, raw_data, ticket_id=None):
                 return None
-
-            def check_connection(self):
-                return True
 
         with pytest.raises(TypeError):
             IncompleteProv()
@@ -767,17 +761,6 @@ class TestIssueTrackerProviderABC:
             def parse_input(self, input_str):
                 return input_str.upper()
 
-            def fetch_ticket(self, ticket_id):
-                return GenericTicket(
-                    id=ticket_id,
-                    platform=Platform.JIRA,
-                    url=f"https://jira.example.com/{ticket_id}",
-                    title="Test ticket",
-                )
-
-            def check_connection(self):
-                return (True, "Connected")
-
             def normalize(self, raw_data, ticket_id=None):
                 return GenericTicket(
                     id=raw_data.get("key", ticket_id or "TEST-1"),
@@ -791,6 +774,9 @@ class TestIssueTrackerProviderABC:
         assert provider.name == "Test Provider"
         assert provider.can_handle("TEST-123") is True
         assert provider.parse_input("test-1") == "TEST-1"
+        # check_connection now returns default from ABC
+        success, message = provider.check_connection()
+        assert success is True
 
 
 class TestIssueTrackerProviderGenerateBranchSummary:
@@ -921,14 +907,6 @@ class TestIssueTrackerProviderMethodSignatures:
         sig = inspect.signature(provider_class.parse_input)
         params = list(sig.parameters.keys())
         assert "input_str" in params
-
-    def test_fetch_ticket_takes_ticket_id(self, provider_class):
-        """fetch_ticket method takes a ticket_id parameter."""
-        import inspect
-
-        sig = inspect.signature(provider_class.fetch_ticket)
-        params = list(sig.parameters.keys())
-        assert "ticket_id" in params
 
 
 class TestProviderPlatformAttribute:

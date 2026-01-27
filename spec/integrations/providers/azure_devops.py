@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 import re
-import warnings
 from html.parser import HTMLParser
 from io import StringIO
 from types import MappingProxyType
@@ -331,19 +330,3 @@ class AzureDevOpsProvider(IssueTrackerProvider):
         DirectAPIFetcher is the only fetch path.
         """
         return ""
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket - deprecated in hybrid architecture."""
-        warnings.warn(
-            "AzureDevOpsProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError(
-            "AzureDevOpsProvider.fetch_ticket() is deprecated in hybrid architecture."
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        """Verify integration is properly configured."""
-        return (True, "AzureDevOpsProvider ready - use TicketService for connection verification")

@@ -12,7 +12,6 @@ Data fetching is delegated to TicketFetcher implementations.
 from __future__ import annotations
 
 import re
-import warnings
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any
@@ -476,54 +475,3 @@ class LinearProvider(IssueTrackerProvider):
             Prompt template string with {ticket_id} placeholder
         """
         return STRUCTURED_PROMPT_TEMPLATE
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket details from Linear.
-
-        NOTE: This method is required by IssueTrackerProvider ABC but
-        in the hybrid architecture, fetching is delegated to TicketService
-        which uses TicketFetcher implementations. This method is kept for
-        backward compatibility and direct provider usage.
-
-        Args:
-            ticket_id: Normalized ticket ID from parse_input()
-
-        Returns:
-            Populated GenericTicket
-
-        Raises:
-            NotImplementedError: Fetching should use TicketService
-        """
-        warnings.warn(
-            "LinearProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError(
-            "LinearProvider.fetch_ticket() is deprecated in hybrid architecture. "
-            "Use TicketService.get_ticket() with AuggieMediatedFetcher or "
-            "DirectAPIFetcher instead."
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        """Verify Linear integration is properly configured.
-
-        .. deprecated::
-            This method returns a hardcoded True and should not be relied upon
-            in the hybrid architecture. Use TicketService for actual connection
-            verification via TicketFetcher implementations.
-
-        Returns:
-            Tuple of (success: bool, message: str)
-        """
-        warnings.warn(
-            "LinearProvider.check_connection() is deprecated. "
-            "This method returns a hardcoded True and should not be relied upon. "
-            "Use TicketService for connection verification.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        # In hybrid architecture, connection check is done by TicketService
-        # This method returns True as the provider itself doesn't manage connections
-        return (True, "LinearProvider ready - use TicketService for connection verification")

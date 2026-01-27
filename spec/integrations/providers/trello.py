@@ -12,7 +12,6 @@ Data fetching is delegated to TicketFetcher implementations.
 from __future__ import annotations
 
 import re
-import warnings
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
@@ -244,17 +243,3 @@ class TrelloProvider(IssueTrackerProvider):
         DirectAPIFetcher is the only fetch path.
         """
         return ""
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket - deprecated in hybrid architecture."""
-        warnings.warn(
-            "TrelloProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError("TrelloProvider.fetch_ticket() is deprecated.")
-
-    def check_connection(self) -> tuple[bool, str]:
-        """Verify integration is properly configured."""
-        return (True, "TrelloProvider ready - use TicketService for connection verification")

@@ -544,49 +544,6 @@ class JiraProvider(IssueTrackerProvider):
             Prompt template string with {ticket_id} placeholder
         """
         return STRUCTURED_PROMPT_TEMPLATE
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket details from Jira.
-
-        NOTE: This method is required by IssueTrackerProvider ABC but
-        in the hybrid architecture, fetching is delegated to TicketService
-        which uses TicketFetcher implementations. This method is kept for
-        backward compatibility and direct provider usage.
-
-        Args:
-            ticket_id: Normalized ticket ID from parse_input()
-
-        Returns:
-            Populated GenericTicket
-
-        Raises:
-            NotImplementedError: Fetching should use TicketService
-        """
-        # Emit deprecation warning for developers who call this directly
-        warnings.warn(
-            "JiraProvider.fetch_ticket() is deprecated. Use TicketService.get_ticket() "
-            "with AuggieMediatedFetcher or DirectAPIFetcher instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError(
-            "JiraProvider.fetch_ticket() is deprecated in hybrid architecture. "
-            "Use TicketService.get_ticket() with AuggieMediatedFetcher or "
-            "DirectAPIFetcher instead."
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        """Verify Jira integration is properly configured.
-
-        NOTE: Connection checking is delegated to TicketFetcher implementations
-        in the hybrid architecture.
-
-        Returns:
-            Tuple of (success: bool, message: str)
-        """
-        # In hybrid architecture, connection check is done by TicketService
-        # This method returns True as the provider itself doesn't manage connections
-        return (True, "JiraProvider ready - use TicketService for connection verification")
 ```
 
 ### Step 4: Update Package Exports
@@ -864,22 +821,6 @@ class TestTypeMapping:
 
 ---
 
-## Migration Considerations
-
-### Backward Compatibility
-
-- `fetch_ticket()` raises `NotImplementedError` with clear migration message
-- Existing code using direct Jira integration unchanged
-- Provider is opt-in via explicit import
-
-### Gradual Migration Path
-
-1. **Phase 1 (This Ticket):** Implement JiraProvider with parse/normalize capabilities
-2. **Phase 2 (AMI-32):** Integrate with TicketService for unified access
-3. **Phase 3 (Future):** Deprecate legacy `specflow/integrations/jira.py`
-
----
-
 ## Acceptance Criteria Checklist
 
 From Linear ticket AMI-18:
@@ -892,8 +833,6 @@ From Linear ticket AMI-18:
   - [x] `name` property
   - [x] `can_handle(input_str)` - recognizes Jira URLs and IDs
   - [x] `parse_input(input_str)` - extracts normalized ticket ID
-  - [x] `fetch_ticket(ticket_id)` - placeholder with deprecation warning
-  - [x] `check_connection()` - returns ready status
 - [x] Implements additional methods for hybrid architecture:
   - [x] `normalize(raw_data)` - converts Jira JSON to GenericTicket
   - [x] `get_prompt_template()` - returns structured prompt for agent
@@ -909,7 +848,6 @@ From Linear ticket AMI-18:
 - [x] **Alphanumeric Project Keys** - Supports project keys like `A1-123`, `PROJ99-456` (not just `[A-Z]+`)
 - [x] **Smart URL Construction** - Parses `self` API URL to construct browse URLs for self-hosted instances
 - [x] **Conservative Numeric ID Handling** - Only claims numeric IDs when `default_project` is explicitly configured via constructor or env var (`_has_explicit_default_project` flag)
-- [x] **Deprecation Warning Pattern** - `fetch_ticket()` emits `DeprecationWarning` in addition to raising `NotImplementedError`
 - [x] **Timestamp Format Normalization** - Handles `+0000`, `+00:00`, and `Z` timezone formats
 - [x] **Story Points Type Coercion** - Handles string values like `"5"` → `5.0`
 - [x] **Labels Normalization** - Strips whitespace, converts to strings, filters empty values

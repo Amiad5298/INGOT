@@ -82,7 +82,7 @@ The provider is responsible for:
 > - `normalize()` - Called by `DirectAPIFetcher` and `AuggieMediatedFetcher` to convert raw JSON to `GenericTicket`
 > - `get_prompt_template()` - Called by `AuggieMediatedFetcher` to get platform-specific structured prompts
 >
-> These methods are intentionally not part of the ABC to maintain backward compatibility and allow the hybrid architecture to be adopted gradually without breaking existing providers. They may be added to the ABC in a future refactor once all providers have been migrated to the hybrid pattern.
+> These methods may be added to the ABC in a future refactor once the hybrid pattern stabilizes.
 
 ### Defensive Field Handling
 
@@ -549,48 +549,6 @@ class LinearProvider(IssueTrackerProvider):
             Prompt template string with {ticket_id} placeholder
         """
         return STRUCTURED_PROMPT_TEMPLATE
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket details from Linear.
-
-        NOTE: This method is required by IssueTrackerProvider ABC but
-        in the hybrid architecture, fetching is delegated to TicketService
-        which uses TicketFetcher implementations. This method is kept for
-        backward compatibility and direct provider usage.
-
-        Args:
-            ticket_id: Normalized ticket ID from parse_input()
-
-        Returns:
-            Populated GenericTicket
-
-        Raises:
-            NotImplementedError: Fetching should use TicketService
-        """
-        warnings.warn(
-            "LinearProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError(
-            "LinearProvider.fetch_ticket() is deprecated in hybrid architecture. "
-            "Use TicketService.get_ticket() with AuggieMediatedFetcher or "
-            "DirectAPIFetcher instead."
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        """Verify Linear integration is properly configured.
-
-        NOTE: Connection checking is delegated to TicketFetcher implementations
-        in the hybrid architecture.
-
-        Returns:
-            Tuple of (success: bool, message: str)
-        """
-        # In hybrid architecture, connection check is done by TicketService
-        # This method returns True as the provider itself doesn't manage connections
-        return (True, "LinearProvider ready - use TicketService for connection verification")
 ```
 
 ### Step 6: Update Package Exports
@@ -981,29 +939,6 @@ class TestPromptTemplate:
         assert "identifier" in template
         assert "state" in template
         assert "labels" in template
-
-
-class TestFetchTicketDeprecation:
-    """Test fetch_ticket() deprecation warning."""
-
-    def test_fetch_ticket_raises_deprecation_warning(self):
-        """fetch_ticket() should emit DeprecationWarning before raising."""
-        provider = LinearProvider()
-
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            with pytest.raises(NotImplementedError):
-                provider.fetch_ticket("ENG-123")
-
-    def test_fetch_ticket_raises_not_implemented(self):
-        """fetch_ticket() should raise NotImplementedError."""
-        import warnings
-        provider = LinearProvider()
-
-        # Suppress the warning to test the exception
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            with pytest.raises(NotImplementedError, match="hybrid architecture"):
-                provider.fetch_ticket("ENG-123")
 ```
 
 ---
@@ -1107,21 +1042,7 @@ provider = ProviderRegistry.get_provider_for_input("https://linear.app/team/issu
 
 ---
 
-## Migration Considerations
-
-### Backward Compatibility
-
-- `fetch_ticket()` raises `NotImplementedError` with clear migration message
-- Existing code using direct Linear integration unchanged
-- Provider is opt-in via explicit import
-
-### Gradual Migration Path
-
-1. **Phase 1 (This Ticket):** Implement LinearProvider with parse/normalize capabilities
-2. **Phase 2 (AMI-32):** Integrate with TicketService for unified access
-3. **Phase 3 (Future):** Deprecate legacy direct GraphQL client usage
-
-### ID Disambiguation
+## ID Disambiguation
 
 Linear IDs (`TEAM-123`) are ambiguous with Jira IDs (`PROJECT-123`):
 
@@ -1145,8 +1066,6 @@ From Linear ticket AMI-20:
   - [ ] `name` property → returns "Linear"
   - [ ] `can_handle(input_str)` - recognizes Linear URLs and TEAM-123 format
   - [ ] `parse_input(input_str)` - extracts normalized ticket ID (handles URL slugs)
-  - [ ] `fetch_ticket(ticket_id)` - raises NotImplementedError (hybrid architecture)
-  - [ ] `check_connection()` - returns ready status
 - [ ] Implements additional methods for hybrid architecture:
   - [ ] `normalize(raw_data)` - converts Linear GraphQL JSON to GenericTicket
   - [ ] `get_prompt_template()` - returns structured prompt for agent

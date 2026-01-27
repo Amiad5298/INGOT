@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import os
 import re
-import warnings
 from datetime import datetime
 from typing import Any
 
@@ -545,48 +544,3 @@ class GitHubProvider(IssueTrackerProvider):
             Prompt template string with {ticket_id} placeholder
         """
         return STRUCTURED_PROMPT_TEMPLATE
-
-    def fetch_ticket(self, ticket_id: str) -> GenericTicket:
-        """Fetch ticket details from GitHub.
-
-        NOTE: This method is required by IssueTrackerProvider ABC but
-        in the hybrid architecture, fetching is delegated to TicketService
-        which uses TicketFetcher implementations. This method is kept for
-        backward compatibility and direct provider usage.
-
-        Args:
-            ticket_id: Normalized ticket ID from parse_input()
-
-        Returns:
-            Populated GenericTicket
-
-        Raises:
-            NotImplementedError: Fetching should use TicketService
-        """
-        warnings.warn(
-            "GitHubProvider.fetch_ticket() is deprecated. "
-            "Use TicketService.get_ticket() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise NotImplementedError(
-            "GitHubProvider.fetch_ticket() is deprecated in hybrid architecture. "
-            "Use TicketService.get_ticket() with AuggieMediatedFetcher or "
-            "DirectAPIFetcher instead."
-        )
-
-    def check_connection(self) -> tuple[bool, str]:
-        """Verify GitHub integration is properly configured.
-
-        NOTE: Connection checking is delegated to TicketFetcher implementations
-        in the hybrid architecture.
-
-        Returns:
-            Tuple of (success: bool, message: str)
-        """
-        # In hybrid architecture, connection check is done by TicketService
-        # This method returns True as the provider itself doesn't manage connections
-        return (
-            True,
-            "GitHubProvider ready - use TicketService for connection verification",
-        )

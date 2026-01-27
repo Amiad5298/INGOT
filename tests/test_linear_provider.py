@@ -10,10 +10,7 @@ Tests cover:
 - Status mapping (state.name priority over state.type for "In Review")
 - Type mapping (default to FEATURE, not UNKNOWN)
 - get_prompt_template() and other methods
-- fetch_ticket() and check_connection() deprecation warnings
 """
-
-import warnings
 
 import pytest
 
@@ -595,40 +592,3 @@ class TestPromptTemplate:
         assert "identifier" in template
         assert "state" in template
         assert "labels" in template
-
-
-class TestFetchTicketDeprecation:
-    """Test fetch_ticket() deprecation warning."""
-
-    def test_fetch_ticket_raises_deprecation_warning(self, provider):
-        """fetch_ticket() should emit DeprecationWarning before raising."""
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            with pytest.raises(NotImplementedError):
-                provider.fetch_ticket("ENG-123")
-
-    def test_fetch_ticket_raises_not_implemented(self, provider):
-        """fetch_ticket() should raise NotImplementedError."""
-        # Suppress the warning to test the exception
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            with pytest.raises(NotImplementedError, match="hybrid architecture"):
-                provider.fetch_ticket("ENG-123")
-
-
-class TestCheckConnectionDeprecation:
-    """Test check_connection() deprecation warning."""
-
-    def test_check_connection_raises_deprecation_warning(self, provider):
-        """check_connection() should emit DeprecationWarning."""
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            success, message = provider.check_connection()
-            assert success is True
-
-    def test_check_connection_returns_ready(self, provider):
-        """check_connection returns ready status (with deprecation warning)."""
-        # Suppress the warning to test the return value
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            success, message = provider.check_connection()
-            assert success is True
-            assert "ready" in message.lower() or "LinearProvider" in message

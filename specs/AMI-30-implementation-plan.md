@@ -652,15 +652,7 @@ asyncio.run(test())
 
 ---
 
-## Migration Considerations
-
-### Backward Compatibility
-
-- **No breaking changes** - This is a new module with no existing dependents
-- Existing `spec/integrations/jira.py` remains unchanged (legacy path)
-- Future tickets (AMI-32: TicketService) will integrate with this fetcher
-
-### Dependencies
+## Dependencies
 
 | Dependency | Status | Notes |
 |------------|--------|-------|
@@ -671,12 +663,7 @@ asyncio.run(test())
 | `AgentConfig.supports_platform()` | ✅ Implemented (AMI-33) | `spec/config/fetch_config.py` |
 | `Platform` enum | ✅ Implemented | `spec/integrations/providers/base.py` |
 
-### Downstream Dependents (Future)
-
-- **AMI-32:** `TicketService` uses `AuggieMediatedFetcher` as primary fetcher
-- **CLI Integration:** `specflow/cli.py` will use TicketService for ticket fetching
-
-### Relationship with ProviderRegistry
+## Relationship with ProviderRegistry
 
 Per the architecture note in the ticket comments:
 
