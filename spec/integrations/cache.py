@@ -499,8 +499,9 @@ class FileBasedTicketCache(TicketCache):
         This prevents partial/corrupted writes if the process crashes.
         os.replace() is atomic on POSIX systems.
 
-        P0 Fix: Uses try...except Exception to ensure temp file cleanup for ANY
+        P0 Fix: Uses try...finally to ensure temp file cleanup for ANY
         failure (TypeError from json.dump, OSError, etc.), preventing resource leaks.
+        Also ensures fd is closed even if os.fdopen fails to take ownership.
 
         Raises:
             TypeError: If data contains non-JSON-serializable objects
@@ -513,16 +514,27 @@ class FileBasedTicketCache(TicketCache):
             prefix=".cache_",
             dir=self.cache_dir,
         )
+        fd_closed = False
+        success = False
         try:
             with os.fdopen(fd, "w") as f:
+                fd_closed = True  # os.fdopen takes ownership of fd
                 json.dump(data, f, indent=2)
             os.replace(tmp_path, path)
-        except Exception:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+            success = True
+        finally:
+            # Close fd if os.fdopen never took ownership (e.g., os.fdopen failed)
+            if not fd_closed:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            # Always clean up temp file on failure
+            if not success:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def set(
         self,
