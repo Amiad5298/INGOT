@@ -55,6 +55,10 @@ from spec.integrations.jira import (
     fetch_ticket_info,
     parse_jira_ticket,
 )
+from spec.integrations.ticket_service import (
+    TicketService,
+    create_ticket_service,
+)
 
 __all__ = [
     # Authentication
@@ -101,4 +105,7 @@ __all__ = [
     "SPECFLOW_AGENT_TASKLIST",
     "SPECFLOW_AGENT_IMPLEMENTER",
     "SPECFLOW_AGENT_REVIEWER",
+    # TicketService
+    "TicketService",
+    "create_ticket_service",
 ]
