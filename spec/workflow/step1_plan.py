@@ -75,12 +75,12 @@ def _generate_plan_with_tui(
     from spec.ui.tui import TaskRunnerUI
 
     # Create log directory and log path
-    log_dir = _create_plan_log_dir(state.ticket.ticket_id)
+    log_dir = _create_plan_log_dir(state.ticket.id)
     log_path = log_dir / f"{format_run_directory()}.log"
 
     ui = TaskRunnerUI(
         status_message="Generating implementation plan...",
-        ticket_id=state.ticket.ticket_id,
+        ticket_id=state.ticket.id,
         single_operation_mode=True,
     )
     ui.set_log_path(log_path)
@@ -119,9 +119,9 @@ def _build_minimal_prompt(state: WorkflowState, plan_path: Path) -> str:
     Returns:
         Minimal prompt string with ticket context.
     """
-    prompt = f"""Create implementation plan for: {state.ticket.ticket_id}
+    prompt = f"""Create implementation plan for: {state.ticket.id}
 
-Ticket: {state.ticket.title or state.ticket.summary or 'Not available'}
+Ticket: {state.ticket.title or state.ticket.branch_summary or 'Not available'}
 Description: {state.ticket.description or 'Not available'}"""
 
     # Add user context if provided
@@ -315,7 +315,7 @@ def _save_plan_from_output(plan_path: Path, state: WorkflowState) -> None:
         state: Current workflow state
     """
     # Create a basic plan template if Auggie didn't create the file
-    template = f"""# Implementation Plan: {state.ticket.ticket_id}
+    template = f"""# Implementation Plan: {state.ticket.id}
 
 ## Summary
 {state.ticket.title or 'Implementation task'}

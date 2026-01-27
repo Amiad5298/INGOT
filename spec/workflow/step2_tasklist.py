@@ -111,14 +111,13 @@ def step_2_create_tasklist(state: WorkflowState, auggie: AuggieClient) -> bool:
 # The regex uses a greedy match for the name field up to the LAST occurrence
 # of " DESCRIPTION:" to handle task names containing the word "DESCRIPTION".
 ADD_TASKS_TOOL_PATTERN = re.compile(
-    r'^UUID:(?P<uuid>[A-Za-z0-9]+)\s+'
-    r'NAME:(?P<name>.+)\s+DESCRIPTION:(?P<desc>.*)$'
+    r"^UUID:(?P<uuid>[A-Za-z0-9]+)\s+" r"NAME:(?P<name>.+)\s+DESCRIPTION:(?P<desc>.*)$"
 )
 
 # Strict category prefixes - UPPERCASE ONLY to avoid false positives
 # e.g., "FUNDAMENTAL: Setup DB" matches, but "Fundamental analysis" does NOT
 CATEGORY_PREFIX_PATTERN = re.compile(
-    r'^(?P<category>FUNDAMENTAL|INDEPENDENT):\s*(?P<task_name>.+)$'
+    r"^(?P<category>FUNDAMENTAL|INDEPENDENT):\s*(?P<task_name>.+)$"
 )
 
 
@@ -145,14 +144,14 @@ def _parse_add_tasks_line(raw_task_text: str) -> tuple[str | None, str]:
         # Not add_tasks format - return as-is, no category
         return (None, raw_task_text.strip())
 
-    name_field = match.group('name').strip()
+    name_field = match.group("name").strip()
 
     # Check for UPPERCASE category prefix (strict matching)
     category_match = CATEGORY_PREFIX_PATTERN.match(name_field)
 
     if category_match:
-        category = category_match.group('category').lower()
-        task_name = category_match.group('task_name').strip()
+        category = category_match.group("category").lower()
+        task_name = category_match.group("task_name").strip()
         return (f"<!-- category: {category} -->", task_name)
 
     # No category prefix - return name as-is
@@ -176,7 +175,7 @@ def _extract_tasklist_from_output(output: str, ticket_id: str) -> str | None:
 
     Args:
         output: AI output text that may contain task list
-        ticket_id: Ticket ID for the header
+        ticket_id: Ticket ID for the header (platform-agnostic)
 
     Returns:
         Formatted task list content, or None if no tasks found
@@ -295,7 +294,7 @@ def _generate_tasklist(
     plan_content = plan_path.read_text()
 
     # Minimal prompt - subagent has detailed instructions
-    prompt = f"""Generate task list for: {state.ticket.ticket_id}
+    prompt = f"""Generate task list for: {state.ticket.id}
 
 Implementation Plan:
 {plan_content}
@@ -317,7 +316,7 @@ Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
         return False
 
     # Try to extract and persist the task list from AI output
-    tasklist_content = _extract_tasklist_from_output(output, state.ticket.ticket_id)
+    tasklist_content = _extract_tasklist_from_output(output, state.ticket.id)
 
     if tasklist_content:
         # Ensure parent directory exists
@@ -359,8 +358,16 @@ Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
 # Test-related keywords for pre-check optimization (case-insensitive)
 # Language-agnostic list covering common test terminology
 _TEST_KEYWORDS = [
-    "test", "spec", "unit", "integration", "e2e",
-    "assert", "verify", "check", "mock", "stub",
+    "test",
+    "spec",
+    "unit",
+    "integration",
+    "e2e",
+    "assert",
+    "verify",
+    "check",
+    "mock",
+    "stub",
 ]
 
 
@@ -450,7 +457,7 @@ Output ONLY the refined task list markdown."""
         return False
 
     # Extract the refined task list from output
-    refined_content = _extract_tasklist_from_output(output, state.ticket.ticket_id)
+    refined_content = _extract_tasklist_from_output(output, state.ticket.id)
 
     if refined_content:
         # Safety check: warn if content is significantly shorter
@@ -501,7 +508,7 @@ def _create_default_tasklist(tasklist_path: Path, state: WorkflowState) -> None:
         tasklist_path: Path to save task list
         state: Current workflow state
     """
-    template = f"""# Task List: {state.ticket.ticket_id}
+    template = f"""# Task List: {state.ticket.id}
 
 ## Implementation Tasks
 
@@ -565,4 +572,3 @@ __all__ = [
     "_generate_tasklist",
     "_extract_tasklist_from_output",
 ]
-

@@ -3,7 +3,7 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from spec.integrations.jira import JiraTicket
+from spec.integrations.providers import GenericTicket, Platform
 from spec.workflow.state import WorkflowState
 from spec.workflow.task_memory import (
     TaskMemory,
@@ -258,16 +258,21 @@ class TestCaptureTaskMemory:
     @patch("spec.workflow.task_memory._get_modified_files")
     @patch("spec.workflow.task_memory._identify_patterns_in_changes")
     @patch("spec.workflow.task_memory._extract_test_commands")
-    def test_captures_task_memory(
-        self, mock_extract, mock_identify, mock_get_files
-    ):
+    def test_captures_task_memory(self, mock_extract, mock_identify, mock_get_files):
         """Captures task memory with all components."""
         mock_get_files.return_value = ["file1.py", "file2.py"]
         mock_identify.return_value = ["Python implementation"]
         mock_extract.return_value = ["pytest tests/test_file.py"]
 
         task = Task(name="Implement user module")
-        ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         memory = capture_task_memory(task, state)
@@ -280,16 +285,21 @@ class TestCaptureTaskMemory:
     @patch("spec.workflow.task_memory._get_modified_files")
     @patch("spec.workflow.task_memory._identify_patterns_in_changes")
     @patch("spec.workflow.task_memory._extract_test_commands")
-    def test_adds_memory_to_state(
-        self, mock_extract, mock_identify, mock_get_files
-    ):
+    def test_adds_memory_to_state(self, mock_extract, mock_identify, mock_get_files):
         """Adds captured memory to workflow state."""
         mock_get_files.return_value = ["file1.py"]
         mock_identify.return_value = []
         mock_extract.return_value = []
 
         task = Task(name="Test task")
-        ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         capture_task_memory(task, state)
@@ -356,7 +366,14 @@ class TestBuildPatternContext:
     def test_returns_empty_for_no_memories(self):
         """Returns empty string when no memories exist."""
         task = Task(name="Test task")
-        ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         context = build_pattern_context(task, state)
@@ -366,7 +383,14 @@ class TestBuildPatternContext:
     def test_returns_general_patterns_when_no_related(self):
         """Returns general patterns when no related memories found."""
         task = Task(name="Implement new feature")
-        ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
         state.task_memories = [
             TaskMemory(
@@ -384,7 +408,14 @@ class TestBuildPatternContext:
     def test_returns_related_patterns(self):
         """Returns patterns from related memories."""
         task = Task(name="Write unit tests for user authentication")
-        ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
         state.task_memories = [
             TaskMemory(
@@ -410,7 +441,14 @@ class TestBuildPatternContext:
     def test_formats_context_as_markdown(self):
         """Formats context as markdown."""
         task = Task(name="Write tests for user module")
-        ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
         state.task_memories = [
             TaskMemory(
@@ -431,4 +469,3 @@ class TestBuildPatternContext:
         assert "**Key Decisions:**" in context
         assert "- Use dataclass for User model" in context
         assert "Follow these established patterns for consistency" in context
-

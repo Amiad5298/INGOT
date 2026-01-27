@@ -164,3 +164,37 @@ def rate_limit_config():
         max_delay_seconds=30.0,
         jitter_factor=0.25,
     )
+
+
+@pytest.fixture
+def generic_ticket():
+    """Create a standard test ticket using GenericTicket.
+
+    This is the platform-agnostic ticket fixture that should be used
+    for all workflow tests after the JiraTicket to GenericTicket migration.
+    """
+    from spec.integrations.providers import GenericTicket, Platform
+
+    return GenericTicket(
+        id="TEST-123",
+        platform=Platform.JIRA,
+        url="https://jira.example.com/TEST-123",
+        title="Test Feature",
+        description="Test description for the feature implementation.",
+        branch_summary="test-feature",
+    )
+
+
+@pytest.fixture
+def generic_ticket_no_summary():
+    """Create a test ticket without branch summary."""
+    from spec.integrations.providers import GenericTicket, Platform
+
+    return GenericTicket(
+        id="TEST-456",
+        platform=Platform.JIRA,
+        url="https://jira.example.com/TEST-456",
+        title="Test Feature No Summary",
+        description="Test description.",
+        branch_summary="",
+    )

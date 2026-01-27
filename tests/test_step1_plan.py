@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spec.integrations.jira import JiraTicket
 from spec.workflow.state import WorkflowState
 from spec.workflow.step1_plan import (
     _build_minimal_prompt,
@@ -20,20 +19,9 @@ from spec.workflow.step1_plan import (
 
 
 @pytest.fixture
-def ticket():
-    """Create a test ticket."""
-    return JiraTicket(
-        ticket_id="TEST-123",
-        ticket_url="https://jira.example.com/TEST-123",
-        title="Test Feature",
-        description="Test description for the feature implementation.",
-    )
-
-
-@pytest.fixture
-def workflow_state(ticket, tmp_path):
-    """Create a workflow state for testing."""
-    state = WorkflowState(ticket=ticket)
+def workflow_state(generic_ticket, tmp_path):
+    """Create a workflow state for testing using shared generic_ticket fixture."""
+    state = WorkflowState(ticket=generic_ticket)
     state.planning_model = "test-planning-model"
 
     # Create specs directory
@@ -296,21 +284,22 @@ class TestBuildMinimalPrompt:
 
         assert "Test description" in result
 
-    def test_prompt_handles_empty_title(self, ticket, tmp_path):
-        """Prompt handles empty title gracefully."""
-        ticket.title = None
-        state = WorkflowState(ticket=ticket)
+    def test_prompt_handles_empty_title(self, generic_ticket, tmp_path):
+        """Prompt handles empty title gracefully by falling back to branch_summary."""
+        generic_ticket.title = None
+        state = WorkflowState(ticket=generic_ticket)
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
         result = _build_minimal_prompt(state, plan_path)
 
-        assert "Not available" in result
+        # Should fall back to branch_summary when title is None
+        assert generic_ticket.branch_summary in result
         assert "TEST-123" in result
 
-    def test_prompt_handles_empty_description(self, ticket, tmp_path):
+    def test_prompt_handles_empty_description(self, generic_ticket, tmp_path):
         """Prompt handles empty description gracefully."""
-        ticket.description = None
-        state = WorkflowState(ticket=ticket)
+        generic_ticket.description = None
+        state = WorkflowState(ticket=generic_ticket)
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
         result = _build_minimal_prompt(state, plan_path)

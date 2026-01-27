@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from spec.integrations.git import DiffResult
-from spec.integrations.jira import JiraTicket
 from spec.workflow.state import WorkflowState
 from spec.workflow.step4_update_docs import (
     MAX_DIFF_SIZE,
@@ -19,20 +18,9 @@ from spec.workflow.step4_update_docs import (
 
 
 @pytest.fixture
-def ticket():
-    """Create a test ticket."""
-    return JiraTicket(
-        ticket_id="TEST-123",
-        ticket_url="https://jira.example.com/TEST-123",
-        title="Test Feature",
-        description="Test description",
-    )
-
-
-@pytest.fixture
-def workflow_state(ticket):
-    """Create a workflow state for testing."""
-    state = WorkflowState(ticket=ticket)
+def workflow_state(generic_ticket):
+    """Create a workflow state for testing using shared generic_ticket fixture."""
+    state = WorkflowState(ticket=generic_ticket)
     state.base_commit = "abc123"
     return state
 
@@ -164,11 +152,11 @@ class TestStep4NoChanges:
     @patch("spec.workflow.step4_update_docs.print_info")
     @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_skips_when_no_changes_and_no_base_commit(
-        self, mock_has_any_changes, mock_print_info, mock_print_header, ticket
+        self, mock_has_any_changes, mock_print_info, mock_print_header, generic_ticket
     ):
         """Skips documentation update when no changes and no base commit."""
         mock_has_any_changes.return_value = False
-        state = WorkflowState(ticket=ticket)
+        state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""  # No base commit
 
         result = step_4_update_docs(state)
@@ -580,7 +568,7 @@ class TestStep4UntrackedOnly:
         mock_print_header,
         mock_snapshot_class,
         mock_ui_class,
-        ticket,
+        generic_ticket,
         mock_auggie_client,
     ):
         """Step 4 runs when only untracked files exist (not staged/unstaged)."""
@@ -603,7 +591,7 @@ class TestStep4UntrackedOnly:
         # Configure mock client to use run_with_callback (TUI mode)
         mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
 
-        state = WorkflowState(ticket=ticket)
+        state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""  # No base commit
 
         result = step_4_update_docs(state, auggie_client=mock_auggie_client)
@@ -616,12 +604,12 @@ class TestStep4UntrackedOnly:
     @patch("spec.workflow.step4_update_docs.print_info")
     @patch("spec.workflow.step4_update_docs.has_any_changes")
     def test_skips_when_no_changes_at_all(
-        self, mock_has_changes, mock_print_info, mock_print_header, ticket
+        self, mock_has_changes, mock_print_info, mock_print_header, generic_ticket
     ):
         """Step 4 skips when there are truly no changes (including untracked)."""
         mock_has_changes.return_value = False
 
-        state = WorkflowState(ticket=ticket)
+        state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""
 
         result = step_4_update_docs(state)
@@ -655,7 +643,7 @@ class TestStep4MissingBaseCommit:
         mock_print_header,
         mock_snapshot_class,
         mock_ui_class,
-        ticket,
+        generic_ticket,
         mock_auggie_client,
     ):
         """Uses staged+unstaged+untracked when base_commit is empty."""
@@ -678,7 +666,7 @@ class TestStep4MissingBaseCommit:
         # Configure mock client to use run_with_callback (TUI mode)
         mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
 
-        state = WorkflowState(ticket=ticket)
+        state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""
 
         result = step_4_update_docs(state, auggie_client=mock_auggie_client)

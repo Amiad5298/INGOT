@@ -8,7 +8,7 @@ to identify contradictions early in the workflow.
 import re
 
 from spec.integrations.auggie import AuggieClient
-from spec.integrations.jira import JiraTicket
+from spec.integrations.providers import GenericTicket
 from spec.utils.logging import log_message
 from spec.workflow.state import WorkflowState
 
@@ -44,7 +44,7 @@ def _noop_callback(_: str) -> None:
 
 
 def detect_context_conflict(
-    ticket: JiraTicket,
+    ticket: GenericTicket,
     user_context: str,
     auggie: AuggieClient,
     state: WorkflowState,
@@ -60,7 +60,7 @@ def detect_context_conflict(
     - Returns conflict info for advisory warnings (non-blocking)
 
     Args:
-        ticket: JiraTicket with title and description
+        ticket: GenericTicket with title and description (platform-agnostic)
         user_context: User-provided additional context
         auggie: Auggie CLI client
         state: Workflow state for accessing subagent configuration

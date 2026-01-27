@@ -17,7 +17,7 @@ from spec.integrations.auggie import (
     SPECFLOW_AGENT_TASKLIST,
     SPECFLOW_AGENT_TASKLIST_REFINER,
 )
-from spec.integrations.jira import JiraTicket
+from spec.integrations.providers import GenericTicket
 from spec.workflow.git_utils import DirtyTreePolicy
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ class WorkflowState:
     the AI-assisted development workflow.
 
     Attributes:
-        ticket: Jira ticket information
+        ticket: Ticket information (platform-agnostic)
         branch_name: Git branch name for this workflow
         base_commit: Commit hash before workflow started
         planning_model: AI model for planning phases
@@ -84,8 +84,8 @@ class WorkflowState:
             (planner, tasklist, implementer, reviewer, doc_updater)
     """
 
-    # Ticket information
-    ticket: JiraTicket
+    # Ticket information (platform-agnostic)
+    ticket: GenericTicket
 
     # Git state
     branch_name: str = ""
@@ -168,7 +168,7 @@ class WorkflowState:
         Returns:
             Plan filename based on ticket ID
         """
-        return f"{self.ticket.ticket_id}-plan.md"
+        return f"{self.ticket.id}-plan.md"
 
     @property
     def tasklist_filename(self) -> str:
@@ -177,7 +177,7 @@ class WorkflowState:
         Returns:
             Task list filename based on ticket ID
         """
-        return f"{self.ticket.ticket_id}-tasklist.md"
+        return f"{self.ticket.id}-tasklist.md"
 
     def get_plan_path(self) -> Path:
         """Get full path to plan file.

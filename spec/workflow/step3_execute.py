@@ -213,8 +213,8 @@ def step_3_execute(
 
     # Setup
     plan_path = state.get_plan_path()
-    log_dir = _create_run_log_dir(state.ticket.ticket_id)
-    _cleanup_old_runs(state.ticket.ticket_id)
+    log_dir = _create_run_log_dir(state.ticket.id)
+    _cleanup_old_runs(state.ticket.id)
 
     failed_tasks: list[str] = []
 
@@ -357,7 +357,7 @@ def _execute_with_tui(
     user_quit: bool = False
 
     # Initialize TUI
-    tui = TaskRunnerUI(ticket_id=state.ticket.ticket_id, verbose_mode=verbose)
+    tui = TaskRunnerUI(ticket_id=state.ticket.id, verbose_mode=verbose)
     tui.initialize_records([t.name for t in pending])
     tui.set_log_dir(log_dir)
 
@@ -667,7 +667,7 @@ def _execute_parallel_with_tui(
     max_workers = min(state.max_parallel_tasks, len(tasks))
 
     # Initialize TUI with all parallel tasks
-    tui = TaskRunnerUI(ticket_id=state.ticket.ticket_id, verbose_mode=verbose)
+    tui = TaskRunnerUI(ticket_id=state.ticket.id, verbose_mode=verbose)
     tui.initialize_records([t.name for t in tasks])
     tui.set_log_dir(log_dir)
     tui.set_parallel_mode(True)  # Enable parallel mode display
@@ -953,7 +953,7 @@ def _show_summary(state: WorkflowState, failed_tasks: list[str] | None = None) -
     console.print()
     print_header("Execution Summary")
 
-    console.print(f"[bold]Ticket:[/bold] {state.ticket.ticket_id}")
+    console.print(f"[bold]Ticket:[/bold] {state.ticket.id}")
     console.print(f"[bold]Branch:[/bold] {state.branch_name or get_current_branch()}")
     console.print(f"[bold]Tasks completed:[/bold] {len(state.completed_tasks)}")
     console.print(f"[bold]Checkpoints:[/bold] {len(state.checkpoint_commits)}")
@@ -1008,14 +1008,14 @@ def _run_post_implementation_tests(state: WorkflowState) -> None:
     print_step("Running Tests for Changed Code via AI")
 
     # Create log directory for test execution
-    log_dir = _get_log_base_dir() / state.ticket.ticket_id / LOG_DIR_TEST_EXECUTION
+    log_dir = _get_log_base_dir() / state.ticket.id / LOG_DIR_TEST_EXECUTION
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{format_run_directory()}.log"
 
     # Create UI with collapsible panel and verbose toggle (single-operation mode)
     ui = TaskRunnerUI(
         status_message="Running tests for changed code...",
-        ticket_id=state.ticket.ticket_id,
+        ticket_id=state.ticket.id,
         single_operation_mode=True,
     )
     ui.set_log_path(log_path)
@@ -1063,7 +1063,7 @@ def _offer_commit_instructions(state: WorkflowState) -> None:
 
     # Generate suggested commit message
     task_count = len(state.completed_tasks)
-    commit_msg = f"feat({state.ticket.ticket_id}): implement {task_count} tasks"
+    commit_msg = f"feat({state.ticket.id}): implement {task_count} tasks"
 
     console.print()
     print_header("Suggested Commit Steps")

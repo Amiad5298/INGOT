@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spec.integrations.jira import JiraTicket
+from spec.integrations.providers import GenericTicket, Platform
 from spec.workflow.state import WorkflowState
 from spec.workflow.step3_execute import (
     _build_task_prompt,
@@ -27,11 +27,13 @@ from spec.workflow.tasks import Task, TaskCategory, TaskStatus
 @pytest.fixture
 def ticket():
     """Create a test ticket."""
-    return JiraTicket(
-        ticket_id="TEST-123",
-        ticket_url="https://jira.example.com/TEST-123",
+    return GenericTicket(
+        id="TEST-123",
+        platform=Platform.JIRA,
+        url="https://jira.example.com/TEST-123",
         title="Test Feature",
         description="Test description",
+        branch_summary="test-feature",
     )
 
 

@@ -382,15 +382,16 @@ class TestStep1TUIIntegration:
     @pytest.fixture
     def workflow_state(self, tmp_path: Path):
         """Create a workflow state for testing."""
-        from spec.integrations.jira import JiraTicket
+        from spec.integrations.providers import GenericTicket, Platform
         from spec.workflow.state import WorkflowState
 
-        ticket = JiraTicket(
-            ticket_id="TEST-456",
-            ticket_url="https://jira.example.com/TEST-456",
-            summary="Test Feature",
+        ticket = GenericTicket(
+            id="TEST-456",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-456",
             title="Implement test feature",
             description="Test description for the feature",
+            branch_summary="Test Feature",
         )
         state = WorkflowState(ticket=ticket)
 

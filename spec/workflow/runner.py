@@ -17,7 +17,7 @@ from spec.integrations.git import (
     handle_dirty_state,
     is_dirty,
 )
-from spec.integrations.jira import JiraTicket, fetch_ticket_info
+from spec.integrations.providers import GenericTicket
 from spec.ui.menus import show_git_dirty_menu
 from spec.ui.prompts import prompt_confirm, prompt_input
 from spec.utils.console import (
@@ -44,7 +44,7 @@ from spec.workflow.step4_update_docs import step_4_update_docs
 
 
 def run_spec_driven_workflow(
-    ticket: JiraTicket,
+    ticket: GenericTicket,
     config: ConfigManager,
     planning_model: str = "",
     implementation_model: str = "",
@@ -69,7 +69,7 @@ def run_spec_driven_workflow(
     4. Update documentation based on code changes
 
     Args:
-        ticket: Jira ticket information
+        ticket: Ticket information (platform-agnostic GenericTicket)
         config: Configuration manager
         planning_model: Model for planning phases
         implementation_model: Model for implementation phase
@@ -88,7 +88,7 @@ def run_spec_driven_workflow(
     Returns:
         True if workflow completed successfully
     """
-    print_header(f"Starting Workflow: {ticket.ticket_id}")
+    print_header(f"Starting Workflow: {ticket.id}")
 
     # Initialize state with subagent names from config
     state = WorkflowState(
@@ -131,16 +131,10 @@ def run_spec_driven_workflow(
             print_error("Failed to install SPEC subagent files")
             return False
 
-        # Fetch ticket information early (before branch creation)
-        print_step("Fetching ticket information...")
-        try:
-            state.ticket = fetch_ticket_info(state.ticket, auggie)
-            print_success(f"Ticket: {state.ticket.title}")
-            if state.ticket.description:
-                print_info(f"Description: {state.ticket.description[:200]}...")
-        except Exception as e:
-            log_message(f"Failed to fetch ticket info: {e}")
-            print_warning("Could not fetch ticket details. Continuing with ticket ID only.")
+        # Display ticket information (already fetched via TicketService before workflow)
+        print_success(f"Ticket: {state.ticket.title}")
+        if state.ticket.description:
+            print_info(f"Description: {state.ticket.description[:200]}...")
 
         # Ask user for additional context
         if prompt_confirm(
@@ -177,8 +171,7 @@ def run_spec_driven_workflow(
                     )
                     console.print()
 
-        # Create feature branch (now with ticket summary available)
-        # Use state.ticket which has the updated summary from fetch_ticket_info
+        # Create feature branch using ticket's safe_branch_name
         if not _setup_branch(state, state.ticket):
             return False
 
@@ -221,25 +214,20 @@ def run_spec_driven_workflow(
         return True
 
 
-def _setup_branch(state: WorkflowState, ticket: JiraTicket) -> bool:
+def _setup_branch(state: WorkflowState, ticket: GenericTicket) -> bool:
     """Set up the feature branch for the workflow.
 
     Args:
         state: Workflow state
-        ticket: Jira ticket
+        ticket: Ticket information (platform-agnostic)
 
     Returns:
         True if branch was set up successfully
     """
     current_branch = get_current_branch()
 
-    # Generate branch name using ticket summary if available
-    if ticket.summary:
-        # Format: RED-180934-add-graphql-query-to-fetch-account
-        branch_name = f"{ticket.ticket_id.lower()}-{ticket.summary}"
-    else:
-        # Fallback to simple format if summary not available
-        branch_name = f"feature/{ticket.ticket_id.lower()}"
+    # Use GenericTicket's safe_branch_name property for git-safe branch naming
+    branch_name = ticket.safe_branch_name
 
     state.branch_name = branch_name
 
@@ -272,7 +260,7 @@ def _show_completion(state: WorkflowState) -> None:
     console.print()
     print_header("Workflow Complete!")
 
-    console.print(f"[bold green]✓[/bold green] Ticket: {state.ticket.ticket_id}")
+    console.print(f"[bold green]✓[/bold green] Ticket: {state.ticket.id}")
     console.print(f"[bold green]✓[/bold green] Branch: {state.branch_name}")
     console.print(f"[bold green]✓[/bold green] Tasks: {len(state.completed_tasks)} completed")
 

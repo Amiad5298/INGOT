@@ -11,26 +11,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spec.integrations.jira import JiraTicket
 from spec.workflow.autofix import _run_auto_fix, run_auto_fix
 from spec.workflow.state import WorkflowState
 
 
 @pytest.fixture
-def ticket():
-    """Create a test ticket."""
-    return JiraTicket(
-        ticket_id="TEST-123",
-        ticket_url="https://jira.example.com/TEST-123",
-        title="Test ticket",
-        description="Test description",
-    )
-
-
-@pytest.fixture
-def workflow_state(ticket, tmp_path):
-    """Create a test workflow state with valid paths."""
-    state = WorkflowState(ticket=ticket)
+def workflow_state(generic_ticket, tmp_path):
+    """Create a test workflow state with valid paths using shared generic_ticket fixture."""
+    state = WorkflowState(ticket=generic_ticket)
     # Create the specs directory and plan file
     specs_dir = tmp_path / "specs"
     specs_dir.mkdir(parents=True)
@@ -126,7 +114,9 @@ class TestRunAutoFix:
         assert call_args[1]["dont_save_session"] is True
 
     @patch("spec.workflow.autofix.AuggieClient")
-    def test_prompt_includes_no_commit_instruction(self, mock_client_class, workflow_state, log_dir):
+    def test_prompt_includes_no_commit_instruction(
+        self, mock_client_class, workflow_state, log_dir
+    ):
         """Prompt explicitly tells agent not to commit."""
         mock_client = MagicMock()
         mock_client.run_print_with_output.return_value = (True, "Done")
@@ -145,4 +135,3 @@ class TestBackwardsCompatibility:
     def test_underscore_alias_is_same_function(self):
         """_run_auto_fix is an alias for run_auto_fix."""
         assert _run_auto_fix is run_auto_fix
-

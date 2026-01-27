@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spec.integrations.jira import JiraTicket
+from spec.integrations.providers import GenericTicket, Platform
 from spec.workflow.state import WorkflowState
 from spec.workflow.step1_plan import _build_minimal_prompt
 from spec.workflow.task_memory import TaskMemory
@@ -14,12 +14,13 @@ from spec.workflow.tasks import Task
 @pytest.fixture
 def mock_workflow_state(tmp_path):
     """Create a mock workflow state for testing."""
-    ticket = JiraTicket(
-        ticket_id="TEST-123",
-        ticket_url="https://jira.example.com/TEST-123",
-        summary="Test Feature",
+    ticket = GenericTicket(
+        id="TEST-123",
+        platform=Platform.JIRA,
+        url="https://jira.example.com/TEST-123",
         title="Implement test feature",
-        description="Test description"
+        description="Test description",
+        branch_summary="Test Feature",
     )
 
     state = WorkflowState(ticket=ticket)
@@ -30,23 +31,27 @@ def mock_workflow_state(tmp_path):
 
     # Create plan file
     plan_file = specs_dir / "TEST-123-plan.md"
-    plan_file.write_text("""# Implementation Plan: TEST-123
+    plan_file.write_text(
+        """# Implementation Plan: TEST-123
 
 ## Task 1: Create user module
 Create a user module with basic CRUD operations.
 
 ## Task 2: Add tests
 Write unit tests for the user module.
-""")
+"""
+    )
     state.plan_file = plan_file
 
     # Create tasklist file
     tasklist_file = specs_dir / "TEST-123-tasklist.md"
-    tasklist_file.write_text("""# Task List: TEST-123
+    tasklist_file.write_text(
+        """# Task List: TEST-123
 
 - [ ] Create user module
 - [ ] Add tests
-""")
+"""
+    )
     state.tasklist_file = tasklist_file
 
     return state
@@ -85,6 +90,7 @@ class TestFullWorkflowWithTaskMemory:
 
         # Import and call the function that captures memory
         from spec.workflow.task_memory import capture_task_memory
+
         capture_task_memory(task, mock_workflow_state)
 
         # Verify memory was captured
@@ -118,6 +124,7 @@ class TestFullWorkflowWithTaskMemory:
 
         # Build pattern context
         from spec.workflow.task_memory import build_pattern_context
+
         context = build_pattern_context(task, mock_workflow_state)
 
         # Verify context includes patterns from previous task
@@ -149,6 +156,7 @@ NameError: name 'User' is not defined
 
         # Analyze the error
         from spec.utils.error_analysis import analyze_error_output
+
         task = Task(name="Create user module")
         analysis = analyze_error_output(error_output, task)
 
@@ -167,6 +175,7 @@ NameError: name 'User' is not defined
 
         # Analyze error
         from spec.utils.error_analysis import analyze_error_output
+
         task = Task(name="Create user module")
         analysis = analyze_error_output(error_output, task)
 
@@ -193,6 +202,7 @@ class TestMultipleTasksWithMemory:
         mock_identify.return_value = ["Python implementation", "Dataclass pattern"]
 
         from spec.workflow.task_memory import capture_task_memory
+
         task1 = Task(name="Create user module")
         capture_task_memory(task1, mock_workflow_state)
 
@@ -224,12 +234,13 @@ class TestUserAdditionalContext:
     @pytest.fixture
     def state_with_ticket(self):
         """Create a workflow state with ticket for testing."""
-        ticket = JiraTicket(
-            ticket_id="TEST-456",
-            ticket_url="https://jira.example.com/TEST-456",
-            summary="test-feature",
+        ticket = GenericTicket(
+            id="TEST-456",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-456",
             title="Implement test feature",
-            description="Test description for the feature"
+            description="Test description for the feature",
+            branch_summary="test-feature",
         )
         return WorkflowState(ticket=ticket)
 
@@ -240,7 +251,9 @@ class TestUserAdditionalContext:
         mock_confirm.return_value = False
 
         # Simulate the logic from runner.py
-        if mock_confirm("Would you like to add additional context about this ticket?", default=False):
+        if mock_confirm(
+            "Would you like to add additional context about this ticket?", default=False
+        ):
             user_context = mock_input(
                 "Enter additional context (press Enter twice when done):",
                 multiline=True,
@@ -260,7 +273,9 @@ class TestUserAdditionalContext:
         mock_input.return_value = "Additional details about the feature"
 
         # Simulate the logic from runner.py
-        if mock_confirm("Would you like to add additional context about this ticket?", default=False):
+        if mock_confirm(
+            "Would you like to add additional context about this ticket?", default=False
+        ):
             user_context = mock_input(
                 "Enter additional context (press Enter twice when done):",
                 multiline=True,
@@ -278,7 +293,9 @@ class TestUserAdditionalContext:
         mock_input.return_value = "   "  # whitespace only
 
         # Simulate the logic from runner.py
-        if mock_confirm("Would you like to add additional context about this ticket?", default=False):
+        if mock_confirm(
+            "Would you like to add additional context about this ticket?", default=False
+        ):
             user_context = mock_input(
                 "Enter additional context (press Enter twice when done):",
                 multiline=True,
@@ -295,12 +312,13 @@ class TestBuildMinimalPrompt:
     @pytest.fixture
     def state_with_ticket(self):
         """Create a workflow state with ticket for testing."""
-        ticket = JiraTicket(
-            ticket_id="TEST-789",
-            ticket_url="https://jira.example.com/TEST-789",
-            summary="test-feature",
+        ticket = GenericTicket(
+            id="TEST-789",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-789",
             title="Implement test feature",
-            description="Test description for the feature"
+            description="Test description for the feature",
+            branch_summary="test-feature",
         )
         return WorkflowState(ticket=ticket)
 
@@ -337,12 +355,13 @@ class TestWorkflowWithFailFast:
     @pytest.fixture
     def state_with_fail_fast(self, tmp_path):
         """Create a workflow state with fail_fast enabled."""
-        ticket = JiraTicket(
-            ticket_id="TEST-FF",
-            ticket_url="https://jira.example.com/TEST-FF",
-            summary="Test Feature",
+        ticket = GenericTicket(
+            id="TEST-FF",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-FF",
             title="Test with fail_fast",
-            description="Test description"
+            description="Test description",
+            branch_summary="Test Feature",
         )
         state = WorkflowState(ticket=ticket)
         state.fail_fast = True
@@ -368,10 +387,13 @@ class TestWorkflowWithFailFast:
 
     def test_fail_fast_default_is_false(self):
         """fail_fast defaults to False."""
-        ticket = JiraTicket(
-            ticket_id="TEST-DEFAULT",
-            ticket_url="test",
-            summary="Test",
+        ticket = GenericTicket(
+            id="TEST-DEFAULT",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-DEFAULT",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
         )
         state = WorkflowState(ticket=ticket)
         assert state.fail_fast is False
@@ -383,10 +405,13 @@ class TestWorkflowWithSquashAtEnd:
     @pytest.fixture
     def state_with_squash(self, tmp_path):
         """Create a workflow state with squash_at_end enabled."""
-        ticket = JiraTicket(
-            ticket_id="TEST-SQUASH",
-            ticket_url="test",
-            summary="Test Feature",
+        ticket = GenericTicket(
+            id="TEST-SQUASH",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-SQUASH",
+            title="Test Feature",
+            description="Test description",
+            branch_summary="Test Feature",
         )
         state = WorkflowState(ticket=ticket)
         state.squash_at_end = True
@@ -394,7 +419,14 @@ class TestWorkflowWithSquashAtEnd:
 
     def test_squash_at_end_defaults_to_true(self):
         """squash_at_end defaults to True."""
-        ticket = JiraTicket(ticket_id="TEST", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
         assert state.squash_at_end is True
 
@@ -448,10 +480,13 @@ class TestFileSystemErrors:
 
     def test_handles_missing_plan_file(self, tmp_path):
         """Handles missing plan file gracefully."""
-        ticket = JiraTicket(
-            ticket_id="TEST-MISSING",
-            ticket_url="test",
-            summary="Test",
+        ticket = GenericTicket(
+            id="TEST-MISSING",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-MISSING",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
         )
         state = WorkflowState(ticket=ticket)
         # plan_file is not set, get_plan_path returns default
@@ -461,10 +496,13 @@ class TestFileSystemErrors:
 
     def test_handles_missing_tasklist_file(self, tmp_path):
         """Handles missing tasklist file gracefully."""
-        ticket = JiraTicket(
-            ticket_id="TEST-MISSING",
-            ticket_url="test",
-            summary="Test",
+        ticket = GenericTicket(
+            id="TEST-MISSING",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-MISSING",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
         )
         state = WorkflowState(ticket=ticket)
 
@@ -478,10 +516,13 @@ class TestWorkflowResumption:
     @pytest.fixture
     def resumable_state(self, tmp_path):
         """Create a state that can be resumed."""
-        ticket = JiraTicket(
-            ticket_id="TEST-RESUME",
-            ticket_url="test",
-            summary="Test Resume",
+        ticket = GenericTicket(
+            id="TEST-RESUME",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-RESUME",
+            title="Test Resume",
+            description="Test description",
+            branch_summary="Test Resume",
         )
         state = WorkflowState(ticket=ticket)
 
@@ -537,12 +578,13 @@ class TestEndToEndWorkflowScenarios:
     @pytest.fixture
     def complete_state(self, tmp_path):
         """Create a complete workflow state for testing."""
-        ticket = JiraTicket(
-            ticket_id="TEST-E2E",
-            ticket_url="https://jira.example.com/TEST-E2E",
-            summary="End-to-end Test",
+        ticket = GenericTicket(
+            id="TEST-E2E",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-E2E",
             title="E2E Test Feature",
             description="Complete E2E test",
+            branch_summary="End-to-end Test",
         )
         state = WorkflowState(ticket=ticket)
         state.branch_name = "feature/TEST-E2E-e2e-test"
@@ -565,7 +607,7 @@ class TestEndToEndWorkflowScenarios:
 
     def test_complete_workflow_state_configuration(self, complete_state):
         """Complete workflow state has all necessary configuration."""
-        assert complete_state.ticket.ticket_id == "TEST-E2E"
+        assert complete_state.ticket.id == "TEST-E2E"
         assert complete_state.branch_name == "feature/TEST-E2E-e2e-test"
         assert complete_state.base_commit == "abc123"
         assert complete_state.planning_model == "gpt-4"
@@ -643,4 +685,3 @@ class TestEndToEndWorkflowScenarios:
         assert complete_state.task_memories[0].task_name == "Task 1"
         assert complete_state.task_memories[1].task_name == "Task 2"
         assert complete_state.task_memories[2].task_name == "Task 3"
-

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from spec.integrations.jira import JiraTicket
+from spec.integrations.providers import GenericTicket, Platform
 from spec.ui.menus import TaskReviewChoice
 from spec.workflow.state import WorkflowState
 from spec.workflow.step2_tasklist import (
@@ -23,12 +23,13 @@ from spec.workflow.tasks import parse_task_list
 @pytest.fixture
 def workflow_state(tmp_path):
     """Create a workflow state for testing."""
-    ticket = JiraTicket(
-        ticket_id="TEST-123",
-        ticket_url="https://jira.example.com/TEST-123",
-        summary="Test Feature",
+    ticket = GenericTicket(
+        id="TEST-123",
+        platform=Platform.JIRA,
+        url="https://jira.example.com/TEST-123",
         title="Implement test feature",
-        description="Test description"
+        description="Test description",
+        branch_summary="Test Feature",
     )
     state = WorkflowState(ticket=ticket)
 
@@ -38,7 +39,8 @@ def workflow_state(tmp_path):
 
     # Create plan file
     plan_file = specs_dir / "TEST-123-plan.md"
-    plan_file.write_text("""# Implementation Plan: TEST-123
+    plan_file.write_text(
+        """# Implementation Plan: TEST-123
 
 ## Summary
 Test implementation plan.
@@ -46,7 +48,8 @@ Test implementation plan.
 ## Tasks
 1. Create module
 2. Add tests
-""")
+"""
+    )
     state.plan_file = plan_file
 
     # Patch the paths to use tmp_path
@@ -293,6 +296,7 @@ Task list updated successfully. Created: 13, Updated: 1, Deleted: 0.
 
         # Count tasks by category
         from spec.workflow.tasks import TaskCategory
+
         fundamental_tasks = [t for t in tasks if t.category == TaskCategory.FUNDAMENTAL]
         independent_tasks = [t for t in tasks if t.category == TaskCategory.INDEPENDENT]
 
@@ -308,12 +312,12 @@ Task list updated successfully. Created: 13, Updated: 1, Deleted: 0.
 
         # Verify task names don't have the prefix anymore (it's in metadata)
         for task in tasks:
-            assert not task.name.startswith("FUNDAMENTAL:"), (
-                f"Task name should not start with 'FUNDAMENTAL:': {task.name}"
-            )
-            assert not task.name.startswith("INDEPENDENT:"), (
-                f"Task name should not start with 'INDEPENDENT:': {task.name}"
-            )
+            assert not task.name.startswith(
+                "FUNDAMENTAL:"
+            ), f"Task name should not start with 'FUNDAMENTAL:': {task.name}"
+            assert not task.name.startswith(
+                "INDEPENDENT:"
+            ), f"Task name should not start with 'INDEPENDENT:': {task.name}"
 
     def test_extracts_category_from_add_tasks_format(self):
         """Extracts category metadata from add_tasks tool format.
@@ -437,6 +441,7 @@ class TestStrictParser:
 
         # Verify categories
         from spec.workflow.tasks import TaskCategory
+
         assert tasks[0].category == TaskCategory.INDEPENDENT
         assert tasks[1].category == TaskCategory.FUNDAMENTAL
         assert tasks[2].category == TaskCategory.INDEPENDENT
@@ -465,7 +470,7 @@ class TestGenerateTasklist:
 - [ ] Create user module
 - [ ] Add authentication
 - [ ] Write tests
-"""
+""",
         )
         mock_auggie_class.return_value = mock_client
 
@@ -492,10 +497,13 @@ class TestGenerateTasklist:
     ):
         """Uses state.subagent_names tasklist agent for task list generation."""
         # Setup
-        ticket = JiraTicket(
-            ticket_id="TEST-456",
-            ticket_url="https://jira.example.com/TEST-456",
-            summary="Test",
+        ticket = GenericTicket(
+            id="TEST-456",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-456",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
         )
         state = WorkflowState(ticket=ticket)
 
@@ -506,10 +514,7 @@ class TestGenerateTasklist:
         tasklist_path = specs_dir / "TEST-456-tasklist.md"
 
         mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (
-            True,
-            "- [ ] Single task\n"
-        )
+        mock_client.run_print_with_output.return_value = (True, "- [ ] Single task\n")
         mock_auggie_class.return_value = mock_client
 
         # Act
@@ -529,7 +534,14 @@ class TestGenerateTasklist:
         tmp_path,
     ):
         """Falls back to default template when AI output has no checkbox tasks."""
-        ticket = JiraTicket(ticket_id="TEST-789", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-789",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-789",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         specs_dir = tmp_path / "specs"
@@ -541,7 +553,7 @@ class TestGenerateTasklist:
         mock_client = MagicMock()
         mock_client.run_print_with_output.return_value = (
             True,
-            "I couldn't understand the plan. Please clarify."
+            "I couldn't understand the plan. Please clarify.",
         )
         mock_auggie_class.return_value = mock_client
 
@@ -581,10 +593,13 @@ class TestStep2CreateTasklist:
         monkeypatch.chdir(tmp_path)
 
         # Setup
-        ticket = JiraTicket(
-            ticket_id="TEST-EDIT",
-            ticket_url="https://jira.example.com/TEST-EDIT",
-            summary="Test Edit Flow",
+        ticket = GenericTicket(
+            id="TEST-EDIT",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-EDIT",
+            title="Test Edit Flow",
+            description="Test description",
+            branch_summary="Test Edit Flow",
         )
         state = WorkflowState(ticket=ticket)
 
@@ -662,7 +677,14 @@ class TestStep2CreateTasklist:
         """REGENERATE choice calls _generate_tasklist again."""
         monkeypatch.chdir(tmp_path)
 
-        ticket = JiraTicket(ticket_id="TEST-REGEN", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-REGEN",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-REGEN",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         specs_dir = tmp_path / "specs"
@@ -701,7 +723,14 @@ class TestStep2CreateTasklist:
         """ABORT choice returns False."""
         monkeypatch.chdir(tmp_path)
 
-        ticket = JiraTicket(ticket_id="TEST-ABORT", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-ABORT",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-ABORT",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         specs_dir = tmp_path / "specs"
@@ -727,7 +756,14 @@ class TestStep2CreateTasklist:
         """Returns False when plan file does not exist."""
         monkeypatch.chdir(tmp_path)
 
-        ticket = JiraTicket(ticket_id="TEST-NOPLAN", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-NOPLAN",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-NOPLAN",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         # Create specs directory but NO plan file
@@ -748,12 +784,14 @@ class TestDisplayTasklist:
     def test_displays_task_list(self, tmp_path, capsys):
         """Displays task list content and task count."""
         tasklist_path = tmp_path / "tasklist.md"
-        tasklist_path.write_text("""# Task List: TEST-123
+        tasklist_path.write_text(
+            """# Task List: TEST-123
 
 - [ ] Task one
 - [ ] Task two
 - [x] Task three
-""")
+"""
+        )
 
         with patch("spec.workflow.step2_tasklist.console") as mock_console:
             _display_tasklist(tasklist_path)
@@ -821,6 +859,7 @@ class TestEditTasklist:
     def test_handles_editor_error(self, mock_run, tmp_path):
         """Handles case when editor exits with error."""
         import subprocess as sp
+
         tasklist_path = tmp_path / "tasklist.md"
         tasklist_path.write_text("- [ ] Task\n")
 
@@ -836,7 +875,14 @@ class TestCreateDefaultTasklist:
     def test_creates_default_template(self, tmp_path):
         """Creates default task list with template content."""
         tasklist_path = tmp_path / "tasklist.md"
-        ticket = JiraTicket(ticket_id="TEST-DEFAULT", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-DEFAULT",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-DEFAULT",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         _create_default_tasklist(tasklist_path, state)
@@ -851,7 +897,14 @@ class TestCreateDefaultTasklist:
     def test_includes_ticket_id_in_header(self, tmp_path):
         """Includes ticket ID in the task list header."""
         tasklist_path = tmp_path / "tasklist.md"
-        ticket = JiraTicket(ticket_id="PROJ-999", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="PROJ-999",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/PROJ-999",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         _create_default_tasklist(tasklist_path, state)
@@ -862,7 +915,14 @@ class TestCreateDefaultTasklist:
     def test_creates_parent_directory_if_needed(self, tmp_path):
         """Creates parent directories if they don't exist."""
         tasklist_path = tmp_path / "nested" / "dir" / "tasklist.md"
-        ticket = JiraTicket(ticket_id="TEST-NESTED", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-NESTED",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-NESTED",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         # Create parent directory manually since _create_default_tasklist doesn't
@@ -878,7 +938,14 @@ class TestGenerateTasklistRetry:
     @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_returns_false_on_auggie_failure(self, mock_auggie_class, tmp_path):
         """Returns False when Auggie command fails."""
-        ticket = JiraTicket(ticket_id="TEST-FAIL", ticket_url="test", summary="Test")
+        ticket = GenericTicket(
+            id="TEST-FAIL",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-FAIL",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
         state = WorkflowState(ticket=ticket)
 
         specs_dir = tmp_path / "specs"
@@ -894,7 +961,6 @@ class TestGenerateTasklistRetry:
         result = _generate_tasklist(state, plan_path, tasklist_path)
 
         assert result is False
-
 
 
 class TestFundamentalSectionKeywordDetection:

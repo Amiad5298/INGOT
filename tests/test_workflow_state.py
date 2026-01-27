@@ -4,25 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from spec.integrations.jira import JiraTicket
 from spec.workflow.state import RateLimitConfig, WorkflowState
 
 
 @pytest.fixture
-def ticket():
-    """Create a test ticket."""
-    return JiraTicket(
-        ticket_id="TEST-123",
-        ticket_url="TEST-123",
-        title="Test ticket",
-        description="Test description",
-    )
-
-
-@pytest.fixture
-def state(ticket):
-    """Create a test workflow state."""
-    return WorkflowState(ticket=ticket)
+def state(generic_ticket):
+    """Create a test workflow state using shared generic_ticket fixture."""
+    return WorkflowState(ticket=generic_ticket)
 
 
 class TestWorkflowState:
@@ -263,10 +251,10 @@ class TestWorkflowStateParallelFields:
             "doc_updater": "spec-doc-updater",
         }
 
-    def test_subagent_names_custom(self, ticket):
+    def test_subagent_names_custom(self, generic_ticket):
         """subagent_names accepts custom values."""
         state = WorkflowState(
-            ticket=ticket,
+            ticket=generic_ticket,
             subagent_names={
                 "planner": "custom-planner",
                 "tasklist": "custom-tasklist",
@@ -303,10 +291,10 @@ class TestWorkflowStateConflictDetectionFields:
         state.conflict_summary = "Ticket says add X but user says remove X."
         assert state.conflict_summary == "Ticket says add X but user says remove X."
 
-    def test_conflict_fields_initialized_via_constructor(self, ticket):
+    def test_conflict_fields_initialized_via_constructor(self, generic_ticket):
         """conflict fields can be set via constructor."""
         state = WorkflowState(
-            ticket=ticket,
+            ticket=generic_ticket,
             conflict_detected=True,
             conflict_summary="Test conflict summary",
         )
