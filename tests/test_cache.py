@@ -14,9 +14,10 @@ from spec.integrations.cache import (
     CacheKey,
     FileBasedTicketCache,
     InMemoryTicketCache,
-    clear_global_cache,
-    get_global_cache,
-    set_global_cache,
+    # Use internal APIs directly to avoid deprecation warnings in tests
+    _clear_global_cache,
+    _get_global_cache,
+    _set_global_cache,
 )
 from spec.integrations.providers.base import (
     GenericTicket,
@@ -421,6 +422,9 @@ class TestFileBasedTicketCache:
 
         Uses os.utime() for explicit timestamp control instead of time.sleep()
         to avoid flaky tests.
+
+        Note: With max_size=2 and threshold=math.ceil(2*1.1)=3, we need 4 items
+        to exceed the threshold and trigger eviction.
         """
         cache = FileBasedTicketCache(
             cache_dir=tmp_path,
@@ -429,9 +433,9 @@ class TestFileBasedTicketCache:
         )
         base_time = time.time()
 
-        # Add 3 tickets with explicit timestamps
+        # Add 4 tickets to exceed threshold (ceil(2*1.1)=3)
         tickets = []
-        for i in range(3):
+        for i in range(4):
             ticket = GenericTicket(
                 id=f"PROJ-{i}",
                 platform=Platform.JIRA,
@@ -451,7 +455,7 @@ class TestFileBasedTicketCache:
             tickets.append(ticket)
 
         # Set explicit timestamps using os.utime for deterministic ordering
-        # PROJ-0 is oldest, PROJ-1 is middle, PROJ-2 is newest
+        # PROJ-0 is oldest, PROJ-3 is newest
         for i, ticket in enumerate(tickets):
             key = CacheKey.from_ticket(ticket)
             path = cache._get_path(key)
@@ -463,11 +467,12 @@ class TestFileBasedTicketCache:
         cache.force_evict()
 
         assert cache.size() == 2
-        # First ticket should be evicted (oldest mtime)
+        # First two tickets should be evicted (oldest mtime)
         assert cache.get(CacheKey(Platform.JIRA, "PROJ-0")) is None
+        assert cache.get(CacheKey(Platform.JIRA, "PROJ-1")) is None
         # Last two should still exist
-        assert cache.get(CacheKey(Platform.JIRA, "PROJ-1")) is not None
         assert cache.get(CacheKey(Platform.JIRA, "PROJ-2")) is not None
+        assert cache.get(CacheKey(Platform.JIRA, "PROJ-3")) is not None
 
     def test_corrupted_json_file_returns_none(self, cache, sample_ticket):
         """Test that corrupted JSON files are handled gracefully."""
@@ -525,114 +530,258 @@ class TestFileBasedTicketCache:
 
         assert error_queue.empty(), f"Errors occurred: {list(error_queue.queue)}"
 
+    def test_no_temp_file_leak_on_serialization_error(self, tmp_path):
+        """Test that non-serializable data doesn't leave orphaned .tmp files.
+
+        P0 Fix: Ensures _atomic_write cleans up temp files even when json.dump
+        fails with TypeError (e.g., for non-serializable platform_metadata).
+        """
+        cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
+
+        # Create a ticket with non-serializable platform_metadata
+        ticket_with_bad_metadata = GenericTicket(
+            id="BAD-123",
+            platform=Platform.JIRA,
+            url="https://example.com/BAD-123",
+            title="Ticket with non-serializable metadata",
+            description="",
+            status=TicketStatus.OPEN,
+            type=TicketType.TASK,
+            assignee=None,
+            labels=[],
+            created_at=None,
+            updated_at=None,
+            branch_summary="bad-ticket",
+            # Non-serializable objects: set and object()
+            platform_metadata={
+                "bad_set": {1, 2, 3},  # Sets are not JSON serializable
+                "bad_object": object(),  # Custom objects are not JSON serializable
+            },
+        )
+
+        # This should fail gracefully without raising an exception
+        # (the cache logs a warning instead)
+        cache.set(ticket_with_bad_metadata)
+
+        # Check that no .tmp files were left behind
+        tmp_files = list(tmp_path.glob(".cache_*.tmp"))
+        assert len(tmp_files) == 0, f"Orphaned temp files found: {tmp_files}"
+
+        # Also verify no cache file was created for this ticket
+        key = CacheKey.from_ticket(ticket_with_bad_metadata)
+        assert cache.get(key) is None
+
+    def test_eviction_threshold_with_small_max_size(self, tmp_path):
+        """Test that math.ceil correctly provides buffer for small max_size values.
+
+        P2 Fix: Ensures int(max_size * 1.1) doesn't round down to max_size
+        for small values like max_size=2 (int(2.2) == 2, no buffer).
+        Using math.ceil(2 * 1.1) = 3 ensures proper headroom.
+        """
+        # With max_size=2 and math.ceil(2 * 1.1) = 3 as threshold
+        cache = FileBasedTicketCache(
+            cache_dir=tmp_path,
+            default_ttl=timedelta(hours=1),
+            max_size=2,
+        )
+        base_time = time.time()
+
+        # Add 4 tickets to exceed threshold (ceil(2*1.1)=3)
+        tickets = []
+        for i in range(4):
+            ticket = GenericTicket(
+                id=f"THRESH-{i}",
+                platform=Platform.JIRA,
+                url=f"https://example.com/THRESH-{i}",
+                title=f"Threshold Ticket {i}",
+                description="",
+                status=TicketStatus.OPEN,
+                type=TicketType.TASK,
+                assignee=None,
+                labels=[],
+                created_at=None,
+                updated_at=None,
+                branch_summary=f"thresh-ticket-{i}",
+                platform_metadata={},
+            )
+            cache.set(ticket)
+            tickets.append(ticket)
+
+        # Set explicit timestamps: THRESH-0 oldest, THRESH-3 newest
+        for i, ticket in enumerate(tickets):
+            key = CacheKey.from_ticket(ticket)
+            path = cache._get_path(key)
+            if path.exists():  # File may have been evicted already
+                file_time = base_time + i
+                os.utime(path, (file_time, file_time))
+
+        # Force eviction to trigger (in case lazy eviction didn't run)
+        cache.force_evict()
+
+        # Should now be at max_size=2
+        assert cache.size() == 2
+
+        # The two newest tickets should remain (THRESH-2 and THRESH-3)
+        assert cache.get(CacheKey(Platform.JIRA, "THRESH-2")) is not None
+        assert cache.get(CacheKey(Platform.JIRA, "THRESH-3")) is not None
+
+    def test_eviction_handles_file_deletion_race(self, tmp_path):
+        """Test that eviction handles files being deleted during scan.
+
+        P1 Fix: Uses os.scandir with proper exception handling to avoid
+        FileNotFoundError when a file is deleted between listing and stat.
+        """
+        cache = FileBasedTicketCache(
+            cache_dir=tmp_path,
+            default_ttl=timedelta(hours=1),
+            max_size=5,
+        )
+
+        # Add 10 tickets to trigger eviction
+        for i in range(10):
+            ticket = GenericTicket(
+                id=f"RACE-{i}",
+                platform=Platform.JIRA,
+                url=f"https://example.com/RACE-{i}",
+                title=f"Race Ticket {i}",
+                description="",
+                status=TicketStatus.OPEN,
+                type=TicketType.TASK,
+                assignee=None,
+                labels=[],
+                created_at=None,
+                updated_at=None,
+                branch_summary=f"race-ticket-{i}",
+                platform_metadata={},
+            )
+            cache.set(ticket)
+
+        # Get a file to delete during eviction scan
+        json_files = list(tmp_path.glob("*.json"))
+        file_to_delete = json_files[0] if json_files else None
+
+        # We'll delete a file right before force_evict runs,
+        # then verify eviction doesn't crash when encountering the deleted file
+        if file_to_delete:
+            # Delete one file to simulate race condition
+            file_to_delete.unlink()
+
+        # This should NOT crash even though a file was deleted
+        # The eviction will see 9 files now, but the logic should still work
+        cache.force_evict()
+
+        # Cache should still be functional and at or below max_size
+        # (9 files - deletion down to 5 = 4 files removed, leaving 5)
+        assert cache.size() <= 5
+
 
 class TestGlobalCache:
-    """Test global cache singleton functions."""
+    """Test global cache singleton functions (internal APIs)."""
 
     def test_get_global_cache_singleton(self):
-        clear_global_cache()
-        cache1 = get_global_cache()
-        cache2 = get_global_cache()
+        _clear_global_cache()
+        cache1 = _get_global_cache()
+        cache2 = _get_global_cache()
         assert cache1 is cache2
-        clear_global_cache()
+        _clear_global_cache()
 
     def test_set_global_cache(self):
-        clear_global_cache()
+        _clear_global_cache()
         custom_cache = InMemoryTicketCache(max_size=100)
-        set_global_cache(custom_cache)
-        assert get_global_cache() is custom_cache
-        clear_global_cache()
+        _set_global_cache(custom_cache)
+        assert _get_global_cache() is custom_cache
+        _clear_global_cache()
 
     def test_get_global_cache_memory_type(self):
-        clear_global_cache()
-        cache = get_global_cache(cache_type="memory")
+        _clear_global_cache()
+        cache = _get_global_cache(cache_type="memory")
         assert isinstance(cache, InMemoryTicketCache)
-        clear_global_cache()
+        _clear_global_cache()
 
     def test_get_global_cache_file_type(self, tmp_path):
-        clear_global_cache()
-        cache = get_global_cache(cache_type="file", cache_dir=tmp_path)
+        _clear_global_cache()
+        cache = _get_global_cache(cache_type="file", cache_dir=tmp_path)
         assert isinstance(cache, FileBasedTicketCache)
-        clear_global_cache()
+        _clear_global_cache()
 
     def test_clear_global_cache_clears_entries(self, sample_ticket):
-        clear_global_cache()
-        cache = get_global_cache()
+        _clear_global_cache()
+        cache = _get_global_cache()
         cache.set(sample_ticket)
         assert cache.size() == 1
-        clear_global_cache()
+        _clear_global_cache()
         # After clear, getting global cache should return a new empty cache
-        new_cache = get_global_cache()
+        new_cache = _get_global_cache()
         assert new_cache.size() == 0
-        clear_global_cache()
+        _clear_global_cache()
 
     def test_get_global_cache_type_mismatch_strict_raises(self, tmp_path):
         """Test that strict mode raises CacheConfigurationError on type mismatch."""
-        clear_global_cache()
+        _clear_global_cache()
         # Initialize as memory cache
-        cache1 = get_global_cache(cache_type="memory")
+        cache1 = _get_global_cache(cache_type="memory")
         assert isinstance(cache1, InMemoryTicketCache)
 
         # Try to get as file cache with strict=True (default) - should raise
         with pytest.raises(CacheConfigurationError) as exc_info:
-            get_global_cache(cache_type="file", cache_dir=tmp_path)
+            _get_global_cache(cache_type="file", cache_dir=tmp_path)
 
         assert "cache_type='file' vs existing='memory'" in str(exc_info.value)
-        clear_global_cache()
+        _clear_global_cache()
 
     def test_get_global_cache_type_mismatch_non_strict_warning(self, tmp_path, caplog):
         """Test that non-strict mode logs warning on type mismatch."""
         import logging
 
-        clear_global_cache()
+        _clear_global_cache()
         # Initialize as memory cache
-        cache1 = get_global_cache(cache_type="memory")
+        cache1 = _get_global_cache(cache_type="memory")
         assert isinstance(cache1, InMemoryTicketCache)
 
         # Try to get as file cache with strict=False - should warn and return existing
         with caplog.at_level(logging.WARNING):
-            cache2 = get_global_cache(cache_type="file", cache_dir=tmp_path, strict=False)
+            cache2 = _get_global_cache(cache_type="file", cache_dir=tmp_path, strict=False)
 
         assert cache2 is cache1  # Should return the same cache
         assert isinstance(cache2, InMemoryTicketCache)  # Still memory cache
         assert "different configuration" in caplog.text
-        clear_global_cache()
+        _clear_global_cache()
 
     def test_get_global_cache_kwargs_mismatch_strict_raises(self):
         """Test that strict mode raises CacheConfigurationError on kwargs mismatch."""
-        clear_global_cache()
+        _clear_global_cache()
         # Initialize with max_size=100
-        cache1 = get_global_cache(cache_type="memory", max_size=100)
+        cache1 = _get_global_cache(cache_type="memory", max_size=100)
         assert isinstance(cache1, InMemoryTicketCache)
 
         # Try to get with different max_size - should raise
         with pytest.raises(CacheConfigurationError) as exc_info:
-            get_global_cache(cache_type="memory", max_size=200)
+            _get_global_cache(cache_type="memory", max_size=200)
 
         assert "kwargs=" in str(exc_info.value)
-        clear_global_cache()
+        _clear_global_cache()
 
     def test_set_global_cache_updates_type(self, tmp_path, caplog):
-        """Test that set_global_cache correctly updates the cache type."""
+        """Test that _set_global_cache correctly updates the cache type."""
         import logging
 
-        clear_global_cache()
+        _clear_global_cache()
 
         # Set a file-based cache
         file_cache = FileBasedTicketCache(cache_dir=tmp_path)
-        set_global_cache(file_cache)
+        _set_global_cache(file_cache)
 
         # Verify the cache is the file cache we set (use file type to match)
-        assert get_global_cache(cache_type="file") is file_cache
+        assert _get_global_cache(cache_type="file") is file_cache
 
         # Getting with memory type should raise (cache is file type)
         with pytest.raises(CacheConfigurationError):
-            get_global_cache(cache_type="memory")
+            _get_global_cache(cache_type="memory")
 
         # With strict=False, should warn and return existing
         with caplog.at_level(logging.WARNING):
-            cache = get_global_cache(cache_type="memory", strict=False)
+            cache = _get_global_cache(cache_type="memory", strict=False)
 
         assert cache is file_cache  # Should return existing cache
         assert "different configuration" in caplog.text
-        clear_global_cache()
+        _clear_global_cache()
