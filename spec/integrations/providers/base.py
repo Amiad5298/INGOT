@@ -453,6 +453,37 @@ class GenericTicket:
         # Final safety checks for git ref requirements (without prefix)
         return self._finalize_git_ref(slug)
 
+    # Windows reserved names (case-insensitive)
+    _WINDOWS_RESERVED_NAMES: frozenset[str] = frozenset(
+        {
+            "CON",
+            "PRN",
+            "AUX",
+            "NUL",
+            "COM1",
+            "COM2",
+            "COM3",
+            "COM4",
+            "COM5",
+            "COM6",
+            "COM7",
+            "COM8",
+            "COM9",
+            "LPT1",
+            "LPT2",
+            "LPT3",
+            "LPT4",
+            "LPT5",
+            "LPT6",
+            "LPT7",
+            "LPT8",
+            "LPT9",
+        }
+    )
+
+    # Maximum length for filename stems (prevents MAX_PATH issues)
+    _MAX_FILENAME_STEM_LENGTH: int = 64
+
     @property
     def safe_filename_stem(self) -> str:
         """Generate filesystem-safe stem from ticket ID.
@@ -463,6 +494,11 @@ class GenericTicket:
 
         This is CRITICAL for security: ticket IDs from platforms like
         GitHub can contain path-traversal characters (e.g., 'owner/repo#1').
+
+        Windows-safety features:
+        - Reserved names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) are prefixed
+        - Trailing dots and spaces are stripped (cause issues on Windows)
+        - Length is truncated to 64 characters (prevents MAX_PATH issues)
 
         Returns:
             Filesystem-safe string like 'owner_repo_1' or 'TEST-123'
@@ -491,28 +527,28 @@ class GenericTicket:
         # Strip leading/trailing underscores
         result = result.strip("_")
 
+        # Strip trailing dots and spaces (Windows filesystem issues)
+        result = result.rstrip(". ")
+
         # Handle empty result
         if not result:
             return "unknown-ticket"
 
+        # Check for Windows reserved names (case-insensitive)
+        if result.upper() in self._WINDOWS_RESERVED_NAMES:
+            result = f"ticket_{result}"
+
+        # Truncate to maximum length
+        if len(result) > self._MAX_FILENAME_STEM_LENGTH:
+            result = result[: self._MAX_FILENAME_STEM_LENGTH]
+            # Ensure truncation didn't leave trailing underscores/dots/spaces
+            result = result.rstrip("_. ")
+
+        # Final safety check for empty result after all processing
+        if not result:
+            return "unknown-ticket"
+
         return result
-
-    @property
-    def safe_branch_name(self) -> str:
-        """Generate safe git branch name from ticket (DEPRECATED).
-
-        This property is deprecated. Use branch_slug instead and prepend
-        the desired prefix (e.g., 'feature/') in the calling code.
-
-        Kept for backwards compatibility - returns full branch name with
-        semantic prefix.
-
-        Returns:
-            Git-compatible branch name like 'feat/proj-123-add-user-login'
-        """
-        prefix = self.semantic_branch_prefix
-        slug = self.branch_slug
-        return f"{prefix}/{slug}"
 
     def _generate_fallback_id(self) -> str:
         """Generate a deterministic fallback ID when sanitized ticket ID is empty.

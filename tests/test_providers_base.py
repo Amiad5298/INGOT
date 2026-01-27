@@ -4,7 +4,8 @@ Tests cover:
 - Platform, TicketStatus, TicketType enums
 - GenericTicket dataclass properties and methods
 - semantic_branch_prefix property
-- safe_branch_name property
+- branch_slug property
+- safe_filename_stem property
 - IssueTrackerProvider abstract methods
 - Default generate_branch_summary implementation
 - sanitize_for_branch_component helper function
@@ -324,11 +325,11 @@ class TestGenericTicketSemanticBranchPrefix:
         assert ticket.semantic_branch_prefix == "feature"
 
 
-class TestGenericTicketSafeBranchName:
-    """Tests for GenericTicket.safe_branch_name property."""
+class TestGenericTicketBranchSlug:
+    """Tests for GenericTicket.branch_slug property."""
 
-    def test_basic_branch_name_with_summary(self):
-        """Generates branch name with branch_summary."""
+    def test_basic_slug_with_summary(self):
+        """Generates slug with branch_summary."""
         ticket = GenericTicket(
             id="PROJ-123",
             platform=Platform.JIRA,
@@ -336,13 +337,14 @@ class TestGenericTicketSafeBranchName:
             type=TicketType.FEATURE,
             branch_summary="add-user-login",
         )
-        branch = ticket.safe_branch_name
-        assert branch.startswith("feat/")
-        assert "proj-123" in branch.lower()
-        assert "add-user-login" in branch.lower()
+        slug = ticket.branch_slug
+        assert "proj-123" in slug.lower()
+        assert "add-user-login" in slug.lower()
+        # branch_slug should NOT contain prefix
+        assert "/" not in slug
 
-    def test_branch_name_lowercase(self):
-        """Branch name contains lowercase ticket ID."""
+    def test_slug_is_lowercase(self):
+        """Slug contains lowercase ticket ID."""
         ticket = GenericTicket(
             id="TEST-1",
             platform=Platform.JIRA,
@@ -350,23 +352,23 @@ class TestGenericTicketSafeBranchName:
             type=TicketType.BUG,
             branch_summary="uppercase-fix",
         )
-        branch = ticket.safe_branch_name
-        assert "test-1" in branch  # ID is lowercased
+        slug = ticket.branch_slug
+        assert "test-1" in slug  # ID is lowercased
 
-    def test_branch_name_without_summary(self):
-        """Branch name works without branch_summary."""
+    def test_slug_without_summary(self):
+        """Slug works without branch_summary."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
             url="https://jira.example.com/T-1",
             type=TicketType.TASK,
         )
-        branch = ticket.safe_branch_name
-        # Should be prefix/id only
-        assert branch == "chore/t-1"
+        slug = ticket.branch_slug
+        # Should be id only (no prefix)
+        assert slug == "t-1"
 
-    def test_branch_name_includes_ticket_id(self):
-        """Includes ticket ID in branch name."""
+    def test_slug_includes_ticket_id(self):
+        """Includes ticket ID in slug."""
         ticket = GenericTicket(
             id="ABC-999",
             platform=Platform.JIRA,
@@ -374,11 +376,11 @@ class TestGenericTicketSafeBranchName:
             type=TicketType.FEATURE,
             branch_summary="feature-work",
         )
-        branch = ticket.safe_branch_name
-        assert "abc-999" in branch.lower()
+        slug = ticket.branch_slug
+        assert "abc-999" in slug.lower()
 
-    def test_bug_branch_starts_with_fix(self):
-        """Bug ticket branch starts with fix/."""
+    def test_slug_no_prefix_for_bug(self):
+        """Bug ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="BUG-1",
             platform=Platform.JIRA,
@@ -386,11 +388,13 @@ class TestGenericTicketSafeBranchName:
             type=TicketType.BUG,
             branch_summary="critical-issue",
         )
-        branch = ticket.safe_branch_name
-        assert branch.startswith("fix/")
+        slug = ticket.branch_slug
+        # Slug should NOT contain prefix - that's handled by caller
+        assert "/" not in slug
+        assert "bug-1" in slug
 
-    def test_task_branch_starts_with_chore(self):
-        """Task ticket branch starts with chore/."""
+    def test_slug_no_prefix_for_task(self):
+        """Task ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="TASK-1",
             platform=Platform.JIRA,
@@ -398,11 +402,12 @@ class TestGenericTicketSafeBranchName:
             type=TicketType.TASK,
             branch_summary="cleanup-code",
         )
-        branch = ticket.safe_branch_name
-        assert branch.startswith("chore/")
+        slug = ticket.branch_slug
+        assert "/" not in slug
+        assert "task-1" in slug
 
-    def test_maintenance_branch_starts_with_refactor(self):
-        """Maintenance ticket branch starts with refactor/."""
+    def test_slug_no_prefix_for_maintenance(self):
+        """Maintenance ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="MAINT-1",
             platform=Platform.JIRA,
@@ -410,11 +415,12 @@ class TestGenericTicketSafeBranchName:
             type=TicketType.MAINTENANCE,
             branch_summary="tech-debt",
         )
-        branch = ticket.safe_branch_name
-        assert branch.startswith("refactor/")
+        slug = ticket.branch_slug
+        assert "/" not in slug
+        assert "maint-1" in slug
 
-    def test_unknown_type_branch_starts_with_feature(self):
-        """Unknown type ticket branch starts with feature/."""
+    def test_slug_no_prefix_for_unknown(self):
+        """Unknown type ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="U-1",
             platform=Platform.JIRA,
@@ -422,12 +428,13 @@ class TestGenericTicketSafeBranchName:
             type=TicketType.UNKNOWN,
             branch_summary="something",
         )
-        branch = ticket.safe_branch_name
-        assert branch.startswith("feature/")
+        slug = ticket.branch_slug
+        assert "/" not in slug
+        assert "u-1" in slug
 
 
-class TestGenericTicketSafeBranchNameEdgeCases:
-    """Tests for GenericTicket.safe_branch_name edge cases."""
+class TestGenericTicketBranchSlugEdgeCases:
+    """Tests for GenericTicket.branch_slug edge cases."""
 
     def test_github_style_id_with_slash(self):
         """Handles GitHub-style IDs like owner/repo#42."""
@@ -438,10 +445,11 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.BUG,
             branch_summary="fix-bug",
         )
-        branch = ticket.safe_branch_name
-        assert "/" not in branch.split("/", 1)[1]  # No extra slashes after prefix
-        assert "#" not in branch
-        assert "owner-repo-42" in branch.lower()
+        slug = ticket.branch_slug
+        # branch_slug should NOT contain any slashes
+        assert "/" not in slug
+        assert "#" not in slug
+        assert "owner-repo-42" in slug.lower()
 
     def test_sanitizes_spaces_in_id(self):
         """Replaces spaces with hyphens in ticket ID."""
@@ -452,8 +460,8 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="test",
         )
-        branch = ticket.safe_branch_name
-        assert " " not in branch
+        slug = ticket.branch_slug
+        assert " " not in slug
 
     def test_sanitizes_colons_in_id(self):
         """Replaces colons with hyphens."""
@@ -464,8 +472,8 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.TASK,
             branch_summary="work",
         )
-        branch = ticket.safe_branch_name
-        assert ":" not in branch
+        slug = ticket.branch_slug
+        assert ":" not in slug
 
     def test_removes_double_dot_sequence(self):
         """Removes disallowed '..' sequence."""
@@ -476,8 +484,8 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="add..feature",
         )
-        branch = ticket.safe_branch_name
-        assert ".." not in branch
+        slug = ticket.branch_slug
+        assert ".." not in slug
 
     def test_removes_at_brace_sequence(self):
         """Removes disallowed '@{' sequence."""
@@ -488,8 +496,8 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="ref@{yesterday}",
         )
-        branch = ticket.safe_branch_name
-        assert "@{" not in branch
+        slug = ticket.branch_slug
+        assert "@{" not in slug
 
     def test_removes_trailing_slash(self):
         """Removes trailing slash."""
@@ -499,8 +507,8 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             url="https://jira.example.com/TEST-123",
             type=TicketType.FEATURE,
         )
-        branch = ticket.safe_branch_name
-        assert not branch.endswith("/")
+        slug = ticket.branch_slug
+        assert not slug.endswith("/")
 
     def test_removes_lock_suffix(self):
         """Removes .lock suffix."""
@@ -511,8 +519,8 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="config.lock",
         )
-        branch = ticket.safe_branch_name
-        assert not branch.endswith(".lock")
+        slug = ticket.branch_slug
+        assert not slug.endswith(".lock")
 
     def test_generates_summary_from_title_when_empty(self):
         """Generates safe summary from title when branch_summary is empty."""
@@ -524,10 +532,10 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             title="Add User Authentication Feature",
             branch_summary="",  # Empty
         )
-        branch = ticket.safe_branch_name
-        assert "add" in branch.lower()
-        assert "user" in branch.lower()
-        assert "authentication" in branch.lower()
+        slug = ticket.branch_slug
+        assert "add" in slug.lower()
+        assert "user" in slug.lower()
+        assert "authentication" in slug.lower()
 
     def test_handles_empty_title_and_summary(self):
         """Works with both empty title and summary."""
@@ -539,8 +547,9 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             title="",
             branch_summary="",
         )
-        branch = ticket.safe_branch_name
-        assert branch == "chore/test-123"
+        slug = ticket.branch_slug
+        # branch_slug does NOT include prefix
+        assert slug == "test-123"
 
     def test_sanitizes_special_characters_in_summary(self):
         """Sanitizes special characters in branch summary."""
@@ -551,11 +560,11 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.BUG,
             branch_summary="fix: [critical] issue~1",
         )
-        branch = ticket.safe_branch_name
-        assert ":" not in branch
-        assert "[" not in branch
-        assert "]" not in branch
-        assert "~" not in branch
+        slug = ticket.branch_slug
+        assert ":" not in slug
+        assert "[" not in slug
+        assert "]" not in slug
+        assert "~" not in slug
 
     def test_collapses_consecutive_hyphens(self):
         """Collapses multiple consecutive hyphens."""
@@ -566,11 +575,11 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="some---feature",
         )
-        branch = ticket.safe_branch_name
-        assert "---" not in branch
+        slug = ticket.branch_slug
+        assert "---" not in slug
 
     def test_output_is_entirely_lowercase(self):
-        """Branch name is entirely lowercase."""
+        """Slug is entirely lowercase."""
         ticket = GenericTicket(
             id="UPPERCASE-ID",
             platform=Platform.JIRA,
@@ -578,13 +587,11 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="MixedCase-Summary",
         )
-        branch = ticket.safe_branch_name
-        assert branch == branch.lower()
+        slug = ticket.branch_slug
+        assert slug == slug.lower()
 
     def test_output_contains_only_safe_characters(self):
-        """Branch name contains only [a-z0-9/-] characters."""
-        import re
-
+        """Slug contains only [a-z0-9-] characters (no slash)."""
         ticket = GenericTicket(
             id="PROJ@123",
             platform=Platform.JIRA,
@@ -592,9 +599,9 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="feature! with [special] chars: test~1",
         )
-        branch = ticket.safe_branch_name
-        # Only a-z, 0-9, hyphens, and one forward slash (prefix separator)
-        assert re.match(r"^[a-z0-9]+/[a-z0-9-]+$", branch), f"Invalid branch: {branch}"
+        slug = ticket.branch_slug
+        # Only a-z, 0-9, hyphens (NO forward slash in slug)
+        assert re.match(r"^[a-z0-9-]+$", slug), f"Invalid slug: {slug}"
 
     def test_summary_with_spaces_and_punctuation(self):
         """Summaries with spaces and punctuation are properly sanitized."""
@@ -605,15 +612,15 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.BUG,
             branch_summary="Fix the API endpoint (urgent)!",
         )
-        branch = ticket.safe_branch_name
-        assert " " not in branch
-        assert "(" not in branch
-        assert ")" not in branch
-        assert "!" not in branch
-        assert branch == branch.lower()
-        # Verify structure
-        assert branch.startswith("fix/")
-        assert "test-123" in branch
+        slug = ticket.branch_slug
+        assert " " not in slug
+        assert "(" not in slug
+        assert ")" not in slug
+        assert "!" not in slug
+        assert slug == slug.lower()
+        # Verify structure (no prefix in slug)
+        assert "/" not in slug
+        assert "test-123" in slug
 
     def test_summary_with_unicode_characters(self):
         """Unicode characters are replaced with hyphens."""
@@ -624,11 +631,9 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="Add émoji 🎉 support",
         )
-        branch = ticket.safe_branch_name
-        # Unicode should be replaced, result should be safe
-        import re
-
-        assert re.match(r"^[a-z0-9]+/[a-z0-9-]+$", branch), f"Invalid branch: {branch}"
+        slug = ticket.branch_slug
+        # Unicode should be replaced, result should be safe (no slash)
+        assert re.match(r"^[a-z0-9-]+$", slug), f"Invalid slug: {slug}"
 
     def test_complex_github_style_id(self):
         """Complex GitHub-style IDs like 'org/repo#123' are properly sanitized."""
@@ -639,14 +644,12 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.BUG,
             branch_summary="fix-auth-issue",
         )
-        branch = ticket.safe_branch_name
-        # Should not contain / (except prefix separator), should not contain #
-        parts = branch.split("/", 1)
-        assert len(parts) == 2
-        assert "/" not in parts[1]
-        assert "#" not in parts[1]
+        slug = ticket.branch_slug
+        # branch_slug should NOT contain any slashes or #
+        assert "/" not in slug
+        assert "#" not in slug
         # The ID portion should be sanitized to my-org-my-repo-456
-        assert "my-org-my-repo-456" in branch.lower()
+        assert "my-org-my-repo-456" in slug.lower()
 
     def test_deterministic_output(self):
         """Same input produces same output every time."""
@@ -657,10 +660,10 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.FEATURE,
             branch_summary="New Feature: Add SSO",
         )
-        branch1 = ticket.safe_branch_name
-        branch2 = ticket.safe_branch_name
-        branch3 = ticket.safe_branch_name
-        assert branch1 == branch2 == branch3
+        slug1 = ticket.branch_slug
+        slug2 = ticket.branch_slug
+        slug3 = ticket.branch_slug
+        assert slug1 == slug2 == slug3
 
     def test_empty_branch_summary_uses_title(self):
         """When branch_summary is empty, uses sanitized title (max 50 chars)."""
@@ -673,9 +676,9 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             title=long_title,
             branch_summary="",
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
         # Should use title, truncated and sanitized
-        assert "a" in branch  # From the A's in title
+        assert "a" in slug  # From the A's in title
 
     def test_id_with_dots_handled(self):
         """IDs containing dots are properly sanitized."""
@@ -686,9 +689,9 @@ class TestGenericTicketSafeBranchNameEdgeCases:
             type=TicketType.TASK,
             branch_summary="task-work",
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
         # Dots should be replaced
-        assert ".." not in branch
+        assert ".." not in slug
 
 
 class TestIssueTrackerProviderABC:
@@ -1032,8 +1035,8 @@ class TestProviderPlatformAttribute:
         assert not init_called, "Provider should not be instantiated during registration"
 
 
-class TestGenericTicketSafeBranchNameFallback:
-    """Tests for GenericTicket.safe_branch_name empty ID fallback.
+class TestGenericTicketBranchSlugFallback:
+    """Tests for GenericTicket.branch_slug empty ID fallback.
 
     These tests verify that when the ticket ID sanitizes to empty,
     a deterministic fallback ID is used.
@@ -1047,20 +1050,17 @@ class TestGenericTicketSafeBranchNameFallback:
             url="https://jira.example.com/emoji",
             type=TicketType.FEATURE,
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Should have format prefix/fallback-id
-        assert branch.startswith("feat/")
-        assert "ticket-" in branch
+        # branch_slug should NOT have prefix
+        assert "/" not in slug
+        assert "ticket-" in slug
         # Should be deterministic
-        assert ticket.safe_branch_name == branch
+        assert ticket.branch_slug == slug
         # Verify fallback ID format (ticket-<6-char-hash>)
-        parts = branch.split("/")
-        assert len(parts) == 2
-        id_part = parts[1]
-        assert id_part.startswith("ticket-")
+        assert slug.startswith("ticket-")
         # Hash should be 6 hex chars
-        hash_part = id_part.split("-")[1]
+        hash_part = slug.split("-")[1]
         assert len(hash_part) == 6
         assert all(c in "0123456789abcdef" for c in hash_part)
 
@@ -1072,13 +1072,13 @@ class TestGenericTicketSafeBranchNameFallback:
             url="https://jira.example.com/special",
             type=TicketType.BUG,
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Should have format prefix/fallback-id
-        assert branch.startswith("fix/")
-        assert "ticket-" in branch
-        # Should match allowed pattern
-        assert re.match(r"^[a-z]+/ticket-[a-f0-9]{6}$", branch)
+        # branch_slug should NOT have prefix
+        assert "/" not in slug
+        assert "ticket-" in slug
+        # Should match allowed pattern (no prefix)
+        assert re.match(r"^ticket-[a-f0-9]{6}$", slug)
 
     def test_fallback_id_is_deterministic(self):
         """Same original ID produces same fallback hash."""
@@ -1097,7 +1097,7 @@ class TestGenericTicketSafeBranchNameFallback:
             type=TicketType.TASK,
         )
 
-        assert ticket1.safe_branch_name == ticket2.safe_branch_name
+        assert ticket1.branch_slug == ticket2.branch_slug
 
     def test_different_emoji_ids_produce_different_fallbacks(self):
         """Different emoji IDs produce different fallback hashes."""
@@ -1114,7 +1114,7 @@ class TestGenericTicketSafeBranchNameFallback:
             type=TicketType.FEATURE,
         )
 
-        assert ticket1.safe_branch_name != ticket2.safe_branch_name
+        assert ticket1.branch_slug != ticket2.branch_slug
 
     def test_fallback_with_branch_summary(self):
         """Fallback ID works with branch summary."""
@@ -1125,16 +1125,16 @@ class TestGenericTicketSafeBranchNameFallback:
             type=TicketType.FEATURE,
             branch_summary="add-feature",
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Should have format: prefix/fallback-id-summary
-        assert branch.startswith("feat/")
-        assert "ticket-" in branch
-        assert "add-feature" in branch
+        # branch_slug should NOT have prefix
+        assert "/" not in slug
+        assert "ticket-" in slug
+        assert "add-feature" in slug
 
 
-class TestGenericTicketSafeBranchNameLongSummary:
-    """Tests for GenericTicket.safe_branch_name with long summaries.
+class TestGenericTicketBranchSlugLongSummary:
+    """Tests for GenericTicket.branch_slug with long summaries.
 
     These tests verify that long branch_summary values are truncated
     and don't produce trailing hyphens.
@@ -1150,13 +1150,12 @@ class TestGenericTicketSafeBranchNameLongSummary:
             type=TicketType.FEATURE,
             branch_summary=long_summary,
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Branch should be reasonable length
-        # prefix (4-7) + "/" + id (8) + "-" + summary (max 50) = ~66 max
-        assert len(branch) <= 70
-        # Should contain truncated summary
-        assert branch.startswith("feat/test-123-")
+        # Slug should be reasonable length (id (8) + "-" + summary (max 50) = ~59 max)
+        assert len(slug) <= 65
+        # Should contain truncated summary (no prefix in slug)
+        assert slug.startswith("test-123-")
 
     def test_long_summary_with_special_chars_truncated_cleanly(self):
         """Long summary with special chars truncates without trailing hyphen."""
@@ -1169,10 +1168,10 @@ class TestGenericTicketSafeBranchNameLongSummary:
             type=TicketType.BUG,
             branch_summary=long_summary,
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
         # Should not end with hyphen
-        assert not branch.endswith("-")
+        assert not slug.endswith("-")
 
     def test_long_summary_500_chars(self):
         """500-char summary is truncated properly."""
@@ -1185,14 +1184,14 @@ class TestGenericTicketSafeBranchNameLongSummary:
             type=TicketType.TASK,
             branch_summary=long_summary,
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Verify reasonable length
-        assert len(branch) <= 70
+        # Verify reasonable length (no prefix in slug)
+        assert len(slug) <= 65
         # Verify no trailing hyphen
-        assert not branch.endswith("-")
-        # Verify matches allowed pattern
-        assert re.match(r"^[a-z]+/[a-z0-9-]+$", branch)
+        assert not slug.endswith("-")
+        # Verify matches allowed pattern (no slash in slug)
+        assert re.match(r"^[a-z0-9-]+$", slug)
 
     def test_long_summary_unicode_truncation(self):
         """Unicode in long summary is handled during truncation."""
@@ -1205,25 +1204,25 @@ class TestGenericTicketSafeBranchNameLongSummary:
             type=TicketType.FEATURE,
             branch_summary=long_summary,
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
         # Should be truncated and safe
-        assert len(branch) <= 70
-        # Should not contain unicode
-        assert all(c in "abcdefghijklmnopqrstuvwxyz0123456789-/" for c in branch)
+        assert len(slug) <= 65
+        # Should not contain unicode (no slash in slug)
+        assert all(c in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in slug)
 
 
-class TestGenericTicketSafeBranchNameNoMalformed:
-    """Tests ensuring safe_branch_name never produces malformed branches.
+class TestGenericTicketBranchSlugNoMalformed:
+    """Tests ensuring branch_slug never produces malformed slugs.
 
-    These tests verify that the branch name always has proper structure:
-    - Never just the prefix (e.g., "feat" or "fix")
+    These tests verify that the slug always has proper structure:
+    - Never empty
     - Always has ticket ID component
-    - Proper format: prefix/id or prefix/id-summary
+    - Proper format: id or id-summary
     """
 
-    def test_never_returns_prefix_only(self):
-        """Branch name never degenerates to just prefix."""
+    def test_never_returns_empty(self):
+        """Slug never degenerates to empty string."""
         # Even with empty everything, should have fallback ID
         ticket = GenericTicket(
             id="🎉",  # Will sanitize to empty
@@ -1233,18 +1232,16 @@ class TestGenericTicketSafeBranchNameNoMalformed:
             title="",
             branch_summary="",
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Should not be just "feat" or "feat/"
-        assert branch != "feat"
-        assert branch != "feat/"
-        assert "/" in branch
-        parts = branch.split("/")
-        assert len(parts) == 2
-        assert len(parts[1]) > 0  # Has ID component
+        # Should not be empty
+        assert slug != ""
+        assert len(slug) > 0
+        # Should have fallback ID
+        assert "ticket-" in slug
 
-    def test_never_returns_prefix_hyphen_only(self):
-        """Branch name never degenerates to 'prefix/-'."""
+    def test_never_returns_just_hyphen(self):
+        """Slug never degenerates to just '-'."""
         # ID that sanitizes to empty, summary that sanitizes to empty
         ticket = GenericTicket(
             id="@#$",
@@ -1253,17 +1250,17 @@ class TestGenericTicketSafeBranchNameNoMalformed:
             type=TicketType.BUG,
             branch_summary="!@#$%",  # Will sanitize to empty
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Should not have patterns like "/-" or "-/"
-        assert "/-" not in branch
-        assert "-/" not in branch
-        # Should have format prefix/ticket-hash-unnamed-ticket
+        # Should not have patterns like leading/trailing hyphens
+        assert not slug.startswith("-")
+        assert not slug.endswith("-")
+        # Should have format ticket-hash-unnamed-ticket
         # (because branch_summary had content that sanitized to empty)
-        assert re.match(r"^fix/ticket-[a-f0-9]{6}-unnamed-ticket$", branch)
+        assert re.match(r"^ticket-[a-f0-9]{6}-unnamed-ticket$", slug)
 
-    def test_all_ticket_types_produce_valid_branches(self):
-        """All ticket types produce valid branch names with fallback ID."""
+    def test_all_ticket_types_produce_valid_slugs(self):
+        """All ticket types produce valid slugs with fallback ID."""
         for ticket_type in TicketType:
             ticket = GenericTicket(
                 id="🔥",  # Will need fallback
@@ -1271,20 +1268,17 @@ class TestGenericTicketSafeBranchNameNoMalformed:
                 url="https://jira.example.com/test",
                 type=ticket_type,
             )
-            branch = ticket.safe_branch_name
+            slug = ticket.branch_slug
 
-            # Should have valid format
-            assert "/" in branch
-            parts = branch.split("/")
-            assert len(parts) == 2
-            assert len(parts[0]) > 0  # Has prefix
-            assert len(parts[1]) > 0  # Has ID
+            # Should have valid format (no slash in slug)
+            assert "/" not in slug
+            assert len(slug) > 0
 
             # Should contain only valid chars
-            assert re.match(r"^[a-z]+/[a-z0-9-]+$", branch)
+            assert re.match(r"^[a-z0-9-]+$", slug)
 
     def test_empty_id_with_title_fallback(self):
-        """Empty sanitized ID with title still produces valid branch."""
+        """Empty sanitized ID with title still produces valid slug."""
         ticket = GenericTicket(
             id="🎉",  # Will sanitize to empty
             platform=Platform.JIRA,
@@ -1292,13 +1286,13 @@ class TestGenericTicketSafeBranchNameNoMalformed:
             type=TicketType.FEATURE,
             title="Add user login feature",
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Should have format prefix/fallback-id-summary
-        assert branch.startswith("feat/")
-        assert "ticket-" in branch
+        # Should have fallback ID (no prefix in slug)
+        assert "/" not in slug
+        assert "ticket-" in slug
         # Should include title-derived summary
-        assert "add" in branch or "user" in branch or "login" in branch
+        assert "add" in slug or "user" in slug or "login" in slug
 
     def test_whitespace_only_branch_summary_handled(self):
         """Whitespace-only branch_summary doesn't cause issues."""
@@ -1309,12 +1303,197 @@ class TestGenericTicketSafeBranchNameNoMalformed:
             type=TicketType.TASK,
             branch_summary="   \t\n   ",  # Whitespace only
         )
-        branch = ticket.safe_branch_name
+        slug = ticket.branch_slug
 
-        # Should work without summary
-        assert branch.startswith("chore/test-123")
+        # Should work without summary (no prefix in slug)
+        assert slug.startswith("test-123")
         # Should not have trailing hyphen
-        assert not branch.endswith("-")
+        assert not slug.endswith("-")
+
+
+class TestGenericTicketSafeFilenameStem:
+    """Tests for GenericTicket.safe_filename_stem property.
+
+    These tests verify that the safe_filename_stem property:
+    - Handles Windows reserved names by prepending 'ticket_'
+    - Strips trailing dots and spaces
+    - Truncates to 64 characters max
+    - Sanitizes unsafe filesystem characters
+    """
+
+    def test_basic_stem(self):
+        """Basic ticket ID produces expected stem."""
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+        )
+        assert ticket.safe_filename_stem == "TEST-123"
+
+    def test_github_style_id(self):
+        """GitHub-style IDs are sanitized."""
+        ticket = GenericTicket(
+            id="owner/repo#42",
+            platform=Platform.GITHUB,
+            url="https://github.com/owner/repo/issues/42",
+        )
+        stem = ticket.safe_filename_stem
+        assert "/" not in stem
+        assert "#" not in stem
+        assert stem == "owner_repo_42"
+
+    def test_windows_reserved_name_con(self):
+        """Windows reserved name CON is prefixed."""
+        ticket = GenericTicket(
+            id="CON",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/CON",
+        )
+        assert ticket.safe_filename_stem == "ticket_CON"
+
+    def test_windows_reserved_name_prn(self):
+        """Windows reserved name PRN is prefixed."""
+        ticket = GenericTicket(
+            id="PRN",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/PRN",
+        )
+        assert ticket.safe_filename_stem == "ticket_PRN"
+
+    def test_windows_reserved_name_aux(self):
+        """Windows reserved name AUX is prefixed."""
+        ticket = GenericTicket(
+            id="AUX",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/AUX",
+        )
+        assert ticket.safe_filename_stem == "ticket_AUX"
+
+    def test_windows_reserved_name_nul(self):
+        """Windows reserved name NUL is prefixed."""
+        ticket = GenericTicket(
+            id="NUL",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/NUL",
+        )
+        assert ticket.safe_filename_stem == "ticket_NUL"
+
+    def test_windows_reserved_name_com1(self):
+        """Windows reserved name COM1 is prefixed."""
+        ticket = GenericTicket(
+            id="COM1",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/COM1",
+        )
+        assert ticket.safe_filename_stem == "ticket_COM1"
+
+    def test_windows_reserved_name_lpt9(self):
+        """Windows reserved name LPT9 is prefixed."""
+        ticket = GenericTicket(
+            id="LPT9",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/LPT9",
+        )
+        assert ticket.safe_filename_stem == "ticket_LPT9"
+
+    def test_windows_reserved_name_case_insensitive(self):
+        """Windows reserved name check is case-insensitive."""
+        ticket = GenericTicket(
+            id="con",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/con",
+        )
+        assert ticket.safe_filename_stem == "ticket_con"
+
+    def test_trailing_dot_stripped(self):
+        """Trailing dots are stripped."""
+        ticket = GenericTicket(
+            id="TEST-123...",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+        )
+        stem = ticket.safe_filename_stem
+        assert not stem.endswith(".")
+
+    def test_trailing_space_stripped(self):
+        """Trailing spaces are stripped."""
+        ticket = GenericTicket(
+            id="TEST-123   ",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+        )
+        stem = ticket.safe_filename_stem
+        assert not stem.endswith(" ")
+
+    def test_long_id_truncated(self):
+        """Long ticket IDs are truncated to 64 characters."""
+        long_id = "A" * 100
+        ticket = GenericTicket(
+            id=long_id,
+            platform=Platform.JIRA,
+            url="https://jira.example.com/test",
+        )
+        stem = ticket.safe_filename_stem
+        assert len(stem) <= 64
+
+    def test_truncation_preserves_content(self):
+        """Truncation keeps the first 64 characters."""
+        long_id = "X" * 64 + "Y" * 36
+        ticket = GenericTicket(
+            id=long_id,
+            platform=Platform.JIRA,
+            url="https://jira.example.com/test",
+        )
+        stem = ticket.safe_filename_stem
+        assert len(stem) == 64
+        assert all(c == "X" for c in stem)
+
+    def test_truncation_cleans_trailing_underscore(self):
+        """Truncation strips trailing underscores from result."""
+        # Create ID that would have underscore at position 64
+        id_with_special = "A" * 63 + "/" + "B" * 10
+        ticket = GenericTicket(
+            id=id_with_special,
+            platform=Platform.JIRA,
+            url="https://jira.example.com/test",
+        )
+        stem = ticket.safe_filename_stem
+        assert len(stem) <= 64
+        assert not stem.endswith("_")
+
+    def test_empty_id_returns_fallback(self):
+        """Empty ID returns 'unknown-ticket'."""
+        ticket = GenericTicket(
+            id="",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/test",
+        )
+        assert ticket.safe_filename_stem == "unknown-ticket"
+
+    def test_special_chars_only_returns_fallback(self):
+        """ID with only special chars returns 'unknown-ticket'."""
+        ticket = GenericTicket(
+            id="///###",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/test",
+        )
+        assert ticket.safe_filename_stem == "unknown-ticket"
+
+    def test_unsafe_chars_replaced(self):
+        """Unsafe filesystem characters are replaced."""
+        ticket = GenericTicket(
+            id='TEST:*?"<>|123',
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+        )
+        stem = ticket.safe_filename_stem
+        assert ":" not in stem
+        assert "*" not in stem
+        assert "?" not in stem
+        assert '"' not in stem
+        assert "<" not in stem
+        assert ">" not in stem
+        assert "|" not in stem
 
 
 class TestGenericTicketSerialization:
