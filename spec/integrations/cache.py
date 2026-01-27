@@ -514,20 +514,36 @@ class FileBasedTicketCache(TicketCache):
             prefix=".cache_",
             dir=self.cache_dir,
         )
+        fd_closed = False
         write_succeeded = False
         try:
             # Write to temp file - may raise TypeError/ValueError for non-serializable data
-            with os.fdopen(fd, "w") as f:
+            # P0 FIX: Handle case where os.fdopen fails (rare, but must close fd explicitly)
+            try:
+                f = os.fdopen(fd, "w")
+                fd_closed = True  # os.fdopen now owns the fd
+            except (OSError, ValueError):
+                # os.fdopen failed, we must close the raw fd ourselves
+                os.close(fd)
+                fd_closed = True
+                raise
+            try:
                 json.dump(data, f, indent=2)
+            finally:
+                f.close()
             # Atomic rename (os.replace is atomic on POSIX)
             os.replace(tmp_path, path)
             write_succeeded = True
         finally:
             # Always clean up temp file on any failure (TypeError, ValueError, OSError, etc.)
             if not write_succeeded:
+                # P0 FIX: Ensure fd is closed even if os.fdopen was never called
+                if not fd_closed:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
                 try:
-                    # File descriptor may already be closed by os.fdopen context manager,
-                    # but we still need to remove the temp file
                     os.unlink(tmp_path)
                 except OSError:
                     pass  # File may not exist or already deleted

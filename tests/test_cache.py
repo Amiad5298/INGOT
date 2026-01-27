@@ -570,6 +570,57 @@ class TestFileBasedTicketCache:
         key = CacheKey.from_ticket(ticket_with_bad_metadata)
         assert cache.get(key) is None
 
+    def test_atomic_write_cleans_up_on_json_dump_type_error(self, tmp_path, sample_ticket):
+        """Test that _atomic_write cleans up temp files when json.dump raises TypeError.
+
+        P0 Fix: Uses unittest.mock to directly mock json.dump to raise TypeError,
+        ensuring the cleanup path in _atomic_write's finally block is exercised.
+        """
+        from unittest.mock import patch
+
+        cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
+
+        # Mock json.dump to raise TypeError
+        with patch(
+            "spec.integrations.cache.json.dump", side_effect=TypeError("Test serialization error")
+        ):
+            # This should raise TypeError (not caught by set())
+            # Actually, set() catches TypeError and logs a warning
+            cache.set(sample_ticket)
+
+        # Check that no .tmp files were left behind
+        tmp_files = list(tmp_path.glob(".cache_*.tmp"))
+        assert len(tmp_files) == 0, f"Orphaned temp files found: {tmp_files}"
+
+        # Verify the cache directory is empty (no successful writes)
+        json_files = list(tmp_path.glob("*.json"))
+        assert len(json_files) == 0, f"Unexpected cache files found: {json_files}"
+
+    def test_atomic_write_raises_and_cleans_up_on_type_error(self, tmp_path):
+        """Test that _atomic_write raises TypeError but still cleans up temp files.
+
+        This test directly calls _atomic_write to verify the exception bubbles up
+        while temp files are still cleaned.
+        """
+        from unittest.mock import patch
+
+        cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
+
+        test_path = tmp_path / "test_write.json"
+        test_data = {"key": "value"}
+
+        # Mock json.dump to raise TypeError
+        with patch("spec.integrations.cache.json.dump", side_effect=TypeError("Test error")):
+            with pytest.raises(TypeError, match="Test error"):
+                cache._atomic_write(test_path, test_data)
+
+        # Check that no .tmp files were left behind
+        tmp_files = list(tmp_path.glob(".cache_*.tmp"))
+        assert len(tmp_files) == 0, f"Orphaned temp files found: {tmp_files}"
+
+        # Test file should not exist either
+        assert not test_path.exists()
+
     def test_eviction_threshold_with_small_max_size(self, tmp_path):
         """Test that math.ceil correctly provides buffer for small max_size values.
 
@@ -623,6 +674,73 @@ class TestFileBasedTicketCache:
         # The two newest tickets should remain (THRESH-2 and THRESH-3)
         assert cache.get(CacheKey(Platform.JIRA, "THRESH-2")) is not None
         assert cache.get(CacheKey(Platform.JIRA, "THRESH-3")) is not None
+
+    def test_eviction_threshold_boundary_max_size_5(self, tmp_path):
+        """Test eviction threshold boundary: max_size=5, threshold=ceil(5*1.1)=6.
+
+        Verifies:
+        - Eviction does NOT trigger when count is 5 (at max_size)
+        - Eviction does NOT trigger when count is 6 (at threshold)
+        - Eviction DOES trigger when count exceeds 6 (> threshold)
+        """
+        cache = FileBasedTicketCache(
+            cache_dir=tmp_path,
+            default_ttl=timedelta(hours=1),
+            max_size=5,
+        )
+        base_time = time.time()
+
+        def create_and_set_ticket(idx: int) -> GenericTicket:
+            ticket = GenericTicket(
+                id=f"BOUND-{idx}",
+                platform=Platform.JIRA,
+                url=f"https://example.com/BOUND-{idx}",
+                title=f"Boundary Ticket {idx}",
+                description="",
+                status=TicketStatus.OPEN,
+                type=TicketType.TASK,
+                assignee=None,
+                labels=[],
+                created_at=None,
+                updated_at=None,
+                branch_summary=f"bound-ticket-{idx}",
+                platform_metadata={},
+            )
+            cache.set(ticket)
+            # Set explicit timestamp for deterministic ordering
+            key = CacheKey.from_ticket(ticket)
+            path = cache._get_path(key)
+            if path.exists():
+                file_time = base_time + idx
+                os.utime(path, (file_time, file_time))
+            return ticket
+
+        # Add exactly 5 tickets (at max_size)
+        for i in range(5):
+            create_and_set_ticket(i)
+
+        # Force eviction - should NOT evict (5 <= 6 threshold)
+        cache.force_evict()
+        assert cache.size() == 5, "No eviction should occur when count equals max_size"
+
+        # Add 1 more ticket (now at 6, which equals threshold)
+        create_and_set_ticket(5)
+        cache.force_evict()
+        assert cache.size() == 6, "No eviction should occur when count equals threshold (6)"
+
+        # Add 1 more ticket (now at 7, exceeds threshold)
+        create_and_set_ticket(6)
+        cache.force_evict()
+        # After eviction, should be back to max_size=5
+        assert cache.size() == 5, "Eviction should occur when count exceeds threshold"
+
+        # The 5 newest tickets should remain (BOUND-2 through BOUND-6)
+        assert cache.get(CacheKey(Platform.JIRA, "BOUND-0")) is None
+        assert cache.get(CacheKey(Platform.JIRA, "BOUND-1")) is None
+        for i in range(2, 7):
+            assert (
+                cache.get(CacheKey(Platform.JIRA, f"BOUND-{i}")) is not None
+            ), f"BOUND-{i} should remain"
 
     def test_eviction_handles_file_deletion_race(self, tmp_path):
         """Test that eviction handles files being deleted during scan.
