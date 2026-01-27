@@ -25,14 +25,12 @@ from spec.integrations.auth import (
     PlatformCredentials,
 )
 from spec.integrations.cache import (
+    CacheConfigurationError,
     CachedTicket,
     CacheKey,
     FileBasedTicketCache,
     InMemoryTicketCache,
     TicketCache,
-    clear_global_cache,
-    get_global_cache,
-    set_global_cache,
 )
 from spec.integrations.git import (
     DirtyStateAction,
@@ -55,6 +53,10 @@ from spec.integrations.jira import (
     fetch_ticket_info,
     parse_jira_ticket,
 )
+from spec.integrations.ticket_service import (
+    TicketService,
+    create_ticket_service,
+)
 
 __all__ = [
     # Authentication
@@ -63,12 +65,14 @@ __all__ = [
     # Cache
     "CacheKey",
     "CachedTicket",
+    "CacheConfigurationError",
     "TicketCache",
     "InMemoryTicketCache",
     "FileBasedTicketCache",
-    "get_global_cache",
-    "set_global_cache",
-    "clear_global_cache",
+    # Note: _get_global_cache, _set_global_cache, _clear_global_cache are
+    # internal APIs imported above for testing/legacy support only.
+    # They are intentionally NOT exported in __all__ per AMI-32 spec.
+    # Production code should use dependency injection via TicketService.
     # Git
     "DirtyStateAction",
     "is_git_repo",
@@ -101,4 +105,7 @@ __all__ = [
     "SPECFLOW_AGENT_TASKLIST",
     "SPECFLOW_AGENT_IMPLEMENTER",
     "SPECFLOW_AGENT_REVIEWER",
+    # TicketService
+    "TicketService",
+    "create_ticket_service",
 ]

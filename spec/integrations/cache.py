@@ -21,10 +21,12 @@ import copy
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import tempfile
 import threading
+import urllib.parse
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -44,6 +46,10 @@ logger = logging.getLogger(__name__)
 class CacheKey:
     """Unique cache key for ticket data.
 
+    P2 Fix: ticket_id is URL-encoded in __str__ to handle special characters
+    like colons (:) which could otherwise break parsing logic. The encoding
+    uses 'safe=""' to ensure all special chars are encoded.
+
     Attributes:
         platform: The platform this ticket belongs to
         ticket_id: Normalized ticket identifier (e.g., 'PROJ-123', 'owner/repo#42')
@@ -53,12 +59,14 @@ class CacheKey:
     ticket_id: str
 
     def __str__(self) -> str:
-        """Generate string key for storage."""
-        return f"{self.platform.name}:{self.ticket_id}"
+        """Generate string key for storage.
 
-    def __hash__(self) -> int:
-        """Hash for dict key usage."""
-        return hash((self.platform, self.ticket_id))
+        P2 Fix: URL-encodes ticket_id to safely handle special characters
+        (colons, slashes, etc.) that could break parsing. Uses safe="" to
+        encode all special characters for maximum safety.
+        """
+        encoded_id = urllib.parse.quote(self.ticket_id, safe="")
+        return f"{self.platform.name}:{encoded_id}"
 
     @classmethod
     def from_ticket(cls, ticket: GenericTicket) -> CacheKey:
@@ -350,10 +358,21 @@ class FileBasedTicketCache(TicketCache):
     Concurrency Model:
         - Uses threading.Lock for thread-safe access within a single process.
         - Uses atomic writes (tempfile + os.replace) for crash-safety.
-        - For multi-process scenarios, this cache is optimistic: the last writer
-          wins, but partial/corrupted writes are prevented by atomic rename.
+        - Optimistic concurrency (Last-writer-wins) for multi-process scenarios.
+          Partial/corrupted writes are prevented by atomic rename.
         - LRU eviction uses file modification time; get() updates mtime to ensure
           recently accessed items are retained.
+
+    Warning:
+        **NOT MULTI-PROCESS SAFE** without external locking (e.g., file locks,
+        Redis, or a dedicated cache service). Concurrent access from multiple
+        processes may result in:
+        - Lost updates (last writer wins)
+        - Inconsistent reads during concurrent writes
+        - Race conditions during eviction
+
+        For multi-process deployments, consider using Redis or a database-backed
+        cache, or implement external file locking.
 
     Lazy Eviction Strategy:
         - Eviction only runs probabilistically (10% chance per write) when cache
@@ -375,6 +394,8 @@ class FileBasedTicketCache(TicketCache):
         cache_dir: Path | None = None,
         default_ttl: timedelta = timedelta(hours=1),
         max_size: int = 0,
+        *,
+        eviction_rng: random.Random | None = None,
     ) -> None:
         """Initialize file-based cache.
 
@@ -382,6 +403,9 @@ class FileBasedTicketCache(TicketCache):
             cache_dir: Directory for cache files (default: ~/.specflow-cache)
             default_ttl: Default TTL for entries (default: 1 hour)
             max_size: Maximum entries before LRU eviction (0 = unlimited)
+            eviction_rng: Optional Random instance for deterministic eviction
+                behavior in tests. If None (default), uses global random.random().
+                Pass random.Random(seed) for reproducible eviction behavior.
         """
         self.cache_dir = cache_dir or Path.home() / ".specflow-cache"
         self.default_ttl = default_ttl
@@ -390,6 +414,8 @@ class FileBasedTicketCache(TicketCache):
         self._lock = threading.Lock()
         # Approximate cache size to avoid frequent disk scans
         self._approx_size: int | None = None
+        # P2 FIX: Injectable RNG for deterministic testing
+        self._eviction_rng = eviction_rng
 
     def _get_path(self, key: CacheKey) -> Path:
         """Get file path for cache key.
@@ -490,6 +516,15 @@ class FileBasedTicketCache(TicketCache):
 
         This prevents partial/corrupted writes if the process crashes.
         os.replace() is atomic on POSIX systems.
+
+        P0 Fix: Uses try...finally to ensure temp file cleanup for ANY
+        failure (TypeError from json.dump, OSError, etc.), preventing resource leaks.
+        Also ensures fd is closed even if os.fdopen fails to take ownership.
+
+        Raises:
+            TypeError: If data contains non-JSON-serializable objects
+            ValueError: If data cannot be serialized
+            OSError: If file operations fail
         """
         # Create temp file in same directory to ensure same filesystem
         fd, tmp_path = tempfile.mkstemp(
@@ -497,19 +532,27 @@ class FileBasedTicketCache(TicketCache):
             prefix=".cache_",
             dir=self.cache_dir,
         )
+        fd_closed = False
+        success = False
         try:
-            # Write to temp file
             with os.fdopen(fd, "w") as f:
+                fd_closed = True  # os.fdopen takes ownership of fd
                 json.dump(data, f, indent=2)
-            # Atomic rename (os.replace is atomic on POSIX)
             os.replace(tmp_path, path)
-        except OSError:
-            # Clean up temp file on failure
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+            success = True
+        finally:
+            # Close fd if os.fdopen never took ownership (e.g., os.fdopen failed)
+            if not fd_closed:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            # Always clean up temp file on failure
+            if not success:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def set(
         self,
@@ -549,9 +592,10 @@ class FileBasedTicketCache(TicketCache):
 
                 # Lazy eviction: probabilistic check to avoid O(N) on every write
                 self._maybe_evict_lru()
-            except TypeError as e:
+            except (TypeError, ValueError) as e:
                 # P0 FIX: Handle non-JSON-serializable objects in platform_metadata
-                # (e.g., datetime objects). Log warning and skip caching.
+                # (e.g., datetime objects, sets, custom objects). Log warning and skip caching.
+                # No temp file leak: _atomic_write uses try...finally for cleanup.
                 logger.warning(f"Failed to cache ticket {key} due to serialization error: {e}")
             except OSError as e:
                 logger.warning(f"Failed to write cache file {path}: {e}")
@@ -618,6 +662,9 @@ class FileBasedTicketCache(TicketCache):
         - Only runs with _EVICTION_PROBABILITY (10%) chance
         - Only evicts if size > max_size * _EVICTION_THRESHOLD_RATIO (110%)
 
+        P2 Fix: Uses injectable RNG (self._eviction_rng) for deterministic
+        testing. If None, falls back to global random.random().
+
         This is called from set() with the lock already held.
         """
         if self.max_size <= 0:
@@ -629,7 +676,11 @@ class FileBasedTicketCache(TicketCache):
                 return  # Definitely not over threshold
 
         # Probabilistic check: only scan 10% of the time
-        if random.random() > self._EVICTION_PROBABILITY:
+        # P2 FIX: Use injectable RNG for deterministic testing
+        rng_value = (
+            self._eviction_rng.random() if self._eviction_rng is not None else random.random()
+        )
+        if rng_value > self._EVICTION_PROBABILITY:
             return
 
         # Perform actual eviction check
@@ -639,34 +690,51 @@ class FileBasedTicketCache(TicketCache):
         """Evict least recently used entries if over max_size threshold.
 
         Uses file modification time as LRU indicator. Called with lock held.
-        Eviction threshold is max_size * 1.1 to avoid thrashing.
+        Eviction threshold is math.ceil(max_size * 1.1) to ensure buffer headroom.
+
+        P1 FIX: Uses os.scandir() instead of glob() + stat() to:
+        - Avoid race conditions where files are deleted between listing and stat
+        - Improve I/O performance (scandir caches stat info on most platforms)
         """
         if self.max_size <= 0:
             return
 
-        files = list(self.cache_dir.glob("*.json"))
-        current_size = len(files)
+        # P1 FIX: Use os.scandir for atomic stat + listing in one syscall
+        # This avoids the race condition in glob() + stat() pattern
+        files_with_mtime: list[tuple[Path, float]] = []
+        try:
+            with os.scandir(self.cache_dir) as entries:
+                for entry in entries:
+                    try:
+                        # Only process .json files
+                        if entry.is_file() and entry.name.endswith(".json"):
+                            # entry.stat() uses cached info from scandir on most platforms
+                            stat_info = entry.stat()
+                            files_with_mtime.append((Path(entry.path), stat_info.st_mtime))
+                    except FileNotFoundError:
+                        # File was deleted during iteration, skip it
+                        continue
+                    except OSError:
+                        # Other stat errors (permission, etc.), skip file
+                        continue
+        except OSError as e:
+            logger.warning(f"Failed to scan cache directory during eviction: {e}")
+            return
+
+        current_size = len(files_with_mtime)
         self._approx_size = current_size
 
-        # Use threshold to avoid evicting on every write when at capacity
-        threshold = int(self.max_size * self._EVICTION_THRESHOLD_RATIO)
+        # Use threshold with math.ceil to ensure buffer headroom for small max_size values
+        threshold = math.ceil(self.max_size * self._EVICTION_THRESHOLD_RATIO)
         if current_size <= threshold:
             return
 
         # Sort by modification time (oldest first)
-        # Use a helper function that handles missing files gracefully
-        def get_mtime(path: Path) -> float:
-            try:
-                return path.stat().st_mtime
-            except FileNotFoundError:
-                # File was deleted between glob() and stat(), treat as oldest
-                return 0.0
-
-        files.sort(key=get_mtime)
+        files_with_mtime.sort(key=lambda x: x[1])
 
         # Remove oldest files until at max_size (not threshold)
         to_remove = current_size - self.max_size
-        for path in files[:to_remove]:
+        for path, _ in files_with_mtime[:to_remove]:
             try:
                 path.unlink(missing_ok=True)
                 logger.debug(f"LRU evicted: {path.name}")
@@ -684,30 +752,38 @@ class FileBasedTicketCache(TicketCache):
             self._evict_lru()
 
 
-# Global cache singleton
+# Global cache singleton (internal - use dependency injection via TicketService)
+# These globals are maintained for testing convenience only.
 _global_cache: TicketCache | None = None
 _global_cache_type: str | None = None
-_global_cache_kwargs: dict[str, Any] | None = None
+# P1 Fix: Use empty dict instead of None for consistent mismatch comparison logic.
+# This ensures kwargs comparison always works correctly after clear_global_cache().
+_global_cache_kwargs: dict[str, Any] = {}
 _cache_lock = threading.Lock()
 
 
 class CacheConfigurationError(ValueError):
-    """Raised when get_global_cache is called with conflicting configuration.
+    """Raised when _get_global_cache is called with conflicting configuration.
 
     This indicates that the global cache was already initialized with different
-    parameters than the ones being requested. Use clear_global_cache() first
+    parameters than the ones being requested. Use _clear_global_cache() first
     to reinitialize with new settings.
     """
 
     pass
 
 
-def get_global_cache(
+def _get_global_cache(
     cache_type: str = "memory",
     strict: bool = True,
     **kwargs: Any,
 ) -> TicketCache:
-    """Get or create the global cache singleton.
+    """Get or create the global cache singleton (internal API).
+
+    Warning:
+        This is an internal API for testing convenience. Production code should
+        use dependency injection via TicketService (AMI-32) instead of relying
+        on global state.
 
     Args:
         cache_type: Type of cache ('memory' or 'file')
@@ -750,9 +826,9 @@ def get_global_cache(
                     mismatch_details.append(f"kwargs={kwargs} vs existing={_global_cache_kwargs}")
 
                 message = (
-                    f"get_global_cache() called with different configuration than "
+                    f"_get_global_cache() called with different configuration than "
                     f"existing cache: {', '.join(mismatch_details)}. "
-                    f"Use clear_global_cache() to reinitialize with new settings."
+                    f"Use _clear_global_cache() to reinitialize with new settings."
                 )
 
                 if strict:
@@ -763,8 +839,12 @@ def get_global_cache(
         return _global_cache
 
 
-def set_global_cache(cache: TicketCache) -> None:
-    """Set the global cache instance (primarily for testing).
+def _set_global_cache(cache: TicketCache) -> None:
+    """Set the global cache instance (internal API for testing).
+
+    Warning:
+        This is an internal API for testing convenience. Production code should
+        use dependency injection via TicketService (AMI-32) instead.
 
     Args:
         cache: TicketCache instance to use globally
@@ -782,8 +862,16 @@ def set_global_cache(cache: TicketCache) -> None:
         _global_cache_kwargs = {}
 
 
-def clear_global_cache() -> None:
-    """Clear and reset the global cache singleton."""
+def _clear_global_cache() -> None:
+    """Clear and reset the global cache singleton (internal API).
+
+    Warning:
+        This is an internal API for testing convenience.
+
+    P1 Fix: Reset _global_cache_kwargs to {} instead of None for consistent
+    comparison logic in _get_global_cache(). This ensures that after clearing,
+    subsequent calls with no kwargs will correctly match the empty state.
+    """
     global _global_cache, _global_cache_type, _global_cache_kwargs
 
     with _cache_lock:
@@ -791,4 +879,54 @@ def clear_global_cache() -> None:
             _global_cache.clear()
             _global_cache = None
         _global_cache_type = None
-        _global_cache_kwargs = None
+        # P1 Fix: Use empty dict instead of None for consistent mismatch checks
+        _global_cache_kwargs = {}
+
+
+# Backward compatibility aliases (deprecated - will be removed)
+# These are kept temporarily for existing tests but should not be used in production.
+def get_global_cache(
+    cache_type: str = "memory",
+    strict: bool = True,
+    **kwargs: Any,
+) -> TicketCache:
+    """DEPRECATED: Use dependency injection via TicketService instead.
+
+    This function is maintained for backward compatibility with existing tests.
+    New code should instantiate cache directly and pass to TicketService.
+
+    See specs/AMI-32-implementation-plan.md for the recommended pattern.
+    """
+    import warnings
+
+    warnings.warn(
+        "get_global_cache() is deprecated. Use dependency injection via TicketService instead. "
+        "See AMI-32 for the recommended caching pattern.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return _get_global_cache(cache_type=cache_type, strict=strict, **kwargs)
+
+
+def set_global_cache(cache: TicketCache) -> None:
+    """DEPRECATED: Use dependency injection via TicketService instead."""
+    import warnings
+
+    warnings.warn(
+        "set_global_cache() is deprecated. Use dependency injection via TicketService instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _set_global_cache(cache)
+
+
+def clear_global_cache() -> None:
+    """DEPRECATED: Use dependency injection via TicketService instead."""
+    import warnings
+
+    warnings.warn(
+        "clear_global_cache() is deprecated. Use dependency injection via TicketService instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _clear_global_cache()

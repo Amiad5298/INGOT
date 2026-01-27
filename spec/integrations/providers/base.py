@@ -79,6 +79,66 @@ def sanitize_title_for_branch(title: str, max_length: int = 50) -> str:
     return result.rstrip("-")
 
 
+def _normalize_for_json(obj: Any) -> Any:
+    """Recursively normalize an object for JSON serialization.
+
+    P1 Fix: Ensures platform_metadata (which may contain arbitrary data from
+    platform APIs) can always be serialized to JSON without raising TypeError.
+
+    Normalization rules:
+    - None, bool, int, float, str → passed through unchanged
+    - datetime → ISO format string
+    - set, frozenset → sorted list (for deterministic output)
+    - Enum → .value (or .name if value is not JSON-serializable)
+    - dict → recursively normalize keys and values
+    - list, tuple → recursively normalize elements (returns list)
+    - Other objects → repr() string with __non_serializable__ marker
+
+    The __non_serializable__ marker allows detection of data that was
+    converted and may need investigation, without silently corrupting data.
+
+    Args:
+        obj: Any object to normalize
+
+    Returns:
+        A JSON-serializable representation of the object
+    """
+    # Primitives that are already JSON-safe
+    if obj is None or isinstance(obj, bool | int | float | str):
+        return obj
+
+    # datetime → ISO format string
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+
+    # set/frozenset → sorted list for deterministic output
+    if isinstance(obj, set | frozenset):
+        try:
+            return sorted(_normalize_for_json(item) for item in obj)
+        except TypeError:
+            # Elements not comparable, just convert without sorting
+            return [_normalize_for_json(item) for item in obj]
+
+    # Enum → value or name
+    if isinstance(obj, Enum):
+        val = obj.value
+        if isinstance(val, bool | int | float | str):
+            return val
+        return obj.name
+
+    # dict → recursively normalize
+    if isinstance(obj, dict):
+        return {str(k): _normalize_for_json(v) for k, v in obj.items()}
+
+    # list/tuple → recursively normalize
+    if isinstance(obj, list | tuple):
+        return [_normalize_for_json(item) for item in obj]
+
+    # Fallback: convert to repr string with marker
+    # This preserves visibility into the data without breaking serialization
+    return {"__non_serializable__": True, "type": type(obj).__name__, "repr": repr(obj)}
+
+
 class Platform(Enum):
     """Supported issue tracking platforms.
 
@@ -448,6 +508,13 @@ class GenericTicket:
         Converts the ticket to a dictionary suitable for JSON storage.
         Handles datetime (ISO format), Enum (names/values), and platform_metadata.
 
+        P1 Fix: platform_metadata is recursively normalized to JSON-safe types:
+        - datetime objects → ISO format strings
+        - set/frozenset → list
+        - Enum values → .value or .name (for auto() enums)
+        - Non-serializable objects are converted to repr() strings with a
+          warning marker to preserve data visibility without breaking caching.
+
         Returns:
             Dictionary representation of the ticket with all fields serialized
             to JSON-compatible types.
@@ -468,6 +535,10 @@ class GenericTicket:
             result["created_at"] = self.created_at.isoformat()
         if self.updated_at is not None:
             result["updated_at"] = self.updated_at.isoformat()
+
+        # P1 Fix: Normalize platform_metadata to JSON-safe types
+        if result.get("platform_metadata"):
+            result["platform_metadata"] = _normalize_for_json(result["platform_metadata"])
 
         return result
 
@@ -493,14 +564,14 @@ class GenericTicket:
         # Make a copy to avoid mutating the input
         ticket_data = data.copy()
 
-        # P1 FIX: Strict Platform enum conversion - unknown platforms raise ValueError
-        # to prevent data corruption (ticket identity depends on correct platform).
-        # This will be caught by FileBasedTicketCache._deserialize_ticket, causing
-        # a cache miss and deletion of the stale/corrupted cache file.
+        # P1 FIX: Normalize platform casing before strict validation.
+        # Accepts "jira", "JIRA", "Jira" etc. and maps to Platform.JIRA.
+        # Still raises ValueError for unknown platforms to prevent data corruption.
         platform_str = ticket_data.get("platform", "")
-        if not hasattr(Platform, platform_str):
+        platform_normalized = platform_str.upper() if platform_str else ""
+        if not hasattr(Platform, platform_normalized):
             raise ValueError(f"Unknown platform: {platform_str!r}")
-        ticket_data["platform"] = Platform[platform_str]
+        ticket_data["platform"] = Platform[platform_normalized]
 
         # Resilient TicketStatus enum conversion
         status_str = ticket_data.get("status", "unknown")

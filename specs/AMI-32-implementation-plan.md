@@ -970,6 +970,93 @@ async def test_context_manager_closes_fallback(mock_primary_fetcher, mock_fallba
 
 ---
 
+## Additional Changes (Bug Fixes & Improvements)
+
+During implementation, several improvements were made to support TicketService reliability and proper architecture. These changes are documented here for completeness.
+
+### Cache Module Improvements
+
+These changes improve cache reliability, testing, and correctness:
+
+| Priority | Change | Description | Rationale |
+|----------|--------|-------------|-----------|
+| **P0** | Atomic write cleanup | Refactored `_atomic_write()` with proper `try...finally` for temp file cleanup | Prevents resource leaks on serialization errors (TypeError, ValueError) |
+| **P1** | LRU eviction race fix | Replaced `glob() + stat()` with `os.scandir()` | Avoids race condition where files are deleted between listing and stat |
+| **P1** | Injected RNG for testing | Added `eviction_rng` parameter to `FileBasedTicketCache` | Enables deterministic eviction behavior in tests |
+| **P1** | Global cache kwargs reset | Changed `_global_cache_kwargs` from `None` to `{}` after clear | Ensures consistent comparison logic in `_get_global_cache()` |
+| **P2** | URL-encoded cache keys | Added `urllib.parse.quote()` to `CacheKey.__str__()` | Fixes parsing of ticket IDs with special characters (e.g., GitHub `owner/repo#123`) |
+
+#### Breaking Change: URL-Encoded Cache Keys
+
+The `CacheKey.__str__()` method now URL-encodes the `ticket_id` to safely handle special characters:
+
+**Before:** `JIRA:owner/repo#42`
+**After:** `JIRA:owner%2Frepo%2342`
+
+**Impact:**
+- Existing cached files will NOT be found (cache miss on first access)
+- Tickets will be re-fetched and cached with the new key format
+- This is a one-time cache invalidation, not data loss
+- Required for correctness with GitHub ticket IDs containing `/` and `#`
+
+### Global Cache Deprecation
+
+The global cache singleton functions are deprecated in favor of dependency injection via TicketService:
+
+| Deprecated Function | Replacement |
+|---------------------|-------------|
+| `get_global_cache()` | Pass `InMemoryTicketCache()` or `FileBasedTicketCache()` to `TicketService` constructor |
+| `set_global_cache()` | Pass cache instance to `TicketService` constructor |
+| `clear_global_cache()` | Use `service.clear_cache()` method |
+
+**Migration Example:**
+
+```python
+# OLD (deprecated - emits DeprecationWarning)
+from spec.integrations import get_global_cache
+cache = get_global_cache()
+
+# NEW (recommended)
+from spec.integrations import TicketService, InMemoryTicketCache, create_ticket_service
+
+# Option 1: Use factory function (creates cache automatically)
+async with await create_ticket_service(auggie_client=client) as service:
+    ticket = await service.get_ticket("PROJ-123")
+
+# Option 2: Explicit cache injection
+cache = InMemoryTicketCache(default_ttl=timedelta(hours=2))
+service = TicketService(primary_fetcher=fetcher, cache=cache)
+```
+
+**Rationale:**
+- Global state makes testing difficult and creates hidden dependencies
+- Dependency injection provides explicit control over cache lifecycle
+- TicketService owns caching as an orchestration concern (per architecture spec)
+
+### GenericTicket Serialization Improvements
+
+Added `_normalize_for_json()` helper function to handle non-serializable objects in `platform_metadata`:
+
+| Input Type | Output |
+|------------|--------|
+| `None`, `bool`, `int`, `float`, `str` | Passed through unchanged |
+| `datetime` | ISO format string |
+| `set`, `frozenset` | Sorted list |
+| `Enum` | `.value` (or `.name` if value not JSON-safe) |
+| `dict` | Recursively normalized |
+| `list`, `tuple` | Recursively normalized list |
+| Other objects | `{"__non_serializable__": True, "type": "...", "repr": "..."}` |
+
+**Impact:**
+- `GenericTicket.to_dict()` now normalizes `platform_metadata` before returning
+- Prevents `TypeError` when caching tickets with complex metadata
+- The `__non_serializable__` marker preserves visibility into unconverted data
+
+**Additional Fix:**
+- `GenericTicket.from_dict()` now accepts case-insensitive platform names ("jira", "JIRA", "Jira" all map to `Platform.JIRA`)
+
+---
+
 ## References
 
 ### Related Tickets

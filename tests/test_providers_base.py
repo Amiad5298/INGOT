@@ -1337,3 +1337,183 @@ class TestGenericTicketSafeBranchNameNoMalformed:
         assert branch.startswith("chore/test-123")
         # Should not have trailing hyphen
         assert not branch.endswith("-")
+
+
+class TestGenericTicketSerialization:
+    """Tests for GenericTicket.to_dict() and from_dict() methods.
+
+    P1 Fix Tests: These tests verify that platform_metadata normalization
+    handles non-JSON-serializable types correctly.
+    """
+
+    def test_to_dict_basic_roundtrip(self):
+        """Basic serialization and deserialization roundtrip."""
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            title="Test Ticket",
+            status=TicketStatus.IN_PROGRESS,
+            type=TicketType.FEATURE,
+        )
+        data = ticket.to_dict()
+        restored = GenericTicket.from_dict(data)
+
+        assert restored.id == ticket.id
+        assert restored.platform == ticket.platform
+        assert restored.title == ticket.title
+        assert restored.status == ticket.status
+        assert restored.type == ticket.type
+
+    def test_to_dict_normalizes_datetime_in_metadata(self):
+        """P1 Fix: datetime in platform_metadata is normalized to ISO string."""
+        from datetime import UTC, datetime
+
+        test_dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            platform_metadata={"created": test_dt, "updated": test_dt},
+        )
+        data = ticket.to_dict()
+
+        # datetime should be converted to ISO string
+        assert isinstance(data["platform_metadata"]["created"], str)
+        assert "2024-01-15" in data["platform_metadata"]["created"]
+        assert "10:30:00" in data["platform_metadata"]["created"]
+
+    def test_to_dict_normalizes_set_in_metadata(self):
+        """P1 Fix: set in platform_metadata is normalized to sorted list."""
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            platform_metadata={"tags": {"beta", "alpha", "gamma"}},
+        )
+        data = ticket.to_dict()
+
+        # set should be converted to sorted list
+        assert isinstance(data["platform_metadata"]["tags"], list)
+        assert data["platform_metadata"]["tags"] == ["alpha", "beta", "gamma"]
+
+    def test_to_dict_normalizes_enum_in_metadata(self):
+        """P1 Fix: Enum in platform_metadata is normalized to value."""
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            platform_metadata={"status": TicketStatus.IN_PROGRESS},
+        )
+        data = ticket.to_dict()
+
+        # Enum should be converted to its value
+        assert data["platform_metadata"]["status"] == "in_progress"
+
+    def test_to_dict_normalizes_custom_object_in_metadata(self):
+        """P1 Fix: Non-serializable objects get __non_serializable__ marker."""
+
+        class CustomClass:
+            def __repr__(self):
+                return "CustomClass()"
+
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            platform_metadata={"custom": CustomClass()},
+        )
+        data = ticket.to_dict()
+
+        # Custom object should be converted to marked dict
+        custom_data = data["platform_metadata"]["custom"]
+        assert custom_data["__non_serializable__"] is True
+        assert custom_data["type"] == "CustomClass"
+        assert "CustomClass()" in custom_data["repr"]
+
+    def test_to_dict_normalizes_nested_metadata(self):
+        """P1 Fix: Nested structures in platform_metadata are recursively normalized."""
+        from datetime import UTC, datetime
+
+        ticket = GenericTicket(
+            id="TEST-123",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-123",
+            platform_metadata={
+                "nested": {
+                    "tags": {"a", "b"},
+                    "timestamp": datetime(2024, 1, 1, tzinfo=UTC),
+                },
+                "list_of_sets": [{"x", "y"}, {"z"}],
+            },
+        )
+        data = ticket.to_dict()
+
+        # Check nested dict
+        assert data["platform_metadata"]["nested"]["tags"] == ["a", "b"]
+        assert "2024-01-01" in data["platform_metadata"]["nested"]["timestamp"]
+
+        # Check list of sets
+        assert data["platform_metadata"]["list_of_sets"][0] == ["x", "y"]
+        assert data["platform_metadata"]["list_of_sets"][1] == ["z"]
+
+
+class TestGenericTicketFromDictPlatformCasing:
+    """Tests for platform casing normalization in GenericTicket.from_dict().
+
+    P1 Fix Tests: These tests verify case-insensitive platform parsing.
+    """
+
+    def test_from_dict_accepts_uppercase_platform(self):
+        """from_dict accepts uppercase platform name (canonical)."""
+        data = {
+            "id": "TEST-123",
+            "platform": "JIRA",
+            "url": "https://jira.example.com/TEST-123",
+        }
+        ticket = GenericTicket.from_dict(data)
+        assert ticket.platform == Platform.JIRA
+
+    def test_from_dict_accepts_lowercase_platform(self):
+        """P1 Fix: from_dict accepts lowercase platform name."""
+        data = {
+            "id": "TEST-123",
+            "platform": "jira",
+            "url": "https://jira.example.com/TEST-123",
+        }
+        ticket = GenericTicket.from_dict(data)
+        assert ticket.platform == Platform.JIRA
+
+    def test_from_dict_accepts_mixed_case_platform(self):
+        """P1 Fix: from_dict accepts mixed case platform name."""
+        data = {
+            "id": "TEST-123",
+            "platform": "Jira",
+            "url": "https://jira.example.com/TEST-123",
+        }
+        ticket = GenericTicket.from_dict(data)
+        assert ticket.platform == Platform.JIRA
+
+    def test_from_dict_rejects_unknown_platform(self):
+        """from_dict still rejects unknown platform names."""
+        data = {
+            "id": "TEST-123",
+            "platform": "unknown_platform",
+            "url": "https://example.com/TEST-123",
+        }
+        with pytest.raises(ValueError) as exc_info:
+            GenericTicket.from_dict(data)
+        assert "Unknown platform" in str(exc_info.value)
+
+    def test_from_dict_all_platforms_case_insensitive(self):
+        """P1 Fix: All platforms work with any casing."""
+        platforms = ["GITHUB", "github", "GitHub", "LINEAR", "linear", "Linear"]
+
+        for platform_str in platforms:
+            data = {
+                "id": "TEST-123",
+                "platform": platform_str,
+                "url": "https://example.com/TEST-123",
+            }
+            ticket = GenericTicket.from_dict(data)
+            assert ticket.platform.name == platform_str.upper()
