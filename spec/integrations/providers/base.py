@@ -442,6 +442,111 @@ class GenericTicket:
 
         return branch
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize GenericTicket to JSON-compatible dictionary.
+
+        Converts the ticket to a dictionary suitable for JSON storage.
+        Handles datetime (ISO format), Enum (names/values), and platform_metadata.
+
+        Returns:
+            Dictionary representation of the ticket with all fields serialized
+            to JSON-compatible types.
+        """
+        from dataclasses import asdict
+
+        result = asdict(self)
+
+        # Convert Platform enum to name (uses auto() so we use .name)
+        result["platform"] = self.platform.name
+
+        # Convert TicketStatus and TicketType enums to their values
+        result["status"] = self.status.value
+        result["type"] = self.type.value
+
+        # Convert datetime objects to ISO format strings
+        if self.created_at is not None:
+            result["created_at"] = self.created_at.isoformat()
+        if self.updated_at is not None:
+            result["updated_at"] = self.updated_at.isoformat()
+
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GenericTicket:
+        """Deserialize GenericTicket from a dictionary.
+
+        Converts a dictionary (e.g., from JSON storage) back to a GenericTicket.
+        Uses resilient deserialization for enums - if a stored value doesn't
+        match a current enum member, falls back to UNKNOWN to prevent crashes
+        from stale cache entries.
+
+        Args:
+            data: Dictionary containing ticket data
+
+        Returns:
+            Reconstructed GenericTicket instance
+
+        Raises:
+            KeyError: If required fields are missing from data
+            ValueError: If platform string is unknown/invalid (prevents data corruption)
+        """
+        # Make a copy to avoid mutating the input
+        ticket_data = data.copy()
+
+        # P1 FIX: Strict Platform enum conversion - unknown platforms raise ValueError
+        # to prevent data corruption (ticket identity depends on correct platform).
+        # This will be caught by FileBasedTicketCache._deserialize_ticket, causing
+        # a cache miss and deletion of the stale/corrupted cache file.
+        platform_str = ticket_data.get("platform", "")
+        if not hasattr(Platform, platform_str):
+            raise ValueError(f"Unknown platform: {platform_str!r}")
+        ticket_data["platform"] = Platform[platform_str]
+
+        # Resilient TicketStatus enum conversion
+        status_str = ticket_data.get("status", "unknown")
+        try:
+            ticket_data["status"] = TicketStatus(status_str)
+        except ValueError:
+            # Fallback for unknown status values (stale cache)
+            ticket_data["status"] = TicketStatus.UNKNOWN
+
+        # Resilient TicketType enum conversion
+        type_str = ticket_data.get("type", "unknown")
+        try:
+            ticket_data["type"] = TicketType(type_str)
+        except ValueError:
+            # Fallback for unknown type values (stale cache)
+            ticket_data["type"] = TicketType.UNKNOWN
+
+        # Convert ISO format strings back to datetime
+        created_at = ticket_data.get("created_at")
+        if created_at and isinstance(created_at, str):
+            try:
+                ticket_data["created_at"] = datetime.fromisoformat(created_at)
+            except ValueError:
+                ticket_data["created_at"] = None
+        elif created_at is None:
+            ticket_data["created_at"] = None
+
+        updated_at = ticket_data.get("updated_at")
+        if updated_at and isinstance(updated_at, str):
+            try:
+                ticket_data["updated_at"] = datetime.fromisoformat(updated_at)
+            except ValueError:
+                ticket_data["updated_at"] = None
+        elif updated_at is None:
+            ticket_data["updated_at"] = None
+
+        # Ensure labels is a list
+        if "labels" in ticket_data and ticket_data["labels"] is None:
+            ticket_data["labels"] = []
+
+        # Ensure platform_metadata is a dict
+        if "platform_metadata" in ticket_data and ticket_data["platform_metadata"] is None:
+            ticket_data["platform_metadata"] = {}
+
+        return cls(**ticket_data)
+
 
 class IssueTrackerProvider(ABC):
     """Abstract base class for issue tracker integrations.
