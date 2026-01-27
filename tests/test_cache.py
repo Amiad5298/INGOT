@@ -869,6 +869,35 @@ class TestFileBasedTicketCache:
         # The exact size may vary based on eviction, but it shouldn't crash
         assert cache.size() >= 0
 
+    def test_atomic_write_cleanup_on_serialization_error(self, tmp_path, sample_ticket):
+        """Test that serialization errors don't leave orphaned .tmp files.
+
+        P0 Fix Verification: This test mocks json.dump to raise TypeError and
+        verifies that:
+        1. The TypeError is caught and logged (not raised to caller from set())
+        2. No .tmp files are left behind in the cache directory
+        3. The cache directory is empty (no partial writes)
+        """
+        from unittest.mock import patch
+
+        cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
+
+        # Mock json.dump to raise TypeError to simulate non-serializable data
+        with patch(
+            "spec.integrations.cache.json.dump",
+            side_effect=TypeError("Object of type 'set' is not JSON serializable"),
+        ):
+            # set() should catch the TypeError and log a warning, not raise
+            cache.set(sample_ticket)
+
+        # CRITICAL: Assert no .tmp files were left behind (P0 resource leak fix)
+        tmp_files = list(tmp_path.glob(".cache_*.tmp"))
+        assert len(tmp_files) == 0, f"Resource leak: orphaned temp files found: {tmp_files}"
+
+        # Assert the cache directory is empty (no successful writes)
+        all_files = os.listdir(tmp_path)
+        assert len(all_files) == 0, f"Cache directory should be empty but contains: {all_files}"
+
 
 class TestGlobalCache:
     """Test global cache singleton functions (internal APIs)."""
