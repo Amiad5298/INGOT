@@ -112,16 +112,20 @@ Example task list with file annotations:
 
 ## Supported Platforms
 
-SPEC supports 6 ticket platforms out of the box:
+SPEC supports 6 ticket platforms—3 with out-of-the-box Auggie integration, 3 requiring fallback credentials:
 
-| Platform | URL Support | Ticket ID Support | Notes |
-|----------|-------------|-------------------|-------|
-| **Jira** | ✅ | ✅ `PROJECT-123` | Full integration via Auggie |
-| **Linear** | ✅ | ✅ `ENG-456` | Full integration via Auggie |
-| **GitHub Issues** | ✅ | ✅ `owner/repo#42` | Full integration via Auggie |
-| **Azure DevOps** | ✅ | ⚠️ Work item ID | Requires fallback credentials *(TODO: verify exact accepted ID formats)* |
-| **Monday** | ✅ | ❌ URL only | Requires fallback credentials |
-| **Trello** | ✅ | ❌ URL only | Requires fallback credentials |
+| Platform | URL Support | Ticket ID Support | Auth Mode | Notes |
+|----------|-------------|-------------------|-----------|-------|
+| **Jira** | ✅ | ✅ `PROJECT-123` | Auggie | Works out of the box |
+| **Linear** | ✅ | ⚠️ URL preferred | Auggie | IDs like `ENG-123` may be ambiguous with Jira |
+| **GitHub Issues** | ✅ | ✅ `owner/repo#42` | Auggie | Works out of the box |
+| **Azure DevOps** | ✅ | ✅ `AB#123` | Fallback | Requires credentials in `~/.spec-config` |
+| **Monday** | ✅ | ❌ URL only | Fallback | Requires credentials in `~/.spec-config` |
+| **Trello** | ✅ | ✅ 8-char short ID | Fallback | Requires credentials in `~/.spec-config` |
+
+> **Auggie platforms** (Jira, Linear, GitHub): No additional configuration needed—works via Auggie's built-in integrations.
+>
+> **Fallback platforms** (Azure DevOps, Monday, Trello): Requires API credentials. See the [Platform Configuration Guide](docs/platform-configuration.md).
 
 ### Platform Detection
 
@@ -129,15 +133,30 @@ SPEC automatically detects the platform from the ticket URL or ID:
 
 ```bash
 # URLs are auto-detected
-spec https://company.atlassian.net/browse/PROJ-123     # → Jira
-spec https://linear.app/team/issue/ENG-456             # → Linear
-spec https://github.com/owner/repo/issues/42           # → GitHub
-spec https://dev.azure.com/org/project/_workitems/789 # → Azure DevOps
+spec https://company.atlassian.net/browse/PROJ-123        # → Jira
+spec https://linear.app/team/issue/ENG-456                # → Linear
+spec https://github.com/owner/repo/issues/42              # → GitHub
+spec https://dev.azure.com/org/project/_workitems/edit/789  # → Azure DevOps
 
-# Ambiguous IDs may require --platform flag
-# (e.g., "ENG-123" could match both Jira and Linear project formats)
+# Ambiguous IDs require --platform flag
 spec PROJ-123 --platform jira
 spec ENG-456 --platform linear
+```
+
+### Ambiguous IDs
+
+Some ticket ID formats are shared across platforms (e.g., `ABC-123` matches both Jira and Linear). When SPEC cannot determine the platform unambiguously, it will:
+
+1. Check `DEFAULT_PLATFORM` in `~/.spec-config` (if set)
+2. Prompt you to select a platform interactively
+
+**Rule of thumb:** If your ticket ID looks like `ABC-123` and you use both Jira and Linear, always pass `--platform` or set `DEFAULT_PLATFORM`.
+
+```bash
+# Example: You have "ENG-456" which exists in both Jira and Linear
+spec ENG-456                    # ⚠️ Ambiguous → prompts or uses DEFAULT_PLATFORM
+spec ENG-456 --platform linear  # ✅ Explicitly targets Linear
+spec ENG-456 --platform jira    # ✅ Explicitly targets Jira
 ```
 
 ## Quick Start
@@ -154,15 +173,15 @@ spec https://company.atlassian.net/browse/PROJECT-123  # Jira URL
 spec https://linear.app/team/issue/ENG-456              # Linear URL
 spec https://github.com/owner/repo/issues/42            # GitHub URL
 
-# URL-based examples for other platforms
-spec https://dev.azure.com/org/project/_workitems/edit/789  # Azure DevOps
-spec https://mycompany.monday.com/boards/123456/pulses/789  # Monday (TODO: verify URL format)
-spec https://trello.com/c/aBcDeFgH/123-card-title           # Trello
+# URL-based examples for fallback platforms
+spec https://dev.azure.com/org/project/_workitems/edit/789    # Azure DevOps
+spec https://mycompany.monday.com/boards/123456/pulses/789    # Monday
+spec https://trello.com/c/aBcDeFgH/123-card-title             # Trello
 
 # Or use a ticket ID with explicit platform
 spec PROJECT-123 --platform jira
 spec ENG-456 --platform linear
-spec owner/repo#42                                       # GitHub (unambiguous)
+spec owner/repo#42                                            # GitHub (unambiguous)
 ```
 
 That's it! SPEC will guide you through the entire workflow with interactive prompts.
@@ -755,13 +774,22 @@ spec --config
 
 #### Ambiguous Ticket ID
 
-If prompted to select a platform:
+Ticket IDs like `ABC-123` match both Jira and Linear formats. SPEC resolves ambiguity by:
+
+1. Checking `DEFAULT_PLATFORM` in `~/.spec-config`
+2. Prompting you to select a platform interactively
+
+To avoid prompts, either:
 
 ```bash
-# Both Jira and Linear use PROJECT-123 format
-# SPEC will prompt you to choose, or use --platform:
+# Option 1: Use --platform flag
 spec ENG-456 --platform linear
+
+# Option 2: Set a default platform
+echo 'DEFAULT_PLATFORM=jira' >> ~/.spec-config
 ```
+
+> **Tip:** Use full URLs when possible—they're always unambiguous.
 
 ### Debug Logging
 

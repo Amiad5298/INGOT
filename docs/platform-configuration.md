@@ -112,6 +112,14 @@ These platforms work out-of-the-box when using Auggie. Fallback credentials are 
 
 Jira is fully integrated with Auggie's MCP tools. When using Auggie, no additional configuration is needed.
 
+#### Supported Input Formats
+
+| Format | Example |
+|--------|---------|
+| Atlassian Cloud URL | `https://company.atlassian.net/browse/PROJ-123` |
+| Self-hosted URL | `https://jira.company.com/browse/PROJ-123` |
+| Ticket ID | `PROJ-123` |
+
 #### Optional Fallback Credentials
 
 | Config Key | Description |
@@ -150,6 +158,15 @@ FALLBACK_JIRA_TOKEN=${JIRA_API_TOKEN}
 
 Linear is fully integrated with Auggie's MCP tools. When using Auggie, no additional configuration is needed.
 
+#### Supported Input Formats
+
+| Format | Example |
+|--------|---------|
+| Linear URL | `https://linear.app/team/issue/ENG-456` |
+| Ticket ID | `ENG-456` ⚠️ (ambiguous with Jira—use URL or `--platform linear`) |
+
+> **Note:** Ticket IDs like `ENG-456` match both Linear and Jira formats. Use the full URL or pass `--platform linear` to avoid ambiguity.
+
 #### Optional Fallback Credentials
 
 | Config Key | Description |
@@ -183,6 +200,14 @@ FALLBACK_LINEAR_API_KEY=${LINEAR_API_KEY}
 ### GitHub
 
 GitHub Issues is fully integrated with Auggie's MCP tools. When using Auggie, no additional configuration is needed.
+
+#### Supported Input Formats
+
+| Format | Example |
+|--------|---------|
+| Issue URL | `https://github.com/owner/repo/issues/42` |
+| Pull Request URL | `https://github.com/owner/repo/pull/42` |
+| Short reference | `owner/repo#42` |
 
 #### Optional Fallback Credentials
 
@@ -231,6 +256,14 @@ These platforms do not have Auggie MCP integration. You **must** configure fallb
 
 Azure DevOps requires fallback credentials—there is no Auggie MCP integration.
 
+#### Supported Input Formats
+
+| Format | Example |
+|--------|---------|
+| dev.azure.com URL | `https://dev.azure.com/org/project/_workitems/edit/123` |
+| visualstudio.com URL | `https://org.visualstudio.com/project/_workitems/edit/123` |
+| Work Item ID | `AB#123` |
+
 #### Required Credentials
 
 | Config Key | Description |
@@ -273,6 +306,15 @@ FALLBACK_AZURE_DEVOPS_PAT=${AZURE_DEVOPS_PAT}
 
 Monday.com requires fallback credentials—there is no Auggie MCP integration.
 
+#### Supported Input Formats
+
+| Format | Example |
+|--------|---------|
+| Board/Pulse URL | `https://mycompany.monday.com/boards/123456/pulses/789` |
+| View URL | `https://view.monday.com/boards/123456/pulses/789` |
+
+> **Note:** Monday.com does not support standalone item IDs—you must use the full URL.
+
 #### Required Credentials
 
 | Config Key | Description |
@@ -306,6 +348,14 @@ FALLBACK_MONDAY_API_KEY=${MONDAY_API_KEY}
 ### Trello
 
 Trello requires fallback credentials—there is no Auggie MCP integration.
+
+#### Supported Input Formats
+
+| Format | Example |
+|--------|---------|
+| Card URL | `https://trello.com/c/aBcDeFgH/123-card-title` |
+| Short URL | `https://trello.com/c/aBcDeFgH` |
+| Short link ID | `aBcDeFgH` (8 alphanumeric characters) |
 
 #### Required Credentials
 
@@ -449,6 +499,35 @@ For CI/CD pipelines, use your platform's secret management:
 - **Jenkins:** Use [credentials plugin](https://plugins.jenkins.io/credentials/)
 - **Azure Pipelines:** Use [secret variables](https://learn.microsoft.com/en-us/azure/devops/pipelines/process/variables#secret-variables)
 
+### Token Rotation
+
+API tokens should be rotated periodically for security. Here's a recommended schedule:
+
+| Platform | Max Token Lifetime | Recommended Rotation |
+|----------|-------------------|---------------------|
+| Jira | No expiration | Every 90 days |
+| Linear | No expiration | Every 90 days |
+| GitHub | Configurable (fine-grained) or no expiration (classic) | Every 90 days |
+| Azure DevOps | 1 year max | Before expiration |
+| Monday | No expiration | Every 90 days |
+| Trello | Configurable (`expiration` param) | Every 90 days |
+
+**Rotation process:**
+1. Generate a new token in the platform's admin console
+2. Update the environment variable in your shell profile
+3. Reload your shell (`source ~/.zshrc`)
+4. Verify with `spec --config`
+5. Revoke the old token in the platform's admin console
+
+### Scoping Tokens
+
+Follow the principle of least privilege:
+
+- **Jira:** Grant access only to required projects
+- **GitHub:** Use fine-grained tokens scoped to specific repositories
+- **Azure DevOps:** Scope to specific organizations/projects if possible
+- **Linear/Monday/Trello:** Account-level tokens typically required
+
 ---
 
 ## Verifying Your Configuration
@@ -520,6 +599,26 @@ When configuration is correct, you'll see the ticket content rendered as a speci
      "https://company.atlassian.net/rest/api/3/myself"
    ```
 
+### Ambiguous Ticket IDs
+
+Ticket IDs like `ABC-123` match both Jira and Linear formats. When SPEC cannot determine the platform:
+
+1. It checks `DEFAULT_PLATFORM` in `~/.spec-config`
+2. If not set, it prompts you to select a platform interactively
+
+**Solutions:**
+
+```bash
+# Option 1: Use --platform flag
+spec ENG-456 --platform linear
+
+# Option 2: Set a default platform
+echo 'DEFAULT_PLATFORM=jira' >> ~/.spec-config
+
+# Option 3: Use full URLs (always unambiguous)
+spec https://linear.app/team/issue/ENG-456
+```
+
 ### Platform-Specific Issues
 
 **Jira:**
@@ -533,6 +632,10 @@ When configuration is correct, you'll see the ticket content rendered as a speci
 **Azure DevOps:**
 - PAT must have "Work Items: Read" scope
 - Organization name is case-sensitive
+
+**Monday:**
+- Only URL-based access is supported (no standalone item IDs)
+- URL format: `https://<subdomain>.monday.com/boards/<board_id>/pulses/<item_id>`
 
 **Trello:**
 - Both API key AND token are required
