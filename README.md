@@ -462,6 +462,15 @@ SUBAGENT_REVIEWER="spec-reviewer"
 | `SUBAGENT_IMPLEMENTER` | string | "spec-implementer" | Custom implementer subagent name |
 | `SUBAGENT_REVIEWER` | string | "spec-reviewer" | Custom reviewer subagent name |
 
+### Platform Credentials
+
+For platforms without Auggie integration (Azure DevOps, Monday, Trello), you must configure fallback credentials. Jira, Linear, and GitHub can optionally use fallback credentials as a backup.
+
+See the **[Platform Configuration Guide](docs/platform-configuration.md)** for:
+- Step-by-step credential setup for each platform
+- Security best practices for storing credentials
+- Troubleshooting common authentication errors
+
 ### Interactive Configuration
 
 ```bash
