@@ -221,6 +221,27 @@ def mock_trello_ticket():
 # =============================================================================
 
 
+def _make_async_context_manager(mock_service: MagicMock) -> MagicMock:
+    """Configure a MagicMock to work as an async context manager.
+
+    This is the STANDARD pattern for mocking create_ticket_service_from_config.
+    The factory returns a service that supports `async with service: ...`.
+
+    Pattern:
+        mock_service.__aenter__ returns mock_service (the same object)
+        mock_service.__aexit__ returns None (no exception suppression)
+
+    Args:
+        mock_service: The MagicMock to configure
+
+    Returns:
+        The same mock_service, now configured as an async CM
+    """
+    mock_service.__aenter__ = AsyncMock(return_value=mock_service)
+    mock_service.__aexit__ = AsyncMock(return_value=None)
+    return mock_service
+
+
 @pytest.fixture
 def mock_fetcher_factory():
     """Factory for creating mock fetchers with platform-specific responses.
@@ -272,6 +293,32 @@ def mock_config_for_cli():
 
 
 @pytest.fixture
+def cli_runner_isolated():
+    """CliRunner with isolated_filesystem() applied to all invocations.
+
+    This fixture provides a helper that wraps `runner.invoke()` with
+    `isolated_filesystem()` to prevent filesystem I/O flakiness.
+
+    Usage:
+        def test_something(cli_runner_isolated):
+            result = cli_runner_isolated(["PROJ-123", "--platform", "jira"])
+            assert result.exit_code == 0
+    """
+    from typer.testing import CliRunner
+
+    from spec.cli import app
+
+    runner = CliRunner()
+
+    def invoke_isolated(args: list[str], **kwargs):
+        """Invoke CLI with isolated filesystem."""
+        with runner.isolated_filesystem():
+            return runner.invoke(app, args, **kwargs)
+
+    return invoke_isolated
+
+
+@pytest.fixture
 def mock_ticket_service_factory():
     """Factory for creating mock TicketService for Layer A tests.
 
@@ -311,10 +358,8 @@ def mock_ticket_service_factory():
             mock_service.get_ticket = AsyncMock(side_effect=mock_get_ticket)
             mock_service.close = AsyncMock()
 
-            # Set up async context manager protocol on the service itself
-            mock_service.__aenter__ = AsyncMock(return_value=mock_service)
-            mock_service.__aexit__ = AsyncMock(return_value=None)
-            return mock_service
+            # Use standard async CM pattern helper
+            return _make_async_context_manager(mock_service)
 
         return mock_create_ticket_service
 

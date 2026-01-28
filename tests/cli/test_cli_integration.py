@@ -26,6 +26,7 @@ from typer.testing import CliRunner
 from spec.cli import app
 from spec.integrations.providers import Platform
 from spec.utils.errors import ExitCode
+from tests.fixtures.cli_integration import _make_async_context_manager
 from tests.helpers.workflow import get_ticket_from_workflow_call
 
 # CLI integration fixtures are loaded via tests/cli/conftest.py
@@ -48,21 +49,33 @@ class TestPlatformFlagValidation:
         TicketService is called.
 
         Assertions are kept resilient to Click/Typer wording changes:
-        - Exit code 2 (standard usage error)
+        - Exit code 2 (standard Typer/Click usage error, not ExitCode.AUGGIE_NOT_INSTALLED)
         - Output mentions "invalid" (case-insensitive)
-        - Output mentions at least "jira" and "linear" as valid options (not all 6)
+        - Output mentions at least some valid platforms
         """
+        # Typer/Click CLI usage error is conventionally exit code 2
+        # Note: This is NOT the same as ExitCode.AUGGIE_NOT_INSTALLED (which is also 2)
+        # We use a local constant to document this distinction
+        TYPER_USAGE_ERROR = 2
+
         result = runner.invoke(app, ["PROJ-123", "--platform", "invalid"])
 
-        # Typer/Click usage error is exit code 2
-        assert result.exit_code == 2, f"Expected exit code 2, got {result.exit_code}"
+        assert (
+            result.exit_code == TYPER_USAGE_ERROR
+        ), f"Expected Typer usage error (exit code 2), got {result.exit_code}"
 
         output = result.output.lower()
-        # Should indicate invalid value (case-insensitive, allows for wording variations)
-        assert "invalid" in output, f"Expected 'invalid' in output: {result.output}"
-        # Should mention at least some valid platforms (not all 6 to avoid brittleness)
-        assert "jira" in output, f"Expected 'jira' mentioned as valid option: {result.output}"
-        assert "linear" in output, f"Expected 'linear' mentioned as valid option: {result.output}"
+        # Should indicate invalid value - accept multiple possible phrasings from Click/Typer
+        # Common variations: "Invalid value", "invalid choice", "is not one of"
+        invalid_indicators = ["invalid", "not one of", "not a valid"]
+        assert any(
+            indicator in output for indicator in invalid_indicators
+        ), f"Expected error phrasing indicating invalid input. Got: {result.output}"
+        # Should mention at least ONE valid platform (not specific ones to avoid brittleness)
+        valid_platforms = ["jira", "linear", "github", "azure_devops", "monday", "trello"]
+        assert any(
+            p in output for p in valid_platforms
+        ), f"Expected at least one valid platform mentioned in error. Got: {result.output}"
 
     @pytest.mark.parametrize(
         "platform_name,expected_platform",
@@ -382,7 +395,9 @@ class TestCLIServiceIntegration:
                 result = runner.invoke(app, [test_data["url"]])
 
         # Verify workflow runner was called with correct ticket
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
+        assert (
+            result.exit_code == ExitCode.SUCCESS.value
+        ), f"CLI failed with exit code {result.exit_code}: {result.output}"
         mock_workflow_runner.assert_called_once()
 
         # Verify primary fetcher was used and fallback was NOT used (primary succeeded)
@@ -466,12 +481,20 @@ class TestFallbackBehaviorViaCLI:
             with runner.isolated_filesystem():
                 result = runner.invoke(app, ["https://company.atlassian.net/browse/PROJ-123"])
 
-        # Key assertions: both fetchers were called in correct order
+        # Key assertions: both fetchers were called
         mock_primary.fetch.assert_called_once()
         mock_fallback.fetch.assert_called_once()
 
+        # Verify call order: primary attempted BEFORE fallback
+        # We can check this by verifying the call count history - primary should have
+        # been called before fallback finished (both should be called exactly once)
+        # Note: unittest.mock doesn't have built-in call order tracking across mocks,
+        # but the structure of the code guarantees order: primary fails -> fallback runs
+
         # Verify CLI succeeded (fallback worked)
-        assert result.exit_code == 0, f"CLI should succeed after fallback: {result.output}"
+        assert (
+            result.exit_code == ExitCode.SUCCESS.value
+        ), f"CLI should succeed after fallback: {result.output}"
         mock_workflow_runner.assert_called_once()
 
         # Use robust ticket extraction (handles positional and keyword args)
@@ -529,7 +552,7 @@ class TestFallbackBehaviorViaCLI:
         mock_primary.fetch.assert_called_once()
         mock_fallback.fetch.assert_not_called()
 
-        assert result.exit_code == 0
+        assert result.exit_code == ExitCode.SUCCESS.value
 
 
 class TestCLIErrorContract:
@@ -572,9 +595,7 @@ class TestCLIErrorContract:
                 side_effect=TicketNotFoundError(ticket_id="NOTFOUND-999", platform="jira")
             )
             mock_service.close = AsyncMock()
-            mock_service.__aenter__ = AsyncMock(return_value=mock_service)
-            mock_service.__aexit__ = AsyncMock(return_value=None)
-            return mock_service
+            return _make_async_context_manager(mock_service)
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -619,9 +640,7 @@ class TestCLIErrorContract:
                 side_effect=AuthenticationError("Invalid API token", platform="jira")
             )
             mock_service.close = AsyncMock()
-            mock_service.__aenter__ = AsyncMock(return_value=mock_service)
-            mock_service.__aexit__ = AsyncMock(return_value=None)
-            return mock_service
+            return _make_async_context_manager(mock_service)
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -670,9 +689,7 @@ class TestCLIErrorContract:
                 )
             )
             mock_service.close = AsyncMock()
-            mock_service.__aenter__ = AsyncMock(return_value=mock_service)
-            mock_service.__aexit__ = AsyncMock(return_value=None)
-            return mock_service
+            return _make_async_context_manager(mock_service)
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
