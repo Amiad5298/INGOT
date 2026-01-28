@@ -76,7 +76,7 @@ This ticket adds end-to-end integration tests that verify the complete flow from
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │ LAYER B: CLI→Service Integration Tests                                          │
-│ Mock boundary: fetcher.fetch() method                                            │
+│ Mock boundary: fetcher class constructors (return mock instances with .fetch())  │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │  runner.invoke(app, ["https://jira.example.com/browse/PROJ-123"])               │
 │       │                                                                          │
@@ -108,10 +108,10 @@ This ticket adds end-to-end integration tests that verify the complete flow from
 | `TicketService` | MockService instance | **Real** | Layer B tests real orchestration |
 | `ProviderRegistry` | N/A (not reached) | **Real** | Test actual platform detection |
 | `Provider.normalize()` | N/A (not reached) | **Real** | Test actual data transformation |
-| `AuggieMediatedFetcher.fetch()` | N/A | **MOCKED** | No Auggie CLI calls |
-| `DirectAPIFetcher.fetch()` | N/A | **MOCKED** | No HTTP calls |
+| `AuggieMediatedFetcher` | N/A | **MOCKED** (constructor patched) | Returns mock with stubbed `.fetch()` |
+| `DirectAPIFetcher` | N/A | **MOCKED** (constructor patched) | Returns mock with stubbed `.fetch()` |
 | `AuggieClient` | N/A | MOCKED constructor | Avoid process spawn |
-| `AuthenticationManager` | N/A | Real with mocked config | Test credential lookup |
+| `AuthenticationManager` | N/A | MOCKED instance | Provide fake credentials |
 | `prompt_select()` | MOCKED | MOCKED | Simulate user input |
 | `ConfigManager` | MOCKED | MOCKED | Control settings |
 
@@ -135,8 +135,8 @@ This ticket adds end-to-end integration tests that verify the complete flow from
 
 | AC | Description | Test Type | Test Class/Method | Notes |
 |----|-------------|-----------|-------------------|-------|
-| **AC1** | Integration tests exist for CLI with mocked TicketService | Layer A | `TestCLIContractWithMockedService` | Mock at `create_ticket_service` factory |
-| **AC2** | All 6 platforms tested through CLI entry point | Layer B | `TestCLIServiceIntegration.test_platform_via_cli[platform]` | Parametrized test for all 6 platforms |
+| **AC1** | Integration tests exist for CLI with mocked TicketService | Layer A | `TestPlatformFlagValidation`, `TestDisambiguationFlow` | Mock at `create_ticket_service` factory (TicketService itself is mocked) |
+| **AC2** | All 6 platforms tested through CLI entry point | Layer B | `TestCLIServiceIntegration.test_platform_via_cli[platform]` | Parametrized test for all 6 platforms using PLATFORM_TEST_DATA keys |
 | **AC3** | `--platform` flag tested with all valid values | Layer A | `TestPlatformFlagValidation.test_valid_platform_values` | 6 parametrized cases |
 | **AC4** | Invalid `--platform` values produce errors | Layer A | `TestPlatformFlagValidation.test_invalid_platform_error` | Exit code + message check |
 | **AC5** | Disambiguation flow tested | Layer A | `TestDisambiguationFlow.*` | 4 scenarios (prompt, default, override, skip) |
@@ -654,43 +654,9 @@ def mock_ticket_service_factory():
 **Injection Point:** Mock `spec.integrations.ticket_service.create_ticket_service` to return a MockTicketService.
 This tests CLI behavior without exercising real TicketService/Provider code.
 
-#### Step 2.0: Create MockTicketService Fixture
-
-```python
-@pytest.fixture
-def mock_ticket_service_factory():
-    """Factory to create a MockTicketService that returns specified tickets.
-
-    Usage in tests:
-        with mock_ticket_service_factory({"PROJ-123": mock_jira_ticket}) as mock_create:
-            result = runner.invoke(app, ["PROJ-123", "--platform", "jira"])
-    """
-    from contextlib import asynccontextmanager
-
-    def create_mock_service(ticket_map: dict[str, GenericTicket]):
-        """Create a mock create_ticket_service that returns tickets from ticket_map."""
-
-        class MockTicketService:
-            async def get_ticket(self, input_str: str) -> GenericTicket:
-                # Extract ticket ID from URL or use input directly
-                for key, ticket in ticket_map.items():
-                    if key in input_str:
-                        return ticket
-                # Default: return first ticket or raise
-                if ticket_map:
-                    return next(iter(ticket_map.values()))
-                raise TicketNotFoundError(ticket_id=input_str, platform="unknown")
-
-            async def close(self):
-                pass
-
-        async def mock_create(*args, **kwargs):
-            return MockTicketService()
-
-        return mock_create
-
-    return create_mock_service
-```
+**Note:** The `mock_ticket_service_factory` fixture is already defined in Step 1.2 above.
+It returns a factory that creates mock `create_ticket_service` replacements matching the real signature
+(an async function returning an async context manager).
 
 #### Step 2.1: Test All Valid Platform Values (Layer A)
 
@@ -972,7 +938,7 @@ class TestCLIServiceIntegration:
         },
     }
 
-    @pytest.mark.parametrize("platform", list(Platform))
+    @pytest.mark.parametrize("platform", list(PLATFORM_TEST_DATA.keys()))
     @patch("spec.cli.show_banner")
     @patch("spec.cli._check_prerequisites", return_value=True)
     @patch("spec.cli.ConfigManager")
@@ -986,8 +952,11 @@ class TestCLIServiceIntegration:
         This test:
         1. Invokes CLI with a platform-specific URL
         2. Lets real TicketService and Provider code run
-        3. Mocks only fetcher.fetch() to return raw API data
+        3. Mocks fetcher class constructors to return mock instances with stubbed .fetch()
         4. Verifies the workflow receives correctly normalized GenericTicket
+
+        Note: Parametrized over PLATFORM_TEST_DATA.keys() (not list(Platform)) to ensure
+        we test exactly the 6 supported platforms with proper test data.
         """
         test_data = self.PLATFORM_TEST_DATA[platform]
         raw_data = request.getfixturevalue(test_data["raw_fixture"])
@@ -1250,11 +1219,19 @@ class TestErrorPropagationViaCLI:
 
 | Test Class | Layer | Test Count | Covers AC |
 |------------|-------|------------|-----------|
-| `TestPlatformFlagValidation` | A | 8 (6 platforms + invalid + case-insensitive) | AC3, AC4 |
-| `TestDisambiguationFlow` | A | 5 | AC5, AC10, AC11 |
-| `TestCLIServiceIntegration` | B | 6 + 2 (all platforms + fallback) | **AC1, AC2**, AC7 |
+| `TestPlatformFlagValidation` | A | 17 (6 valid + 1 invalid + 4 case + 6 shorthand) | AC1, AC3, AC4, AC15 |
+| `TestDisambiguationFlow` | A | 6 | AC1, AC5, AC10, AC11, AC12 |
+| `TestCLIServiceIntegration` | B | 7 (6 platforms + 1 fallback) | AC2, AC7, AC9 |
 | `TestErrorPropagationViaCLI` | B | 3 | AC6, AC16, AC17 |
-| **Total** | | **~24 tests** | |
+| **Total** | | **33 tests** | |
+
+> **AC1 Clarification:** AC1 ("Integration tests exist for CLI with mocked TicketService") is satisfied
+> exclusively by **Layer A**, which mocks at the `create_ticket_service` factory boundary. This means
+> TicketService itself is mocked, directly matching the AC1 requirement.
+>
+> **Layer B Coverage:** Layer B provides **additional integration coverage** by testing the full
+> CLI→TicketService→Provider chain with mocking only at the fetcher boundary. Layer B contributes to
+> AC2, AC6, AC7, AC9, AC16, and AC17, but does not satisfy AC1 (since TicketService runs for real).
 
 ### Test Execution
 
@@ -1364,23 +1341,30 @@ pytest tests/test_cli_integration.py -n auto
 ### Expected Test Output (2-Layer Structure)
 
 ```
-# Layer A - CLI Contract Tests
-tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_with_all_platforms[jira-PROJ-123] PASSED
-tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_with_all_platforms[linear-ENG-456] PASSED
-tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_with_all_platforms[github-owner/repo#42] PASSED
-tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_with_all_platforms[azure_devops-AB#789] PASSED
-tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_with_all_platforms[monday-12345] PASSED
-tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_with_all_platforms[trello-abc123] PASSED
+# Layer A - CLI Contract Tests (TestPlatformFlagValidation: 14 tests)
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_valid_platform_values[jira] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_valid_platform_values[linear] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_valid_platform_values[github] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_valid_platform_values[azure_devops] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_valid_platform_values[monday] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_valid_platform_values[trello] PASSED
 tests/test_cli_integration.py::TestPlatformFlagValidation::test_invalid_platform_shows_error PASSED
-tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_case_insensitive PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_case_insensitive[JIRA] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_case_insensitive[Jira] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_case_insensitive[JiRa] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_platform_flag_case_insensitive[jira] PASSED
+tests/test_cli_integration.py::TestPlatformFlagValidation::test_short_flag_alias[jira] PASSED
+... (6 more for -p shorthand)
 
+# Layer A - CLI Contract Tests (TestDisambiguationFlow: 6 tests)
 tests/test_cli_integration.py::TestDisambiguationFlow::test_disambiguation_prompts_user PASSED
 tests/test_cli_integration.py::TestDisambiguationFlow::test_default_platform_skips_prompt PASSED
 tests/test_cli_integration.py::TestDisambiguationFlow::test_ambiguous_id_triggers_disambiguation_via_cli PASSED
 tests/test_cli_integration.py::TestDisambiguationFlow::test_flag_overrides_disambiguation PASSED
 tests/test_cli_integration.py::TestDisambiguationFlow::test_github_format_no_disambiguation PASSED
+tests/test_cli_integration.py::TestDisambiguationFlow::test_config_default_platform_used PASSED
 
-# Layer B - CLI→Service Integration Tests (KEY TESTS)
+# Layer B - CLI→Service Integration Tests (TestCLIServiceIntegration: 7 tests)
 tests/test_cli_integration.py::TestCLIServiceIntegration::test_platform_via_cli[JIRA] PASSED
 tests/test_cli_integration.py::TestCLIServiceIntegration::test_platform_via_cli[LINEAR] PASSED
 tests/test_cli_integration.py::TestCLIServiceIntegration::test_platform_via_cli[GITHUB] PASSED
@@ -1389,14 +1373,12 @@ tests/test_cli_integration.py::TestCLIServiceIntegration::test_platform_via_cli[
 tests/test_cli_integration.py::TestCLIServiceIntegration::test_platform_via_cli[TRELLO] PASSED
 tests/test_cli_integration.py::TestCLIServiceIntegration::test_fallback_behavior_via_cli PASSED
 
+# Layer B - Error Propagation (TestErrorPropagationViaCLI: 3 tests)
 tests/test_cli_integration.py::TestErrorPropagationViaCLI::test_ticket_not_found_via_cli PASSED
 tests/test_cli_integration.py::TestErrorPropagationViaCLI::test_auth_error_via_cli PASSED
 tests/test_cli_integration.py::TestErrorPropagationViaCLI::test_unconfigured_platform_error_via_cli PASSED
 
-============================= 24 passed in 3.45s =============================
-```
-
-============================= 35 passed in 4.12s =============================
+============================= 33 passed in 3.45s =============================
 ```
 
 ---
@@ -1430,3 +1412,5 @@ tests/test_cli_integration.py::TestErrorPropagationViaCLI::test_unconfigured_pla
 | 2026-01-28 | AI Assistant | Initial draft created |
 | 2026-01-28 | AI Assistant | Revised: Fixed mock parameter ordering, added -p shorthand tests, added TicketNotFoundError/AuthenticationError tests, added network error tests, fixed import paths, added complete fixtures for all 6 platforms, corrected call_args access patterns |
 | 2026-01-28 | AI Assistant | **Major revision (v2):** Restructured to 2-layer test strategy to resolve AC1/AC2 mismatch. Layer A mocks at `create_ticket_service`, Layer B mocks at `fetcher.fetch()`. All tests now use `runner.invoke(app, ...)`. Added AC mapping table, implementation guidance, `mock_ticket_service_factory` fixture. Removed redundant Phases 6-7, consolidated into new Phase 4 (Layer B) and Phase 5 (Error Propagation). |
+| 2026-01-28 | AI Assistant | **5-Issue Fix (v3):** (1) Removed duplicate `mock_ticket_service_factory` fixture definition. (2) Clarified Layer B mocking approach: patch fetcher class constructors to return mock instances with stubbed `.fetch()`. (3) Fixed AC1 mapping inconsistency - AC1 now covered by both Layer A and Layer B. (4) Changed parametrization from `list(Platform)` to `PLATFORM_TEST_DATA.keys()` for safety. (5) Fixed expected test count from conflicting 24/35 to consistent 33. |
+| 2026-01-28 | AI Assistant | **AC1 & Count Consistency Fix (v4):** (1) Updated AC1 to be satisfied by Layer A only (mocked TicketService), not Layer B. Layer B now described as "additional integration coverage" for AC2/AC6/AC7/etc. (2) Fixed changelog reference from "consistent 30" to "consistent 33" to match the test matrix and expected output. |
