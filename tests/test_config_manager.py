@@ -278,15 +278,270 @@ class TestConfigManagerShow:
     @patch("spec.config.manager.print_info")
     @patch("spec.config.manager.console")
     def test_show_displays_settings(self, mock_console, mock_info, mock_header, temp_config_file):
-        """Shows all settings from config file."""
+        """Shows all settings including platform status from config file."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
         manager.show()
 
         mock_header.assert_called_once()
-        # Should print multiple setting lines
-        assert mock_console.print.call_count >= 5
+        # Should print platform settings, platform status table, and other sections
+        assert mock_console.print.call_count >= 10  # Increased from 5
+
+        # Verify platform settings are displayed
+        print_calls = [str(call) for call in mock_console.print.call_args_list]
+        assert any("Platform Settings" in str(call) for call in print_calls)
+        assert any("Default Platform" in str(call) for call in print_calls)
+
+    @patch("spec.config.manager.print_header")
+    @patch("spec.config.manager.print_info")
+    @patch("spec.config.manager.console")
+    def test_show_displays_platform_status_table(
+        self, mock_console, mock_info, mock_header, temp_config_file
+    ):
+        """Shows platform configuration status table."""
+        # Skip if Rich is not installed
+        Table = pytest.importorskip("rich.table").Table
+
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        manager.show()
+
+        # Verify Rich Table was printed (for platform status)
+        table_printed = any(
+            isinstance(call.args[0], Table)
+            for call in mock_console.print.call_args_list
+            if call.args
+        )
+        assert table_printed, "Platform status table should be displayed"
+
+
+class TestPlatformStatusHelpers:
+    """Tests for platform status helper methods."""
+
+    def test_get_agent_integrations_uses_agent_config(self, temp_config_file):
+        """Returns integration status from AgentConfig."""
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        integrations = manager._get_agent_integrations()
+
+        # Should return dict with all known platforms
+        from spec.config.fetch_config import KNOWN_PLATFORMS
+
+        assert set(integrations.keys()) == KNOWN_PLATFORMS
+
+        # Default Auggie integrations: jira, linear, github are True
+        assert integrations["jira"] is True
+        assert integrations["linear"] is True
+        assert integrations["github"] is True
+        assert integrations["azure_devops"] is False
+
+    def test_get_agent_integrations_respects_explicit_config(self, tmp_path):
+        """Respects explicit AGENT_INTEGRATION_* config keys."""
+        config_file = tmp_path / ".spec-config"
+        config_file.write_text(
+            'AGENT_INTEGRATION_JIRA="false"\n' 'AGENT_INTEGRATION_MONDAY="true"\n'
+        )
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        integrations = manager._get_agent_integrations()
+
+        # Explicit config should override defaults
+        assert integrations["jira"] is False
+        assert integrations["monday"] is True
+
+    def test_get_agent_integrations_no_defaults_for_non_auggie(self, tmp_path):
+        """Non-Auggie platform with no explicit integrations returns all False.
+
+        This prevents falsely reporting agent support when AGENT_PLATFORM is
+        set to manual, cursor, or other non-Auggie platforms without explicit
+        AGENT_INTEGRATION_* keys.
+        """
+        config_file = tmp_path / ".spec-config"
+        config_file.write_text('AGENT_PLATFORM="manual"\n')
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        integrations = manager._get_agent_integrations()
+
+        # All platforms should be False for non-Auggie without explicit config
+        from spec.config.fetch_config import KNOWN_PLATFORMS
+
+        assert set(integrations.keys()) == KNOWN_PLATFORMS
+        assert all(v is False for v in integrations.values())
+
+    def test_get_agent_integrations_non_auggie_with_explicit_config(self, tmp_path):
+        """Non-Auggie platform respects explicit integration config."""
+        config_file = tmp_path / ".spec-config"
+        config_file.write_text('AGENT_PLATFORM="cursor"\n' 'AGENT_INTEGRATION_JIRA="true"\n')
+        manager = ConfigManager(config_file)
+        manager.load()
+
+        integrations = manager._get_agent_integrations()
+
+        # Only explicitly configured integrations should be True
+        assert integrations["jira"] is True
+        assert integrations["linear"] is False
+        assert integrations["github"] is False
+
+    @patch("spec.integrations.auth.AuthenticationManager")
+    def test_get_fallback_status_checks_all_platforms(self, mock_auth_class, temp_config_file):
+        """Checks fallback status for all known platforms."""
+        # Configure mock to return False for all platforms
+        mock_auth = mock_auth_class.return_value
+        mock_auth.has_fallback_configured.return_value = False
+
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        status = manager._get_fallback_status()
+
+        # Should check all platforms
+        from spec.config.fetch_config import KNOWN_PLATFORMS
+
+        assert set(status.keys()) == KNOWN_PLATFORMS
+        # All should be False since mock returns False
+        assert all(v is False for v in status.values())
+        # Verify has_fallback_configured was called for each platform
+        assert mock_auth.has_fallback_configured.call_count == len(KNOWN_PLATFORMS)
+
+    @patch("spec.integrations.auth.AuthenticationManager")
+    def test_get_fallback_status_with_configured_credentials(
+        self, mock_auth_class, temp_config_file
+    ):
+        """Returns True for platforms with configured fallback credentials."""
+        from spec.integrations.providers import Platform
+
+        # Configure mock to return True only for Jira
+        mock_auth = mock_auth_class.return_value
+
+        def mock_has_fallback(platform):
+            return platform == Platform.JIRA
+
+        mock_auth.has_fallback_configured.side_effect = mock_has_fallback
+
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        status = manager._get_fallback_status()
+
+        assert status["jira"] is True
+        assert status["linear"] is False
+        assert status["github"] is False
+
+    def test_get_platform_ready_status_logic(self, temp_config_file):
+        """Platform is ready if agent OR fallback is configured."""
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        agent = {"jira": True, "linear": False, "github": False}
+        fallback = {"jira": False, "linear": True, "github": False}
+
+        ready = manager._get_platform_ready_status(agent, fallback)
+
+        assert ready["jira"] is True  # agent=True
+        assert ready["linear"] is True  # fallback=True
+        assert ready["github"] is False  # neither
+
+    @patch("spec.config.manager.print_header")
+    @patch("spec.config.manager.print_info")
+    @patch("spec.config.manager.console")
+    def test_show_platform_status_error_handling(
+        self, mock_console, mock_info, mock_header, temp_config_file
+    ):
+        """Gracefully handles errors when displaying platform status."""
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        # Mock _get_agent_integrations to raise an exception
+        with patch.object(
+            manager, "_get_agent_integrations", side_effect=RuntimeError("Test error")
+        ):
+            # Should not raise, should display error message
+            manager._show_platform_status()
+
+        # Verify error message was printed
+        print_calls = [str(call) for call in mock_console.print.call_args_list]
+        assert any("Platform Status" in str(call) for call in print_calls)
+        assert any("Unable to determine platform status" in str(call) for call in print_calls)
+        assert any("Test error" in str(call) for call in print_calls)
+
+    def test_platform_display_order_is_consistent(self, temp_config_file):
+        """Platform table displays in consistent alphabetical order."""
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        # Get platforms multiple times and verify order is consistent
+        from spec.config.manager import _get_known_platforms
+
+        platforms1 = sorted(_get_known_platforms())
+        platforms2 = sorted(_get_known_platforms())
+
+        assert platforms1 == platforms2
+
+        # Verify the list is sorted (alphabetical stability)
+        assert platforms1 == sorted(platforms1)
+
+        # Verify it contains known essential platforms (not an exact match to avoid brittleness)
+        essential_platforms = {"jira", "linear", "github"}
+        assert essential_platforms.issubset(set(platforms1))
+
+    @patch("spec.config.manager.print_header")
+    @patch("spec.config.manager.print_info")
+    @patch("spec.config.manager.console")
+    def test_show_platform_status_plain_text_fallback(
+        self, mock_console, mock_info, mock_header, temp_config_file, capsys
+    ):
+        """Falls back to plain-text output when Rich table fails."""
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        # Simulate Rich Table failure during table creation/printing
+        with patch("rich.table.Table", side_effect=RuntimeError("Rich failed")):
+            manager._show_platform_status()
+
+        # Should have used plain-text fallback (prints to stdout)
+        captured = capsys.readouterr()
+        assert "Platform Status:" in captured.out
+        # Should show platform rows in plain text
+        assert "Jira" in captured.out or "jira" in captured.out.lower()
+        # Should show status columns
+        assert "Agent" in captured.out or "Yes" in captured.out or "No" in captured.out
+
+    @patch("spec.config.manager.print_header")
+    @patch("spec.config.manager.print_info")
+    def test_show_platform_status_fallback_when_rich_import_fails(
+        self, mock_info, mock_header, temp_config_file, capsys
+    ):
+        """Falls back to plain-text output when Rich cannot be imported (ImportError)."""
+        import sys
+        from types import ModuleType
+
+        manager = ConfigManager(temp_config_file)
+        manager.load()
+
+        # Create a fake module that raises ImportError when accessing Table
+        class FakeRichTableModule(ModuleType):
+            def __getattr__(self, name):
+                if name == "Table":
+                    raise ImportError("No module named 'rich.table'")
+                raise AttributeError(name)
+
+        fake_module = FakeRichTableModule("rich.table")
+
+        # Temporarily replace rich.table in sys.modules with our fake module.
+        # This approach is more localized than patching builtins.__import__.
+        with patch.dict(sys.modules, {"rich.table": fake_module}):
+            manager._show_platform_status()
+
+        # Should have used plain-text fallback (prints to stdout)
+        captured = capsys.readouterr()
+        assert "Platform Status:" in captured.out
+        # Verify platform data is displayed in plain text
+        assert "Jira" in captured.out or "jira" in captured.out.lower()
 
 
 class TestCascadingConfigHierarchy:
@@ -1182,7 +1437,7 @@ class TestFetchConfigDataclasses:
 
         config = AgentConfig()
         assert config.platform == AgentPlatform.AUGGIE
-        assert config.integrations == {}
+        assert config.integrations is None  # None means no explicit config
 
     def test_agent_config_supports_platform(self):
         """AgentConfig.supports_platform() works correctly."""
@@ -1322,7 +1577,7 @@ class TestConfigManagerGetAgentConfig:
 
         config = manager.get_agent_config()
         assert config.platform == AgentPlatform.AUGGIE
-        assert config.integrations == {}
+        assert config.integrations is None  # None means no explicit config
 
     def test_get_agent_config_custom_platform(self, tmp_path):
         """Parses AGENT_PLATFORM from config."""

@@ -204,11 +204,13 @@ class AgentConfig:
 
     Attributes:
         platform: The AI agent platform being used
-        integrations: Dict mapping platform names to integration availability
+        integrations: Dict mapping platform names to integration availability.
+            None means no explicit config was set (use platform defaults).
+            Empty dict {} means user explicitly disabled all integrations.
     """
 
     platform: AgentPlatform = AgentPlatform.AUGGIE
-    integrations: dict[str, bool] = field(default_factory=dict)
+    integrations: dict[str, bool] | None = None
 
     def supports_platform(self, platform: str) -> bool:
         """Check if agent has integration for platform.
@@ -219,6 +221,8 @@ class AgentConfig:
         Returns:
             True if the agent has an integration for this platform
         """
+        if self.integrations is None:
+            return False
         return self.integrations.get(platform.lower(), False)
 
 
@@ -522,8 +526,9 @@ def get_active_platforms(
     # Get platforms from per_platform strategy overrides
     active.update(p.lower() for p in strategy_config.per_platform.keys())
 
-    # Get platforms from agent integrations
-    active.update(p.lower() for p in agent_config.integrations.keys())
+    # Get platforms from agent integrations (if explicitly configured)
+    if agent_config.integrations is not None:
+        active.update(p.lower() for p in agent_config.integrations.keys())
 
     # Get platforms from fallback credentials (FALLBACK_{PLATFORM}_* keys)
     for key in raw_config_keys:

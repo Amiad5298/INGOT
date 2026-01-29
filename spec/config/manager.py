@@ -14,6 +14,7 @@ trackers to have project-specific settings while maintaining global defaults.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import re
@@ -48,6 +49,32 @@ from spec.utils.logging import log_message
 
 # Module-level logger
 logger = logging.getLogger(__name__)
+
+# Platform display names - maps internal names to user-friendly display names
+PLATFORM_DISPLAY_NAMES: dict[str, str] = {
+    "jira": "Jira",
+    "linear": "Linear",
+    "github": "GitHub",
+    "azure_devops": "Azure DevOps",
+    "monday": "Monday",
+    "trello": "Trello",
+}
+
+
+@functools.lru_cache(maxsize=1)
+def _get_known_platforms() -> frozenset[str]:
+    """Get KNOWN_PLATFORMS with lazy import to avoid circular dependencies.
+
+    Uses lru_cache instead of a global mutable variable for thread-safety
+    and simpler code.
+
+    Returns:
+        Frozenset of known platform names (immutable).
+    """
+    from spec.config.fetch_config import KNOWN_PLATFORMS
+
+    # Return a frozenset to ensure immutability matches the type hint
+    return frozenset(KNOWN_PLATFORMS)
 
 
 class ConfigManager:
@@ -543,17 +570,22 @@ class ConfigManager:
         Parses AGENT_PLATFORM and AGENT_INTEGRATION_* keys from config.
 
         Returns:
-            AgentConfig instance with platform and integrations
+            AgentConfig instance with platform and integrations.
+            integrations is None if no AGENT_INTEGRATION_* keys are set,
+            or a dict if any are explicitly configured.
 
         Raises:
             ConfigValidationError: If AGENT_PLATFORM has an invalid value
         """
         platform_str = self._raw_values.get("AGENT_PLATFORM")
-        integrations: dict[str, bool] = {}
+        integrations: dict[str, bool] | None = None
 
         # Parse AGENT_INTEGRATION_* keys
+        # Only create dict if at least one key is found
         for key, value in self._raw_values.items():
             if key.startswith("AGENT_INTEGRATION_"):
+                if integrations is None:
+                    integrations = {}
                 platform_name = key.replace("AGENT_INTEGRATION_", "").lower()
                 integrations[platform_name] = value.lower() in ("true", "1", "yes")
 
@@ -880,6 +912,239 @@ class ConfigManager:
 
         return errors
 
+    def _get_agent_integrations(self) -> dict[str, bool]:
+        """Get agent integration status for all platforms.
+
+        Reads from AgentConfig which is populated from AGENT_INTEGRATION_* config keys.
+        Falls back to default Auggie integrations ONLY if:
+        1. No explicit config is set (integrations is None, not empty dict), AND
+        2. The agent platform is AUGGIE
+
+        For non-Auggie platforms (manual, cursor, etc.) with no explicit integrations,
+        returns False for all platforms to avoid falsely reporting agent support.
+
+        Note: An empty dict `{}` means the user explicitly disabled all integrations,
+        which is different from None (no config set).
+
+        Returns:
+            Dict mapping platform names to their agent integration status.
+        """
+        known_platforms = _get_known_platforms()
+        agent_config = self.get_agent_config()
+
+        # Default integrations for Auggie agent (Jira, Linear, GitHub have MCP integrations)
+        # TODO: Consider fetching this from a centralized source (e.g., AgentPlatform metadata)
+        # to avoid drift when new MCP integrations are added.
+        default_integrations = {"jira", "linear", "github"}
+
+        result = {}
+        for platform in known_platforms:
+            # Check explicit config first - use 'is not None' to allow empty dict
+            # (empty dict means user explicitly disabled all integrations)
+            if agent_config.integrations is not None:
+                result[platform] = agent_config.supports_platform(platform)
+            else:
+                # No explicit config - only use Auggie defaults if platform is AUGGIE
+                if agent_config.platform == AgentPlatform.AUGGIE:
+                    result[platform] = platform in default_integrations
+                else:
+                    # Non-Auggie platforms without explicit config have no integrations
+                    result[platform] = False
+
+        return result
+
+    def _get_fallback_status(self) -> dict[str, bool]:
+        """Get fallback credential status for all platforms.
+
+        Returns:
+            Dict mapping platform names to whether fallback credentials are configured.
+        """
+        # Lazy imports to avoid circular dependencies
+        from spec.integrations.auth import AuthenticationManager
+        from spec.integrations.providers import Platform
+
+        known_platforms = _get_known_platforms()
+        auth = AuthenticationManager(self)
+        result: dict[str, bool] = {}
+        for platform_name in known_platforms:
+            try:
+                platform_enum = Platform[platform_name.upper()]
+                result[platform_name] = auth.has_fallback_configured(platform_enum)
+            except KeyError:
+                # Platform enum not found - mark as not configured
+                logger.debug(f"Platform enum not found for '{platform_name}'")
+                result[platform_name] = False
+            except Exception as e:
+                # Catch all exceptions to prevent one platform from crashing
+                # the entire status table. Log to debug and continue.
+                logger.debug(f"Error checking fallback for {platform_name}: {e}")
+                result[platform_name] = False
+
+        return result
+
+    def _get_platform_ready_status(
+        self,
+        agent_integrations: dict[str, bool],
+        fallback_status: dict[str, bool],
+    ) -> dict[str, bool]:
+        """Determine if each platform is ready to use.
+
+        A platform is ready if:
+        - It has agent integration, OR
+        - It has fallback credentials configured
+
+        Args:
+            agent_integrations: Dict of agent integration status per platform
+            fallback_status: Dict of fallback credential status per platform
+
+        Returns:
+            Dict mapping platform names to ready status
+        """
+        known_platforms = _get_known_platforms()
+        return {
+            p: agent_integrations.get(p, False) or fallback_status.get(p, False)
+            for p in known_platforms
+        }
+
+    def _show_platform_status(self) -> None:
+        """Display platform configuration status as a Rich table.
+
+        Handles errors gracefully - if Rich is unavailable or fails,
+        falls back to plain-text output to maintain status visibility.
+
+        Error handling strategy:
+        1. If status computation fails: show error message and return
+        2. If Rich Table creation/printing fails: fall back to plain-text
+        3. Uses standard print() for error messages to avoid Rich dependency issues
+        """
+        # Get status data first (before Rich-specific code)
+        # This allows fallback to use the same data
+        agent_integrations: dict[str, bool] | None = None
+        fallback_status: dict[str, bool] | None = None
+        ready_status: dict[str, bool] | None = None
+
+        try:
+            agent_integrations = self._get_agent_integrations()
+            fallback_status = self._get_fallback_status()
+            ready_status = self._get_platform_ready_status(agent_integrations, fallback_status)
+        except Exception as e:
+            # Status computation failed - use standard print() for robustness
+            # (console.print may fail if Rich is not installed or broken)
+            try:
+                console.print("  [bold]Platform Status:[/bold]")
+                console.print(f"  [dim]Unable to determine platform status: {e}[/dim]")
+                console.print()
+            except Exception:
+                # Fall back to standard print if Rich console also fails
+                print("  Platform Status:")
+                print(f"  Unable to determine platform status: {e}")
+                print()
+            return
+
+        try:
+            from rich.table import Table
+
+            # Create table
+            table = Table(title=None, show_header=True, header_style="bold")
+            table.add_column("Platform", style="cyan")
+            table.add_column("Agent Support")
+            table.add_column("Credentials")
+            table.add_column("Status")
+
+            # Sort platforms for consistent display order
+            known_platforms = _get_known_platforms()
+            for platform in sorted(known_platforms):
+                display_name = PLATFORM_DISPLAY_NAMES.get(platform, platform.title())
+                agent = "✅ Yes" if agent_integrations.get(platform, False) else "❌ No"
+                creds = "✅ Configured" if fallback_status.get(platform, False) else "❌ None"
+
+                if ready_status.get(platform, False):
+                    status = "[green]✅ Ready[/green]"
+                else:
+                    status = "[yellow]❌ Needs Config[/yellow]"
+
+                table.add_row(display_name, agent, creds, status)
+
+            console.print("  [bold]Platform Status:[/bold]")
+            console.print(table)
+
+            # Show hint for unconfigured platforms
+            unconfigured = [p for p, ready in ready_status.items() if not ready]
+            if unconfigured:
+                console.print()
+                console.print(
+                    "  [dim]Tip: See docs/platform-configuration.md for credential setup[/dim]"
+                )
+            console.print()
+
+        except Exception:
+            # Rich failed - fall back to plain-text output using standard print()
+            logger.debug("Rich rendering failed; falling back to plain text", exc_info=True)
+            self._show_platform_status_plain_text(agent_integrations, fallback_status, ready_status)
+
+    def _show_platform_status_plain_text(
+        self,
+        agent_integrations: dict[str, bool],
+        fallback_status: dict[str, bool],
+        ready_status: dict[str, bool],
+    ) -> None:
+        """Display platform status as plain text (fallback when Rich fails).
+
+        Uses dynamic column widths to accommodate platform names of any length.
+
+        Args:
+            agent_integrations: Dict of agent integration status per platform
+            fallback_status: Dict of fallback credential status per platform
+            ready_status: Dict of ready status per platform
+        """
+        known_platforms = _get_known_platforms()
+
+        # Build row data first to calculate dynamic column widths
+        rows: list[tuple[str, str, str, str]] = []
+        for platform in sorted(known_platforms):
+            display_name = PLATFORM_DISPLAY_NAMES.get(platform, platform.title())
+            agent = "Yes" if agent_integrations.get(platform, False) else "No"
+            creds = "Configured" if fallback_status.get(platform, False) else "None"
+            status = "Ready" if ready_status.get(platform, False) else "Needs Config"
+            rows.append((display_name, agent, creds, status))
+
+        # Calculate dynamic column widths (max of header vs content + padding)
+        headers = ("Platform", "Agent", "Credentials", "Status")
+        col_widths = [
+            max(len(headers[i]), max((len(row[i]) for row in rows), default=0)) + 2
+            for i in range(4)
+        ]
+
+        # Total width for separator line
+        total_width = sum(col_widths)
+
+        print("  Platform Status:")
+        print("  " + "-" * total_width)
+        print(
+            f"  {headers[0]:<{col_widths[0]}}"
+            f"{headers[1]:<{col_widths[1]}}"
+            f"{headers[2]:<{col_widths[2]}}"
+            f"{headers[3]:<{col_widths[3]}}"
+        )
+        print("  " + "-" * total_width)
+
+        for row in rows:
+            print(
+                f"  {row[0]:<{col_widths[0]}}"
+                f"{row[1]:<{col_widths[1]}}"
+                f"{row[2]:<{col_widths[2]}}"
+                f"{row[3]:<{col_widths[3]}}"
+            )
+
+        print("  " + "-" * total_width)
+
+        # Show hint for unconfigured platforms
+        unconfigured = [p for p, ready in ready_status.items() if not ready]
+        if unconfigured:
+            print()
+            print("  Tip: See docs/platform-configuration.md for credential setup")
+        print()
+
     def show(self) -> None:
         """Display current configuration using Rich formatting."""
         print_header("Current Configuration")
@@ -893,15 +1158,31 @@ class ConfigManager:
         console.print()
 
         s = self.settings
-        console.print(f"  Default Model (Legacy): {s.default_model or '(not set)'}")
-        console.print(f"  Planning Model: {s.planning_model or '(not set)'}")
-        console.print(f"  Implementation Model: {s.implementation_model or '(not set)'}")
-        console.print(f"  Default Jira Project: {s.default_jira_project or '(not set)'}")
-        console.print(f"  Auto-open Files: {s.auto_open_files}")
-        console.print(f"  Preferred Editor: {s.preferred_editor or '(auto-detect)'}")
-        console.print(f"  Skip Clarification: {s.skip_clarification}")
-        console.print(f"  Squash Commits at End: {s.squash_at_end}")
+
+        # Platform Settings section (NEW)
+        console.print("  [bold]Platform Settings:[/bold]")
+        console.print(f"    Default Platform: {s.default_platform or '(not set)'}")
+        console.print(f"    Default Jira Project: {s.default_jira_project or '(not set)'}")
         console.print()
+
+        # Platform Status table (NEW)
+        self._show_platform_status()
+
+        # Model Settings section (reorganized)
+        console.print("  [bold]Model Settings:[/bold]")
+        console.print(f"    Default Model (Legacy): {s.default_model or '(not set)'}")
+        console.print(f"    Planning Model: {s.planning_model or '(not set)'}")
+        console.print(f"    Implementation Model: {s.implementation_model or '(not set)'}")
+        console.print()
+
+        # General Settings section (reorganized)
+        console.print("  [bold]General Settings:[/bold]")
+        console.print(f"    Auto-open Files: {s.auto_open_files}")
+        console.print(f"    Preferred Editor: {s.preferred_editor or '(auto-detect)'}")
+        console.print(f"    Skip Clarification: {s.skip_clarification}")
+        console.print(f"    Squash Commits at End: {s.squash_at_end}")
+        console.print()
+
         console.print("  [bold]Parallel Execution:[/bold]")
         console.print(f"    Enabled: {s.parallel_execution_enabled}")
         console.print(f"    Max Parallel Tasks: {s.max_parallel_tasks}")
