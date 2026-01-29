@@ -19,7 +19,6 @@ def temp_config_file(tmp_path: Path) -> Path:
 DEFAULT_MODEL="claude-3"
 PLANNING_MODEL="claude-3-opus"
 IMPLEMENTATION_MODEL="claude-3-sonnet"
-DEFAULT_JIRA_PROJECT="PROJ"
 AUTO_OPEN_FILES="true"
 SKIP_CLARIFICATION="false"
 SQUASH_AT_END="true"

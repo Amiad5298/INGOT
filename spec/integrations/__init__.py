@@ -2,7 +2,7 @@
 
 This package contains:
 - git: Git operations (branch management, commits, etc.)
-- jira: Jira ticket parsing and integration checking
+- jira: Jira-specific ticket parsing (legacy, use TicketService for new code)
 - auggie: Auggie CLI wrapper and model management
 - auth: Authentication management for fallback credentials
 """
@@ -87,7 +87,7 @@ __all__ = [
     "add_to_gitignore",
     "create_checkpoint_commit",
     "squash_commits",
-    # Jira
+    # Jira (legacy - use TicketService for new code)
     "JiraTicket",
     "parse_jira_ticket",
     "check_jira_integration",

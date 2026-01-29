@@ -258,7 +258,6 @@ def mock_config_for_cli():
     Provides all commonly accessed settings to avoid MagicMock surprises.
     """
     mock_config = MagicMock()
-    mock_config.settings.default_jira_project = ""
     mock_config.settings.get_default_platform.return_value = None
     mock_config.settings.default_model = "test-model"
     mock_config.settings.planning_model = ""

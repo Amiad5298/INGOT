@@ -314,7 +314,7 @@ def create_checkpoint_commit(ticket_id: str, task_name: str) -> str:
     """Create a checkpoint commit for a completed task.
 
     Args:
-        ticket_id: Jira ticket ID
+        ticket_id: Ticket ID (e.g., PROJ-123)
         task_name: Name of the completed task
 
     Returns:
@@ -341,14 +341,16 @@ def squash_commits(base_commit: str, ticket_id: str, tasks: list[str]) -> None:
 
     Args:
         base_commit: Commit hash to reset to
-        ticket_id: Jira ticket ID
+        ticket_id: Ticket ID (e.g., PROJ-123)
         tasks: List of completed task names
     """
     if len(tasks) == 1:
         final_msg = f"feat({ticket_id}): {tasks[0]}"
     else:
         task_list = "\n".join(f"- {t}" for t in tasks)
-        final_msg = f"feat({ticket_id}): implement {len(tasks)} tasks\n\nCompleted tasks:\n{task_list}"
+        final_msg = (
+            f"feat({ticket_id}): implement {len(tasks)} tasks\n\nCompleted tasks:\n{task_list}"
+        )
 
     subprocess.run(["git", "reset", "--soft", base_commit], check=True)
     subprocess.run(["git", "commit", "-m", final_msg], check=True)
@@ -501,7 +503,9 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
             log_command(f"git diff {base_commit}..HEAD", committed_result.returncode)
 
             if committed_result.returncode != 0:
-                stderr = committed_result.stderr.strip() if committed_result.stderr else "unknown error"
+                stderr = (
+                    committed_result.stderr.strip() if committed_result.stderr else "unknown error"
+                )
                 print_warning(f"Failed to compute committed diff: {stderr}")
                 return DiffResult(
                     has_error=True,
@@ -567,19 +571,27 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
         log_command("git diff --name-only", unstaged_files_result.returncode)
 
         if staged_files_result.returncode == 0:
-            changed_files.extend([
-                f for f in staged_files_result.stdout.strip().split("\n") if f.strip()
-            ])
+            changed_files.extend(
+                [f for f in staged_files_result.stdout.strip().split("\n") if f.strip()]
+            )
         else:
-            stderr = staged_files_result.stderr.strip() if staged_files_result.stderr else "unknown error"
+            stderr = (
+                staged_files_result.stderr.strip()
+                if staged_files_result.stderr
+                else "unknown error"
+            )
             print_warning(f"Failed to list staged files: {stderr}")
 
         if unstaged_files_result.returncode == 0:
-            changed_files.extend([
-                f for f in unstaged_files_result.stdout.strip().split("\n") if f.strip()
-            ])
+            changed_files.extend(
+                [f for f in unstaged_files_result.stdout.strip().split("\n") if f.strip()]
+            )
         else:
-            stderr = unstaged_files_result.stderr.strip() if unstaged_files_result.stderr else "unknown error"
+            stderr = (
+                unstaged_files_result.stderr.strip()
+                if unstaged_files_result.stderr
+                else "unknown error"
+            )
             print_warning(f"Failed to list unstaged files: {stderr}")
 
         # Also get committed changes if we have a base commit
@@ -589,10 +601,16 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
                 capture_output=True,
                 text=True,
             )
-            log_command(f"git diff --name-status {base_commit}..HEAD", name_status_result.returncode)
+            log_command(
+                f"git diff --name-status {base_commit}..HEAD", name_status_result.returncode
+            )
 
             if name_status_result.returncode != 0:
-                stderr = name_status_result.stderr.strip() if name_status_result.stderr else "unknown error"
+                stderr = (
+                    name_status_result.stderr.strip()
+                    if name_status_result.stderr
+                    else "unknown error"
+                )
                 print_warning(f"Failed to get changed files list: {stderr}")
                 # Non-fatal: continue with what we have
             elif name_status_result.stdout.strip():
@@ -657,9 +675,7 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
             print_warning(f"Failed to list untracked files: {stderr}")
             # Non-fatal: continue with empty untracked_files
         elif untracked_result.stdout.strip():
-            untracked_files = [
-                f for f in untracked_result.stdout.strip().split("\n") if f.strip()
-            ]
+            untracked_files = [f for f in untracked_result.stdout.strip().split("\n") if f.strip()]
 
             # Generate diff-like content for small text untracked files
             untracked_diff_parts = []
@@ -667,9 +683,7 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
                 untracked_diff_parts.append(_generate_untracked_file_diff(filepath))
 
             if untracked_diff_parts:
-                diff_sections.append(
-                    "=== Untracked Files ===\n" + "\n".join(untracked_diff_parts)
-                )
+                diff_sections.append("=== Untracked Files ===\n" + "\n".join(untracked_diff_parts))
 
         diff_output = "\n\n".join(diff_sections).strip()
 
@@ -726,9 +740,7 @@ def _is_doc_file_for_diff(filepath: str) -> bool:
     return False
 
 
-def _generate_untracked_file_diff(
-    filepath: str, max_file_size: int = 50_000
-) -> str:
+def _generate_untracked_file_diff(filepath: str, max_file_size: int = 50_000) -> str:
     """Generate diff-like output for a single untracked file.
 
     Only includes full content for documentation files to avoid
@@ -830,11 +842,7 @@ def get_changed_files_list(base_commit: str) -> tuple[list[str], str]:
         return [], ""
 
     output = result.stdout.strip()
-    files = [
-        _parse_name_status_line(line)
-        for line in output.split("\n")
-        if line.strip()
-    ]
+    files = [_parse_name_status_line(line) for line in output.split("\n") if line.strip()]
     return files, output
 
 
@@ -880,4 +888,3 @@ __all__ = [
     "get_untracked_files_list",
     "find_repo_root",
 ]
-

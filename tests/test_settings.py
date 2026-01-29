@@ -15,7 +15,6 @@ class TestSettings:
         assert settings.default_model == ""
         assert settings.planning_model == ""
         assert settings.implementation_model == ""
-        assert settings.default_jira_project == ""
         assert settings.jira_integration_status == ""
         assert settings.jira_check_timestamp == 0
         assert settings.auto_open_files is True
@@ -62,7 +61,6 @@ class TestSettings:
         assert "DEFAULT_MODEL" in keys
         assert "PLANNING_MODEL" in keys
         assert "IMPLEMENTATION_MODEL" in keys
-        assert "DEFAULT_JIRA_PROJECT" in keys
         assert "AUTO_OPEN_FILES" in keys
         assert "SKIP_CLARIFICATION" in keys
         assert "SQUASH_AT_END" in keys

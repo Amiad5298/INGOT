@@ -56,13 +56,13 @@ def parse_jira_ticket(input_str: str, default_project: str = "") -> JiraTicket:
 
     Args:
         input_str: URL, ticket ID, or numeric ID
-        default_project: Default project key for numeric-only input
+        default_project: Optional default project key for numeric-only IDs
 
     Returns:
         JiraTicket with parsed ticket_id and ticket_url
 
     Raises:
-        ValueError: If input format is invalid
+        ValueError: If input format is invalid or numeric ID provided without default_project
     """
     input_str = input_str.strip()
 
@@ -81,11 +81,10 @@ def parse_jira_ticket(input_str: str, default_project: str = "") -> JiraTicket:
         return JiraTicket(ticket_id=ticket_id, ticket_url=input_str)
 
     elif re.match(numeric_pattern, input_str):
-        # Numeric only - requires default project
         if not default_project:
             raise ValueError(
-                "Numeric ticket ID requires DEFAULT_JIRA_PROJECT to be configured. "
-                "Use full ticket ID (e.g., PROJECT-123) or configure default project."
+                "Numeric ticket ID requires a default project key. "
+                "Pass default_project or provide a PROJECT-123 ID."
             )
         ticket_id = f"{default_project.upper()}-{input_str}"
         log_message(f"Parsed numeric ticket with default project: {ticket_id}")
@@ -99,7 +98,7 @@ def parse_jira_ticket(input_str: str, default_project: str = "") -> JiraTicket:
 
     else:
         raise ValueError(
-            "Invalid ticket format. Expected: PROJECT-123, 123, or full Jira URL"
+            "Invalid ticket format. Expected: PROJECT-123, numeric ID with default project, or full Jira ticket URL"
         )
 
 
@@ -243,4 +242,3 @@ __all__ = [
     "check_jira_integration",
     "fetch_ticket_info",
 ]
-

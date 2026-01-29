@@ -103,7 +103,6 @@ class TestPlatformFlagValidation:
     ):
         """All 6 platform values are accepted by --platform flag."""
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config_class.return_value = mock_config
 
         # Mock at create_ticket_service_from_config factory (Layer A approach)
@@ -131,7 +130,6 @@ class TestPlatformFlagValidation:
     ):
         """--platform flag is case-insensitive."""
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config_class.return_value = mock_config
 
         with patch(
@@ -160,7 +158,6 @@ class TestPlatformFlagValidation:
     ):
         """-p shorthand works for all platform values."""
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config_class.return_value = mock_config
 
         with patch(
@@ -219,7 +216,6 @@ class TestDisambiguationFlow:
     ):
         """Ambiguous ticket ID triggers disambiguation when no default configured."""
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config.settings.get_default_platform.return_value = None
         mock_config_class.return_value = mock_config
         mock_prompt.return_value = "jira"
@@ -248,7 +244,6 @@ class TestDisambiguationFlow:
     ):
         """--platform flag bypasses disambiguation entirely."""
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config.settings.get_default_platform.return_value = None
         mock_config_class.return_value = mock_config
 
@@ -607,7 +602,6 @@ class TestCLIErrorContract:
         from spec.integrations.providers.exceptions import TicketNotFoundError
 
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config.settings.get_default_platform.return_value = None
         mock_config_class.return_value = mock_config
 
@@ -653,7 +647,6 @@ class TestCLIErrorContract:
         from spec.integrations.providers.exceptions import AuthenticationError
 
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config.settings.get_default_platform.return_value = None
         mock_config_class.return_value = mock_config
 
@@ -698,7 +691,6 @@ class TestCLIErrorContract:
         )
 
         mock_config = MagicMock()
-        mock_config.settings.default_jira_project = ""
         mock_config.settings.get_default_platform.return_value = None
         mock_config_class.return_value = mock_config
 

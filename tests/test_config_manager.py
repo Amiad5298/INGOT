@@ -39,7 +39,6 @@ class TestConfigManagerLoad:
         assert settings.default_model == "claude-3"
         assert settings.planning_model == "claude-3-opus"
         assert settings.implementation_model == "claude-3-sonnet"
-        assert settings.default_jira_project == "PROJ"
 
     def test_load_ignores_comments(self, tmp_path):
         """Skips lines starting with #."""
@@ -611,7 +610,7 @@ class TestCascadingConfigHierarchy:
         global_config.write_text(
             """DEFAULT_MODEL="global-model"
 PLANNING_MODEL="global-planning"
-DEFAULT_JIRA_PROJECT="GLOBAL"
+DEFAULT_PLATFORM="jira"
 """
         )
 
@@ -619,7 +618,7 @@ DEFAULT_JIRA_PROJECT="GLOBAL"
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         local_config = project_dir / ".spec"
-        local_config.write_text('DEFAULT_JIRA_PROJECT="LOCAL"\n')
+        local_config.write_text('DEFAULT_PLATFORM="linear"\n')
         (project_dir / ".git").mkdir()
         monkeypatch.chdir(project_dir)
 
@@ -631,7 +630,7 @@ DEFAULT_JIRA_PROJECT="GLOBAL"
 
         assert settings.default_model == "global-model"  # from global
         assert settings.planning_model == "env-planning"  # from env
-        assert settings.default_jira_project == "LOCAL"  # from local
+        assert settings.default_platform == "linear"  # from local
 
 
 class TestFindLocalConfig:

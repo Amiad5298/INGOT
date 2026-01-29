@@ -1159,9 +1159,10 @@ class ConfigManager:
 
         s = self.settings
 
-        # Platform Settings section (NEW)
+        # Platform Settings section
         console.print("  [bold]Platform Settings:[/bold]")
         console.print(f"    Default Platform: {s.default_platform or '(not set)'}")
+        # Jira-specific: Used when parsing numeric-only ticket IDs (e.g., 123 → PROJ-123)
         console.print(f"    Default Jira Project: {s.default_jira_project or '(not set)'}")
         console.print()
 

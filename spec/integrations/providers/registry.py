@@ -52,19 +52,20 @@ class ProviderRegistry:
     - Factory Pattern: Provider classes register themselves
     - Singleton Pattern: One provider instance per platform
     - Decorator-based Registration: Providers use @ProviderRegistry.register
-    - Dependency Injection: UserInteractionInterface injected into providers
+    - Dependency Injection: UserInteractionInterface and config injected into providers
 
     All methods are class methods - no instance needed.
     Thread-safe operations using threading.Lock for all state mutations.
 
     Thread Safety:
-        All access to _providers, _instances, and _user_interaction is
+        All access to _providers, _instances, _user_interaction, and _config is
         protected by _lock to ensure safe concurrent access.
     """
 
     _providers: ClassVar[dict[Platform, type[IssueTrackerProvider]]] = {}
     _instances: ClassVar[dict[Platform, IssueTrackerProvider]] = {}
     _user_interaction: ClassVar[UserInteractionInterface] = CLIUserInteraction()
+    _config: ClassVar[dict[str, str]] = {}  # Provider configuration (e.g., default_jira_project)
     _lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
@@ -145,7 +146,9 @@ class ProviderRegistry:
     ) -> IssueTrackerProvider:
         """Create a provider instance with dependency injection.
 
-        Injects UserInteractionInterface if the provider's __init__ accepts it.
+        Injects dependencies based on provider's __init__ signature:
+        - user_interaction: UserInteractionInterface for interactive operations
+        - default_project: Default Jira project key (from set_config)
 
         Args:
             provider_class: The provider class to instantiate
@@ -153,15 +156,24 @@ class ProviderRegistry:
         Returns:
             New provider instance with dependencies injected
         """
-        # Check if provider accepts user_interaction parameter
+        # Check which parameters the provider accepts
         sig = inspect.signature(provider_class.__init__)
         params = sig.parameters
 
+        # Build kwargs for dependency injection
+        kwargs: dict[str, object] = {}
+
         if "user_interaction" in params:
-            # Dynamic injection based on runtime inspection - mypy can't verify this
-            return provider_class(user_interaction=cls._user_interaction)  # type: ignore[call-arg]
-        else:
-            return provider_class()
+            kwargs["user_interaction"] = cls._user_interaction
+
+        if "default_project" in params:
+            # Inject default_jira_project from config if available
+            default_project = cls._config.get("default_jira_project")
+            if default_project:
+                kwargs["default_project"] = default_project
+
+        # Dynamic injection based on runtime inspection - mypy can't verify this
+        return provider_class(**kwargs)  # type: ignore[call-arg]
 
     @classmethod
     def get_provider(cls, platform: Platform) -> IssueTrackerProvider:
@@ -274,6 +286,47 @@ class ProviderRegistry:
             return cls._user_interaction
 
     @classmethod
+    def set_config(cls, config: dict[str, str]) -> None:
+        """Set provider configuration for dependency injection.
+
+        Configuration values are passed to providers during instantiation.
+        Currently supported keys:
+        - default_jira_project: Default Jira project key for numeric ticket IDs
+
+        Note: This does NOT update already-instantiated providers. Call clear()
+        first if you need providers to be re-instantiated with new config.
+
+        Thread-safe: Uses lock to protect mutation.
+
+        Args:
+            config: Dictionary of configuration values
+        """
+        with cls._lock:
+            cls._config = dict(config)  # Copy to prevent external mutation
+
+    @classmethod
+    def reset_instances(cls) -> None:
+        """Reset instances, config, and user interaction without clearing provider registrations.
+
+        Use this method when you need to reset runtime state but preserve provider
+        registrations. This is particularly useful in tests that need to reset
+        between test cases without re-registering providers.
+
+        Thread-safe: Uses lock to protect mutations.
+
+        After resetting:
+        - All singleton instances are destroyed (will be recreated on next get_provider)
+        - UserInteractionInterface is reset to CLIUserInteraction
+        - Configuration is cleared
+
+        Provider class registrations are preserved.
+        """
+        with cls._lock:
+            cls._instances.clear()
+            cls._user_interaction = CLIUserInteraction()
+            cls._config.clear()
+
+    @classmethod
     def clear(cls) -> None:
         """Clear all registrations and instances.
 
@@ -284,8 +337,10 @@ class ProviderRegistry:
         - All provider class registrations are removed
         - All singleton instances are destroyed
         - UserInteractionInterface is reset to CLIUserInteraction
+        - Configuration is cleared
         """
         with cls._lock:
             cls._providers.clear()
             cls._instances.clear()
             cls._user_interaction = CLIUserInteraction()
+            cls._config.clear()

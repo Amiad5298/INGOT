@@ -23,6 +23,7 @@ from spec.integrations.providers.exceptions import (
     PlatformNotSupportedError,
     TicketNotFoundError,
 )
+from spec.integrations.providers.registry import ProviderRegistry
 from spec.integrations.ticket_service import TicketService, create_ticket_service
 from spec.ui.menus import MainMenuChoice, show_main_menu
 from spec.utils.console import (
@@ -336,7 +337,7 @@ def show_help() -> None:
     print_info("")
     print_info("Arguments:")
     print_info("  TICKET    Ticket ID or URL from any supported platform")
-    print_info("            Examples: PROJ-123, https://jira.example.com/browse/PROJ-123")
+    print_info("            Examples: PROJ-123, https://example.atlassian.net/browse/PROJ-123,")
     print_info("            https://linear.app/team/issue/ENG-456, owner/repo#42")
     print_info("")
     print_info("Options:")
@@ -367,8 +368,11 @@ def main(
     ticket: Annotated[
         str | None,
         typer.Argument(
-            help="Ticket ID or URL (e.g., PROJ-123, https://jira.example.com/browse/PROJ-123, "
-            "https://linear.app/team/issue/ENG-456, owner/repo#42)",
+            help=(
+                "Ticket ID or URL. Examples: PROJ-123, "
+                "https://example.atlassian.net/browse/PROJ-123, "
+                "https://linear.app/team/issue/ENG-456, owner/repo#42"
+            ),
         ),
     ] = None,
     platform: Annotated[
@@ -535,6 +539,15 @@ def main(
         config = ConfigManager()
         config.load()
 
+        # Reset and reconfigure ProviderRegistry at startup to ensure deterministic state
+        # This prevents stale config from previous runs (e.g., in tests or daemon mode)
+        ProviderRegistry.reset_instances()
+        ProviderRegistry.set_config(
+            {
+                "default_jira_project": config.settings.default_jira_project or "",
+            }
+        )
+
         # Handle --config flag
         if show_config:
             config.show()
@@ -681,10 +694,10 @@ def _configure_settings(config: ConfigManager) -> None:
         if model:
             config.save("IMPLEMENTATION_MODEL", model)
 
-    # Default Jira project
-    if prompt_confirm("Configure default Jira project?", default=False):
+    # Default Jira project (Jira-specific setting for numeric ticket IDs)
+    if prompt_confirm("Configure default project key (Jira only)?", default=False):
         project = prompt_input(
-            "Enter default Jira project key",
+            "Enter default Jira project key (used when ticket ID has no project prefix)",
             default=config.settings.default_jira_project,
         )
         if project:

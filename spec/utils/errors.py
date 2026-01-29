@@ -4,6 +4,7 @@ This module defines the exit codes and exception hierarchy used throughout
 the application, matching the original Bash script's error handling.
 """
 
+import re
 from enum import IntEnum
 from typing import ClassVar
 
@@ -18,7 +19,7 @@ class ExitCode(IntEnum):
     SUCCESS = 0
     GENERAL_ERROR = 1
     AUGGIE_NOT_INSTALLED = 2
-    JIRA_NOT_CONFIGURED = 3
+    PLATFORM_NOT_CONFIGURED = 3  # Platform not configured
     USER_CANCELLED = 4
     GIT_ERROR = 5
 
@@ -70,16 +71,49 @@ class AuggieNotInstalledError(SpecError):
     _default_exit_code: ClassVar[ExitCode] = ExitCode.AUGGIE_NOT_INSTALLED
 
 
-class JiraNotConfiguredError(SpecError):
-    """Jira integration is not configured in Auggie.
+class PlatformNotConfiguredError(SpecError):
+    """Platform integration is not configured.
 
     Raised when:
-    - Jira MCP server is not configured
-    - Jira API token is missing or invalid
-    - Jira integration check fails
+    - Platform MCP server is not configured
+    - Platform API credentials are missing or invalid
+    - Platform integration check fails
+
+    Attributes:
+        platform: The platform that is not configured (optional)
     """
 
-    _default_exit_code: ClassVar[ExitCode] = ExitCode.JIRA_NOT_CONFIGURED
+    _default_exit_code: ClassVar[ExitCode] = ExitCode.PLATFORM_NOT_CONFIGURED
+
+    def __init__(
+        self,
+        message: str,
+        platform: str | None = None,
+        exit_code: ExitCode | None = None,
+    ) -> None:
+        """Initialize the exception.
+
+        Args:
+            message: Error message describing what went wrong
+            platform: Optional platform name for context. The platform prefix
+                [Platform] is added automatically if not already present.
+            exit_code: Optional override for the default exit code
+        """
+        self.platform = platform
+        if platform:
+            # Normalize platform name for prefix check
+            platform_normalized = platform.strip().lower()
+            # Use regex to check if message already has the platform prefix
+            # Handles variations like [Linear], [ Linear ], [LINEAR], etc.
+            # Pattern: ^\[\s*platform\s*\] (case-insensitive, optional whitespace inside brackets)
+            prefix_pattern = re.compile(
+                rf"^\[\s*{re.escape(platform_normalized)}\s*\]",
+                re.IGNORECASE,
+            )
+            if not prefix_pattern.match(message.strip()):
+                # Add platform prefix for clarity
+                message = f"[{platform.strip()}] {message}"
+        super().__init__(message, exit_code)
 
 
 class UserCancelledError(SpecError):
@@ -112,8 +146,7 @@ __all__ = [
     "ExitCode",
     "SpecError",
     "AuggieNotInstalledError",
-    "JiraNotConfiguredError",
+    "PlatformNotConfiguredError",
     "UserCancelledError",
     "GitOperationError",
 ]
-

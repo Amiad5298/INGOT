@@ -2,6 +2,7 @@
 
 import os
 import queue
+import random
 import threading
 import time
 from datetime import UTC, datetime, timedelta
@@ -666,11 +667,17 @@ class TestFileBasedTicketCache:
         for small values like max_size=2 (int(2.2) == 2, no buffer).
         Using math.ceil(2 * 1.1) = 3 ensures proper headroom.
         """
+        # Create RNG that never triggers lazy eviction (always > 0.1 threshold)
+        # This ensures all 4 tickets are written before any eviction occurs
+        no_evict_rng = random.Random(42)
+        no_evict_rng.random = lambda: 0.99  # Always above _EVICTION_PROBABILITY (0.1)
+
         # With max_size=2 and math.ceil(2 * 1.1) = 3 as threshold
         cache = FileBasedTicketCache(
             cache_dir=tmp_path,
             default_ttl=timedelta(hours=1),
             max_size=2,
+            eviction_rng=no_evict_rng,
         )
         base_time = time.time()
 

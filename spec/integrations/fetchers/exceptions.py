@@ -37,7 +37,7 @@ class CredentialValidationError(TicketFetchError):
     This indicates missing or invalid credential keys required by the platform.
 
     Attributes:
-        platform_name: Name of the platform (e.g., "Jira", "GitHub")
+        platform_name: Name of the platform (e.g., "Jira", "Linear", "GitHub", "Azure DevOps")
         missing_keys: Set of credential keys that are missing
     """
 

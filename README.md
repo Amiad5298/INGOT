@@ -443,7 +443,6 @@ IMPLEMENTATION_MODEL="claude-sonnet-4-5"
 
 # Platform Settings
 DEFAULT_PLATFORM=""  # Options: jira, linear, github, azure_devops, monday, trello
-DEFAULT_JIRA_PROJECT="PROJ"
 
 # Workflow Behavior
 SKIP_CLARIFICATION="false"
@@ -469,7 +468,6 @@ SUBAGENT_REVIEWER="spec-reviewer"
 | `PLANNING_MODEL` | string | "" | AI model for Steps 1-2 |
 | `IMPLEMENTATION_MODEL` | string | "" | AI model for Step 3 |
 | `DEFAULT_PLATFORM` | string | "" | Default platform for ambiguous ticket IDs (empty = auto-detect) |
-| `DEFAULT_JIRA_PROJECT` | string | "" | Default Jira project key |
 | `SKIP_CLARIFICATION` | bool | false | Skip clarification step |
 | `SQUASH_AT_END` | bool | true | Squash commits after workflow |
 | `AUTO_OPEN_FILES` | bool | true | Auto-open generated files |

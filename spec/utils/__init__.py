@@ -31,7 +31,7 @@ from spec.utils.errors import (
     AuggieNotInstalledError,
     ExitCode,
     GitOperationError,
-    JiraNotConfiguredError,
+    PlatformNotConfiguredError,
     SpecError,
     UserCancelledError,
 )
@@ -62,7 +62,7 @@ __all__ = [
     "ExitCode",
     "SpecError",
     "AuggieNotInstalledError",
-    "JiraNotConfiguredError",
+    "PlatformNotConfiguredError",
     "UserCancelledError",
     "GitOperationError",
     # Error Analysis

@@ -8,12 +8,16 @@ Following the hybrid architecture, this provider handles:
 
 Data fetching is delegated to TicketFetcher implementations.
 
-Environment Variables:
-    JIRA_DEFAULT_PROJECT: Default project key for numeric-only ticket IDs.
+Configuration:
+    default_project: Default project key for numeric-only ticket IDs.
         When a user provides just a number (e.g., "123"), it will be prefixed
-        with this project key to form "PROJECT-123". If not set, defaults to
-        the DEFAULT_PROJECT constant ("PROJ"). This can also be overridden
-        per-instance via the JiraProvider constructor's `default_project` parameter.
+        with this project key to form "PROJECT-123".
+
+        Configuration precedence (highest to lowest):
+        1. Constructor `default_project` parameter (direct injection)
+        2. ProviderRegistry.set_config({"default_jira_project": ...}) - set by CLI from config
+        3. JIRA_DEFAULT_PROJECT environment variable (legacy fallback)
+        4. DEFAULT_PROJECT constant ("PROJ") - last resort fallback
 """
 
 from __future__ import annotations
@@ -174,7 +178,8 @@ class JiraProvider(IssueTrackerProvider):
             user_interaction: Optional user interaction interface for DI.
                 If not provided, uses CLIUserInteraction.
             default_project: Default project key for numeric-only ticket IDs.
-                If not provided, uses JIRA_DEFAULT_PROJECT env var or DEFAULT_PROJECT constant.
+                Typically injected by ProviderRegistry from config.settings.default_jira_project.
+                Falls back to JIRA_DEFAULT_PROJECT env var or DEFAULT_PROJECT constant.
         """
         # Note: _user_interaction is stored for potential future use and to maintain
         # constructor contract parity with other providers. The hybrid architecture
@@ -183,6 +188,10 @@ class JiraProvider(IssueTrackerProvider):
         self._user_interaction = user_interaction or CLIUserInteraction()
 
         # Track if default project was explicitly configured (for can_handle behavior)
+        # Configuration sources in priority order:
+        # 1. Constructor parameter (injected by ProviderRegistry from CLI config)
+        # 2. JIRA_DEFAULT_PROJECT env var (legacy/external configuration)
+        # 3. DEFAULT_PROJECT constant (fallback)
         env_project = os.environ.get("JIRA_DEFAULT_PROJECT")
         self._has_explicit_default_project = default_project is not None or env_project is not None
         self._default_project = default_project or env_project or DEFAULT_PROJECT

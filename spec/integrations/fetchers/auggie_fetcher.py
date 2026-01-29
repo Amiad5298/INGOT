@@ -2,7 +2,7 @@
 
 This module provides the AuggieMediatedFetcher class that fetches
 ticket data through Auggie's native MCP tool integrations for
-Jira, Linear, and GitHub.
+Jira, Linear, and GitHub (platforms with MCP integrations).
 
 Architecture Note:
     This fetcher uses a prompt-based approach rather than direct tool
