@@ -174,7 +174,8 @@ class JiraProvider(IssueTrackerProvider):
             user_interaction: Optional user interaction interface for DI.
                 If not provided, uses CLIUserInteraction.
             default_project: Default project key for numeric-only ticket IDs.
-                If not provided, uses JIRA_DEFAULT_PROJECT env var or DEFAULT_PROJECT constant.
+                If not provided, checks env vars (JIRA_DEFAULT_PROJECT, DEFAULT_JIRA_PROJECT)
+                or falls back to DEFAULT_PROJECT constant.
         """
         # Note: _user_interaction is stored for potential future use and to maintain
         # constructor contract parity with other providers. The hybrid architecture
@@ -183,7 +184,12 @@ class JiraProvider(IssueTrackerProvider):
         self._user_interaction = user_interaction or CLIUserInteraction()
 
         # Track if default project was explicitly configured (for can_handle behavior)
-        env_project = os.environ.get("JIRA_DEFAULT_PROJECT")
+        # Check both env var names for compatibility:
+        # - JIRA_DEFAULT_PROJECT: legacy env var name
+        # - DEFAULT_JIRA_PROJECT: config file key (loaded as env var by ConfigManager)
+        env_project = os.environ.get("JIRA_DEFAULT_PROJECT") or os.environ.get(
+            "DEFAULT_JIRA_PROJECT"
+        )
         self._has_explicit_default_project = default_project is not None or env_project is not None
         self._default_project = default_project or env_project or DEFAULT_PROJECT
 

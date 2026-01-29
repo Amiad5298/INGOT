@@ -180,3 +180,39 @@ DESCRIPTION: Test
 
         # Should be lowercase, no special chars
         assert result.summary == "add-user-s-authentication"
+
+
+class TestNumericIdWithConfiguredDefaultProject:
+    """Regression tests for numeric ID parsing with DEFAULT_JIRA_PROJECT configured.
+
+    These tests verify that numeric-only ticket IDs (e.g., "123") work correctly
+    when the default_jira_project setting is configured, addressing the
+    regression from AMI-43.
+    """
+
+    def test_parse_numeric_id_with_configured_default_project(self):
+        """Numeric ID works when default_project is explicitly passed.
+
+        This is the core regression test: verify that parse_jira_ticket
+        correctly handles numeric IDs when given a default_project.
+        """
+        result = parse_jira_ticket("456", default_project="CONFIGURED")
+
+        assert result.ticket_id == "CONFIGURED-456"
+        assert result.ticket_url == "CONFIGURED-456"
+
+    def test_parse_numeric_id_normalizes_project_to_uppercase(self):
+        """Default project is normalized to uppercase."""
+        result = parse_jira_ticket("789", default_project="lowercase")
+
+        assert result.ticket_id == "LOWERCASE-789"
+
+    def test_parse_numeric_id_without_default_raises_helpful_error(self):
+        """Numeric ID without default_project raises a helpful error message."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_jira_ticket("123")
+
+        error_message = str(exc_info.value)
+        assert "default project" in error_message.lower()
+        # The error should guide users to provide a project key
+        assert "PROJECT-123" in error_message or "default_project" in error_message

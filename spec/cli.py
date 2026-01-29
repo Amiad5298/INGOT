@@ -7,6 +7,7 @@ Supports tickets from all 6 platforms: Jira, Linear, GitHub, Azure DevOps, Monda
 """
 
 import asyncio
+import os
 import re
 from collections.abc import Callable, Coroutine
 from typing import Annotated, TypeVar
@@ -367,8 +368,11 @@ def main(
     ticket: Annotated[
         str | None,
         typer.Argument(
-            help="Ticket ID or URL (e.g., PROJ-123, https://example.atlassian.net/browse/PROJ-123, "
-            "https://linear.app/team/issue/ENG-456, owner/repo#42)",
+            help=(
+                "Ticket ID or URL. Examples: PROJ-123, "
+                "https://example.atlassian.net/browse/PROJ-123, "
+                "https://linear.app/team/issue/ENG-456, owner/repo#42"
+            ),
         ),
     ] = None,
     platform: Annotated[
@@ -535,6 +539,11 @@ def main(
         config = ConfigManager()
         config.load()
 
+        # Export DEFAULT_JIRA_PROJECT to environment for JiraProvider
+        # This ensures config file values are available to JiraProvider singleton
+        if config.settings.default_jira_project:
+            os.environ["DEFAULT_JIRA_PROJECT"] = config.settings.default_jira_project
+
         # Handle --config flag
         if show_config:
             config.show()
@@ -680,6 +689,15 @@ def _configure_settings(config: ConfigManager) -> None:
         )
         if model:
             config.save("IMPLEMENTATION_MODEL", model)
+
+    # Default Jira project (Jira-specific setting for numeric ticket IDs)
+    if prompt_confirm("Configure default project key (Jira only)?", default=False):
+        project = prompt_input(
+            "Enter default Jira project key (used when ticket ID has no project prefix)",
+            default=config.settings.default_jira_project,
+        )
+        if project:
+            config.save("DEFAULT_JIRA_PROJECT", project.upper())
 
     # Parallel execution settings
     if prompt_confirm("Configure parallel execution settings?", default=False):

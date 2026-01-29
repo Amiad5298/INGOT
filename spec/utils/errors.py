@@ -74,11 +74,9 @@ class PlatformNotConfiguredError(SpecError):
     """Platform integration is not configured.
 
     Raised when:
-    - Platform MCP server is not configured (Jira, Linear, GitHub, etc.)
+    - Platform MCP server is not configured
     - Platform API credentials are missing or invalid
     - Platform integration check fails
-
-    Supported platforms: Jira, Linear, GitHub, Azure DevOps, Monday, Trello
 
     Attributes:
         platform: The platform that is not configured (optional)
@@ -96,13 +94,19 @@ class PlatformNotConfiguredError(SpecError):
 
         Args:
             message: Error message describing what went wrong
-            platform: Optional platform name for context (included in message if provided)
+            platform: Optional platform name for context. The platform prefix
+                [Platform] is added automatically if not already present.
             exit_code: Optional override for the default exit code
         """
         self.platform = platform
-        if platform and not message.startswith(f"[{platform}]"):
-            # Surface platform context in the rendered message for clarity.
-            message = f"[{platform}] {message}"
+        if platform:
+            # Normalize platform name for prefix check (strip whitespace, lowercase)
+            platform_normalized = platform.strip().lower()
+            # Check if message already starts with any form of the platform prefix
+            message_lower = message.strip().lower()
+            if not message_lower.startswith(f"[{platform_normalized}]"):
+                # Add platform prefix for clarity
+                message = f"[{platform.strip()}] {message}"
         super().__init__(message, exit_code)
 
 

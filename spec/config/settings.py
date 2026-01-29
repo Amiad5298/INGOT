@@ -37,6 +37,7 @@ class Settings:
         implementation_model: AI model for Step 3 (Execution)
         jira_integration_status: Cached Jira integration status
         jira_check_timestamp: Unix timestamp of last Jira check
+        default_jira_project: Default project key for numeric-only Jira ticket IDs
         auto_open_files: Whether to auto-open files in editor
         preferred_editor: Preferred editor command (empty = auto-detect)
         skip_clarification: Skip clarification step by default
@@ -60,6 +61,7 @@ class Settings:
     # Jira settings
     jira_integration_status: str = ""
     jira_check_timestamp: int = 0
+    default_jira_project: str = ""  # Default project key for numeric-only Jira ticket IDs
 
     # UI settings
     auto_open_files: bool = True
@@ -105,6 +107,7 @@ class Settings:
             "IMPLEMENTATION_MODEL": "implementation_model",
             "JIRA_INTEGRATION_STATUS": "jira_integration_status",
             "JIRA_CHECK_TIMESTAMP": "jira_check_timestamp",
+            "DEFAULT_JIRA_PROJECT": "default_jira_project",
             "AUTO_OPEN_FILES": "auto_open_files",
             "PREFERRED_EDITOR": "preferred_editor",
             "SKIP_CLARIFICATION": "skip_clarification",

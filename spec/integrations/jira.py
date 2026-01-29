@@ -98,7 +98,7 @@ def parse_jira_ticket(input_str: str, default_project: str = "") -> JiraTicket:
 
     else:
         raise ValueError(
-            "Invalid ticket format. Expected: PROJECT-123, numeric ID with default project, or full Jira URL"
+            "Invalid ticket format. Expected: PROJECT-123, numeric ID with default project, or full ticket URL"
         )
 
 
