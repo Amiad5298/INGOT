@@ -441,8 +441,165 @@ source ~/.zshrc  # or ~/.bashrc
 
 ---
 
+## Implementation Constraints and Behavioral Rules
+
+This section provides precise behavioral rules for the underlying code that supports platform configuration. These constraints ensure unambiguous implementation for any engineer or AI implementing changes.
+
+### 1. Canonical Credential Map Naming and Location
+
+**Canonical Definition:**
+The authoritative credential requirements per platform are defined in:
+
+```
+spec/config/fetch_config.py:PLATFORM_REQUIRED_CREDENTIALS
+```
+
+This constant is a `dict[str, frozenset[str]]` mapping lowercase platform names to their required credential keys.
+
+**Rules:**
+- Do NOT duplicate the credentials map; always import and reuse the canonical definition from `spec.config.fetch_config.PLATFORM_REQUIRED_CREDENTIALS`.
+- Credential aliases are defined in `spec.config.fetch_config.CREDENTIAL_ALIASES`.
+- Use `canonicalize_credentials(platform, credentials)` before validation to normalize alias keys to canonical keys.
+- Use `validate_credentials(platform, credentials, strict=True)` to validate credential completeness.
+
+### 2. Cache Behavior Specification
+
+When using `FileBasedTicketCache` or any caching decorator, the following rules apply:
+
+**Cache Key Composition:**
+- Cache key MUST be composed of: `platform` (Platform enum) + `normalized_ticket_id` (string, as returned by `provider.parse_input()`).
+- Use `CacheKey(platform: Platform, ticket_id: str)` dataclass from `spec.integrations.cache`.
+- Fetch mode is NOT included in the cache key—cached tickets are valid regardless of how they were fetched.
+
+**TTL / Invalidation Policy:**
+- Default TTL: 1 hour (`DEFAULT_CACHE_TTL = timedelta(hours=1)` in `spec.integrations.ticket_service`).
+- Invalidation: manual only via `cache.invalidate(key)` or `cache.clear()`.
+- There is no automatic background expiration; expiration is checked at read time.
+
+**Corruption Handling:**
+- If the cache file is missing: treat as cache miss, return `None`, and continue.
+- If JSON decode fails: log a warning, treat as cache miss, return `None`, delete the corrupted file, and continue.
+- NEVER crash the CLI due to cache corruption.
+
+**Concurrency:**
+- Keep implementation simple; best-effort atomic write (tempfile + `os.replace`) is sufficient.
+- Single-process locking via `threading.Lock`; multi-process uses optimistic last-writer-wins.
+
+### 3. Platform Registry Ambiguity Resolution
+
+When `ProviderRegistry` or `PlatformDetector` processes user input, the following rules determine platform resolution:
+
+**Definition of "Ambiguous Input":**
+An input is ambiguous when:
+- The input is NOT a URL (URLs are always unambiguous since they contain platform-specific domains).
+- The ticket ID pattern matches regex patterns for MORE than one platform (e.g., "PROJ-123" matches both Jira and Linear patterns).
+
+**Resolution Rules:**
+
+| Condition | Action |
+|-----------|--------|
+| Exactly ONE platform matches | Select it automatically. |
+| MULTIPLE platforms match AND `--platform` flag provided | Use the platform from the flag. |
+| MULTIPLE platforms match AND `default_platform` configured | Use the configured default platform. |
+| MULTIPLE platforms match AND no flag/config | Raise an actionable error (see below). |
+| ZERO platforms match AND `--platform` flag provided | Use the platform from the flag and let provider validate. |
+| ZERO platforms match AND `default_platform` configured | Use the configured default platform and let provider validate. |
+| ZERO platforms match AND no flag/config | Raise an error (see below). |
+
+**Error Message Templates:**
+
+For ambiguous input with no resolution:
+```
+Error: The identifier '{input}' matches multiple platforms: {matched_platforms}.
+
+To resolve:
+  1. Use --platform <platform> flag: spec {input} --platform jira
+  2. Set default_platform in ~/.spec-config or .spec:
+     DEFAULT_PLATFORM=jira
+
+Supported platforms: jira, linear, github, azure_devops, monday, trello
+```
+
+For unrecognized input with no resolution:
+```
+Error: Could not detect platform for '{input}'.
+
+To resolve:
+  1. Use a full URL (e.g., https://jira.example.com/browse/PROJ-123)
+  2. Use --platform <platform> flag: spec {input} --platform jira
+  3. Set default_platform in ~/.spec-config or .spec
+
+Supported platforms: jira, linear, github, azure_devops, monday, trello
+```
+
+### 4. Provider Definition of Done (DoD)
+
+For each provider implementation (GitHub, Linear, Azure DevOps, Monday, Trello, Jira), the following checklist MUST be satisfied:
+
+#### 4.1 Normalized Error Types
+
+Each provider must map platform-specific errors to these normalized exception categories:
+
+| Error Category | Exception Class | When to Raise |
+|----------------|-----------------|---------------|
+| Authentication failure | `AuthenticationError` | Invalid/expired token, missing credentials, 401/403 responses |
+| Resource not found | `TicketNotFoundError` | Ticket ID does not exist, 404 responses |
+| Validation error | `TicketIdFormatError` | Malformed ticket ID, invalid format for platform |
+| Platform API error | `PlatformApiError` | Rate limiting, server errors, unexpected API responses |
+
+All exceptions are defined in `spec.integrations.providers.exceptions` (provider-level) or `spec.integrations.fetchers.exceptions` (fetcher-level).
+
+#### 4.2 Output Contract
+
+`provider.fetch_ticket(ticket_id)` or `provider.normalize(raw_data, ticket_id)` MUST return a `GenericTicket` with these required fields populated:
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | `str` | ✅ Yes | Normalized ticket identifier (e.g., "PROJ-123", "owner/repo#42") |
+| `platform` | `Platform` | ✅ Yes | Platform enum value |
+| `url` | `str` | ✅ Yes | Full URL to view ticket in browser |
+| `title` | `str` | ✅ Yes | Ticket title/summary |
+| `description` | `str` | ✅ Yes | Ticket description (empty string if not available) |
+| `status` | `TicketStatus` | ✅ Yes | Mapped to `TicketStatus` enum |
+| `type` | `TicketType` | ✅ Yes | Mapped to `TicketType` enum (use `TASK` as default if unknown) |
+| `assignee` | `str \| None` | Optional | Display name of assignee |
+| `labels` | `list[str]` | Optional | List of label names (empty list if none) |
+
+#### 4.3 Required Tests
+
+Each provider MUST have:
+1. **Parsing tests** - `test_parse_input_*`: Verify URL and ID pattern parsing
+2. **Happy path test** - `test_normalize_*`: Verify raw API data → GenericTicket conversion
+3. **Failure path test** - `test_*_error_handling`: Verify at least one error case (e.g., not found, auth failure)
+
+### 5. CLI Wiring: Parsing Responsibility
+
+**Centralized Parsing Rule:**
+Do NOT parse the same identifier in multiple places; parsing MUST be centralized.
+
+**Chosen Approach:**
+The `ProviderRegistry` returns the `provider`, and the provider exposes `parse_input(input_str) -> str` to extract the normalized ticket ID.
+
+**Flow:**
+```
+1. CLI receives user input (URL or ticket ID)
+2. ProviderRegistry.get_provider_for_input(input) → returns (provider, detection_groups)
+   OR ProviderRegistry.detect_platform(input) → returns Platform enum
+3. provider.parse_input(input) → returns normalized ticket_id string
+4. TicketService.get_ticket() calls provider.parse_input() internally
+5. Fetcher receives (ticket_id: str, platform: str) — already parsed
+```
+
+**Invariants:**
+- `parse_input()` is called exactly ONCE per ticket fetch operation.
+- `parse_input()` is the ONLY place that extracts ticket ID from raw user input.
+- The CLI does NOT perform any regex parsing of ticket IDs—it passes raw input to TicketService.
+
+---
+
 ## Changelog
 
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-01-28 | AI Assistant | Initial draft created (validation of existing documentation) |
+| 2026-01-29 | AI Assistant | Added Implementation Constraints section with: canonical credential map reference, cache behavior specification, platform registry ambiguity resolution rules, provider Definition of Done, and CLI parsing responsibility clarification. |
