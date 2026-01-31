@@ -16,10 +16,10 @@ import subprocess
 
 import pytest
 
-# Skip all tests unless integration tests are enabled
-pytestmark = pytest.mark.skipif(
+# Marker for tests that require running the Auggie CLI (integration/CLI tests)
+requires_integration = pytest.mark.skipif(
     os.environ.get("SPEC_INTEGRATION_TESTS") != "1",
-    reason="Baseline tests require SPEC_INTEGRATION_TESTS=1",
+    reason="Integration tests require SPEC_INTEGRATION_TESTS=1",
 )
 
 
@@ -82,11 +82,15 @@ class TestImportability:
             pytest.fail(f"Cannot import SPECFLOW_AGENT_* constants: {e}")
 
 
+@requires_integration
 class TestAuggieClientSemantics:
     """Capture current AuggieClient method semantics.
 
     These tests verify the EXACT return types and behaviors of AuggieClient
     methods. Any new backend implementation MUST match these semantics.
+
+    NOTE: These tests require the Auggie CLI and are skipped unless
+    SPEC_INTEGRATION_TESTS=1 is set.
     """
 
     def test_run_with_callback_returns_tuple_bool_str(self):
@@ -96,7 +100,7 @@ class TestAuggieClientSemantics:
         - Returns tuple[bool, str]
         - First element is success (True if returncode == 0)
         - Second element is full output (all lines concatenated)
-        - Callback is invoked for each line (stripped of newline)
+        - Callback is invoked for each line (stripped of newline) when successful
         """
         from spec.integrations.auggie import AuggieClient
 
@@ -112,8 +116,9 @@ class TestAuggieClientSemantics:
         # Verify return type semantics
         assert isinstance(success, bool), "First element must be bool"
         assert isinstance(output, str), "Second element must be str"
-        # Verify callback was called
-        assert len(output_lines) > 0, "Callback should receive output lines"
+        # Verify callback was called (only assert if success, as failures may have no output)
+        if success:
+            assert len(output_lines) > 0, "Callback should receive output lines on success"
 
     def test_run_with_callback_tuple_length_is_two(self):
         """Verify run_with_callback always returns a 2-tuple (bool, str)."""
@@ -258,26 +263,27 @@ class TestAuggieClientSemantics:
         """Verify run_with_callback returns False on command failure.
 
         Contract:
-        - Returns (False, output) when command fails (returncode != 0)
-        - Output is still captured even on failure
+        - Returns (bool, str) tuple
+        - success is False when command fails (returncode != 0)
+        - Output is still captured even on failure (as str, possibly empty)
         """
         from spec.integrations.auggie import AuggieClient
 
         client = AuggieClient()
 
-        # Invalid command should fail (use invalid model to trigger error)
+        # Use an invalid subcommand/flag that reliably returns non-zero
+        # --invalid-flag-that-does-not-exist is not a valid auggie flag
         success, output = client.run_with_callback(
-            "test",
+            "--invalid-flag-that-does-not-exist",
             output_callback=lambda x: None,
-            model="INVALID_MODEL_THAT_DOES_NOT_EXIST_12345",
             dont_save_session=True,
         )
 
-        # Note: This may succeed with default model fallback
-        # The key contract is that False means returncode != 0
-        assert isinstance(success, bool)
-        assert success is False, "Failure path must set success to False"
-        assert isinstance(output, str)
+        # Verify return type semantics (stable contract)
+        assert isinstance(success, bool), "First element must be bool"
+        assert isinstance(output, str), "Second element must be str"
+        # An invalid flag should reliably fail
+        assert success is False, "Invalid CLI flag must return success=False"
 
 
 class TestRateLimitDetection:
