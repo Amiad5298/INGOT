@@ -25,6 +25,7 @@ from spec.integrations.backends.errors import (
     BackendRateLimitError,
     BackendTimeoutError,
 )
+from spec.integrations.backends.factory import BackendFactory
 
 # Explicit public API for IDE support and documentation.
 # All exported symbols should be listed here.
@@ -40,4 +41,6 @@ __all__ = [
     "BackendNotInstalledError",
     "BackendNotConfiguredError",
     "BackendTimeoutError",
+    # Factory
+    "BackendFactory",
 ]
