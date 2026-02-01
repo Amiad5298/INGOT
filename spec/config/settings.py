@@ -93,8 +93,13 @@ class Settings:
     # Platform settings
     default_platform: str = ""  # Default platform for ambiguous ticket IDs (jira, linear, etc.)
 
+    # Backend settings
+    ai_backend: str = (
+        ""  # AI backend selection (auggie, claude, cursor) - no default, must be configured
+    )
+
     # Fetch strategy settings
-    agent_platform: str = "auggie"
+    agent_platform: str = "auggie"  # Legacy - use ai_backend instead
     fetch_strategy_default: str = "auto"
     fetch_cache_duration_hours: int = 24
     fetch_timeout_seconds: int = 30
@@ -126,7 +131,9 @@ class Settings:
             "AUTO_UPDATE_DOCS": "auto_update_docs",
             # Platform settings
             "DEFAULT_PLATFORM": "default_platform",
-            # Fetch strategy settings
+            # Backend settings
+            "AI_BACKEND": "ai_backend",
+            # Fetch strategy settings (legacy AGENT_PLATFORM kept for backward compatibility)
             "AGENT_PLATFORM": "agent_platform",
             "FETCH_STRATEGY_DEFAULT": "fetch_strategy_default",
             "FETCH_CACHE_DURATION_HOURS": "fetch_cache_duration_hours",
