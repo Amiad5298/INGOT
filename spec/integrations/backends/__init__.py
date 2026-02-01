@@ -9,9 +9,11 @@ This package provides a unified abstraction layer for AI backends:
 Modules:
 - errors: Backend-related error types
 - base: AIBackend protocol, BaseBackend class, and SubagentMetadata
+- auggie: AuggieBackend implementation (Phase 1.5)
 - factory: Backend factory for instantiation (Phase 1.6+)
 """
 
+from spec.integrations.backends.auggie import AuggieBackend
 from spec.integrations.backends.base import (
     AIBackend,
     BaseBackend,
@@ -31,6 +33,8 @@ __all__ = [
     "AIBackend",
     "BaseBackend",
     "SubagentMetadata",
+    # Backend implementations
+    "AuggieBackend",
     # Error types
     "BackendRateLimitError",
     "BackendNotInstalledError",
