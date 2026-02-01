@@ -8,11 +8,15 @@ This package provides a unified abstraction layer for AI backends:
 
 Modules:
 - errors: Backend-related error types
-- base: AIBackend protocol and BaseBackend class
+- base: AIBackend protocol, BaseBackend class, and SubagentMetadata
 - factory: Backend factory for instantiation (Phase 1.6+)
 """
 
-from spec.integrations.backends.base import AIBackend
+from spec.integrations.backends.base import (
+    AIBackend,
+    BaseBackend,
+    SubagentMetadata,
+)
 from spec.integrations.backends.errors import (
     BackendNotConfiguredError,
     BackendNotInstalledError,
@@ -23,8 +27,10 @@ from spec.integrations.backends.errors import (
 # Explicit public API for IDE support and documentation.
 # All exported symbols should be listed here.
 __all__ = [
-    # Protocol
+    # Protocol and base class
     "AIBackend",
+    "BaseBackend",
+    "SubagentMetadata",
     # Error types
     "BackendRateLimitError",
     "BackendNotInstalledError",
