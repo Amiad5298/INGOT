@@ -13,15 +13,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from spec.integrations.providers import Platform
 
-# Import subagent constants as single source of truth
-from spec.workflow.constants import (
-    SPECFLOW_AGENT_DOC_UPDATER,
-    SPECFLOW_AGENT_IMPLEMENTER,
-    SPECFLOW_AGENT_PLANNER,
-    SPECFLOW_AGENT_REVIEWER,
-    SPECFLOW_AGENT_TASKLIST,
-    SPECFLOW_AGENT_TASKLIST_REFINER,
-)
+# Subagent constants - must be defined here to avoid circular imports.
+# These are the canonical values; spec/workflow/constants.py re-exports them.
+# DO NOT import from spec.workflow.constants here - it causes circular imports
+# because spec/workflow/__init__.py imports from runner.py which imports from
+# spec/config/manager.py.
+_SPECFLOW_AGENT_PLANNER = "spec-planner"
+_SPECFLOW_AGENT_TASKLIST = "spec-tasklist"
+_SPECFLOW_AGENT_TASKLIST_REFINER = "spec-tasklist-refiner"
+_SPECFLOW_AGENT_IMPLEMENTER = "spec-implementer"
+_SPECFLOW_AGENT_REVIEWER = "spec-reviewer"
+_SPECFLOW_AGENT_DOC_UPDATER = "spec-doc-updater"
 
 
 @dataclass
@@ -77,13 +79,13 @@ class Settings:
     fail_fast: bool = False
 
     # Subagent settings (customizable agent names)
-    # Defaults from auggie.py constants - the single source of truth
-    subagent_planner: str = SPECFLOW_AGENT_PLANNER
-    subagent_tasklist: str = SPECFLOW_AGENT_TASKLIST
-    subagent_tasklist_refiner: str = SPECFLOW_AGENT_TASKLIST_REFINER
-    subagent_implementer: str = SPECFLOW_AGENT_IMPLEMENTER
-    subagent_reviewer: str = SPECFLOW_AGENT_REVIEWER
-    subagent_doc_updater: str = SPECFLOW_AGENT_DOC_UPDATER
+    # Defaults use local constants to avoid circular imports
+    subagent_planner: str = _SPECFLOW_AGENT_PLANNER
+    subagent_tasklist: str = _SPECFLOW_AGENT_TASKLIST
+    subagent_tasklist_refiner: str = _SPECFLOW_AGENT_TASKLIST_REFINER
+    subagent_implementer: str = _SPECFLOW_AGENT_IMPLEMENTER
+    subagent_reviewer: str = _SPECFLOW_AGENT_REVIEWER
+    subagent_doc_updater: str = _SPECFLOW_AGENT_DOC_UPDATER
 
     # Documentation update settings
     auto_update_docs: bool = True  # Enable automatic documentation updates

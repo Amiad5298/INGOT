@@ -53,14 +53,9 @@ from spec.integrations.ticket_service import (
     TicketService,
     create_ticket_service,
 )
-from spec.workflow.constants import (
-    SPECFLOW_AGENT_DOC_UPDATER,
-    SPECFLOW_AGENT_IMPLEMENTER,
-    SPECFLOW_AGENT_PLANNER,
-    SPECFLOW_AGENT_REVIEWER,
-    SPECFLOW_AGENT_TASKLIST,
-    SPECFLOW_AGENT_TASKLIST_REFINER,
-)
+
+# Note: SPECFLOW_AGENT_* constants are NOT re-exported here to avoid
+# circular imports. Import them directly from spec.workflow.constants.
 
 __all__ = [
     # Authentication
@@ -104,13 +99,7 @@ __all__ = [
     "check_auggie_installed",
     "install_auggie",
     "list_models",
-    # Subagent constants (all 6 now exported)
-    "SPECFLOW_AGENT_PLANNER",
-    "SPECFLOW_AGENT_TASKLIST",
-    "SPECFLOW_AGENT_TASKLIST_REFINER",
-    "SPECFLOW_AGENT_IMPLEMENTER",
-    "SPECFLOW_AGENT_REVIEWER",
-    "SPECFLOW_AGENT_DOC_UPDATER",
+    # Note: SPECFLOW_AGENT_* constants removed - import from spec.workflow.constants
     # TicketService
     "TicketService",
     "create_ticket_service",
