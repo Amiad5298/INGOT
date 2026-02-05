@@ -30,8 +30,8 @@ from spec.integrations.providers.base import GenericTicket
 
 if TYPE_CHECKING:
     from spec.config import ConfigManager
-    from spec.integrations.auggie import AuggieClient
     from spec.integrations.auth import AuthenticationManager
+    from spec.integrations.backends.base import AIBackend
 
 
 @runtime_checkable
@@ -291,7 +291,7 @@ class TicketService:
 
 
 async def create_ticket_service(
-    auggie_client: AuggieClient | None = None,
+    backend: AIBackend | None = None,
     auth_manager: AuthenticationManager | None = None,
     config_manager: ConfigManager | None = None,
     cache: TicketCache | None = None,
@@ -301,7 +301,7 @@ async def create_ticket_service(
     """Create a TicketService with standard configuration.
 
     Factory function that creates a TicketService with:
-    - AuggieMediatedFetcher as primary (if auggie_client provided)
+    - AuggieMediatedFetcher as primary (if backend provided)
     - DirectAPIFetcher as fallback (if enable_fallback=True and auth_manager provided)
     - InMemoryTicketCache (if no cache provided)
 
@@ -319,10 +319,10 @@ async def create_ticket_service(
             TicketService → DirectAPIFetcher → AuthenticationManager → ConfigManager
 
     Args:
-        auggie_client: AuggieClient for agent-mediated fetching.
+        backend: AIBackend instance for agent-mediated fetching.
             If None, DirectAPIFetcher becomes the only fetcher.
         auth_manager: AuthenticationManager for DirectAPIFetcher.
-            Required if enable_fallback=True or auggie_client is None.
+            Required if enable_fallback=True or backend is None.
         config_manager: Optional ConfigManager for AuggieMediatedFetcher.
         cache: Optional custom cache implementation.
             Defaults to InMemoryTicketCache with max_size=1000.
@@ -336,14 +336,14 @@ async def create_ticket_service(
         ValueError: If configuration is invalid (no fetchers configured)
 
     Example:
-        from spec.auggie.client import AuggieClient
+        from spec.integrations.backends import AuggieBackend
         from spec.integrations.auth import get_auth_manager
 
-        auggie = AuggieClient()
+        backend = AuggieBackend()
         auth_manager = await get_auth_manager()
 
         async with await create_ticket_service(
-            auggie_client=auggie,
+            backend=backend,
             auth_manager=auth_manager,
         ) as service:
             ticket = await service.get_ticket("PROJ-123")
@@ -352,9 +352,9 @@ async def create_ticket_service(
     fallback: TicketFetcherProtocol | None = None
 
     # Configure primary fetcher
-    if auggie_client:
+    if backend:
         primary = AuggieMediatedFetcher(
-            auggie_client=auggie_client,
+            backend=backend,
             config_manager=config_manager,
         )
 
@@ -370,7 +370,7 @@ async def create_ticket_service(
     if not primary:
         raise ValueError(
             "Cannot create TicketService: no fetchers configured. "
-            "Provide auggie_client or auth_manager."
+            "Provide backend or auth_manager."
         )
 
     # Configure cache

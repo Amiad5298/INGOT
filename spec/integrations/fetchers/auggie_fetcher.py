@@ -1,12 +1,12 @@
-"""Auggie-mediated ticket fetcher using MCP integrations.
+"""AI backend-mediated ticket fetcher using MCP integrations.
 
 This module provides the AuggieMediatedFetcher class that fetches
-ticket data through Auggie's native MCP tool integrations for
+ticket data through an AI backend's MCP tool integrations for
 Jira, Linear, and GitHub (platforms with MCP integrations).
 
 Architecture Note:
     This fetcher uses a prompt-based approach rather than direct tool
-    invocation because the AuggieClient API does not expose an `invoke_tool()`
+    invocation because the AIBackend API does not expose an `invoke_tool()`
     method. The CLI interface requires natural language prompts that instruct
     the agent to use its MCP tools.
 
@@ -16,8 +16,13 @@ Architecture Note:
     - Response parsing handles markdown code blocks
     - Validation ensures required fields exist before returning
 
-    If AuggieClient adds direct tool invocation in the future, this fetcher
+    If AIBackend adds direct tool invocation in the future, this fetcher
     should be updated to use that approach for more deterministic behavior.
+
+Historical Note:
+    This class was originally designed for Auggie (hence the name
+    "AuggieMediatedFetcher"). It now works with any AIBackend implementation.
+    The class name is preserved for backwards compatibility.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from spec.integrations.backends.base import AIBackend
 from spec.integrations.fetchers.base import AgentMediatedFetcher
 from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
@@ -37,14 +43,13 @@ from spec.integrations.providers.base import Platform
 
 if TYPE_CHECKING:
     from spec.config import ConfigManager
-    from spec.integrations.auggie import AuggieClient
 
 logger = logging.getLogger(__name__)
 
 # Default timeout for agent execution (seconds)
 DEFAULT_TIMEOUT_SECONDS: float = 60.0
 
-# Platforms supported by Auggie MCP integrations
+# Platforms supported by AI backend MCP integrations
 SUPPORTED_PLATFORMS = {Platform.JIRA, Platform.LINEAR, Platform.GITHUB}
 
 # Required fields per platform for validation
@@ -119,36 +124,40 @@ Fields can be null if not available.
 
 
 class AuggieMediatedFetcher(AgentMediatedFetcher):
-    """Fetches tickets through Auggie's native MCP integrations.
+    """Fetches tickets through AI backend's MCP integrations.
 
-    This fetcher delegates to Auggie's built-in tool calls for platforms
+    This fetcher delegates to the AI backend's tool calls for platforms
     like Jira, Linear, and GitHub. It's the primary fetch path when
-    running in an Auggie-enabled environment.
+    running in an AI agent-enabled environment.
 
     Note:
-        This fetcher uses prompt-based invocation since AuggieClient does
-        not expose direct tool invocation. See module docstring for details.
+        Despite the name "AuggieMediatedFetcher", this fetcher can work
+        with any AIBackend implementation. The name is preserved for
+        backwards compatibility.
+
+        This fetcher uses prompt-based invocation since the backend API
+        does not expose direct tool invocation. See module docstring for details.
 
     Attributes:
-        _auggie: AuggieClient for CLI invocations
+        _backend: AIBackend instance for prompt execution
         _config: Optional ConfigManager for checking agent integrations
         _timeout_seconds: Timeout for agent execution
     """
 
     def __init__(
         self,
-        auggie_client: AuggieClient,
+        backend: AIBackend,
         config_manager: ConfigManager | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
-        """Initialize with Auggie client and optional config.
+        """Initialize with AI backend and optional config.
 
         Args:
-            auggie_client: Client for Auggie CLI invocations
+            backend: AI backend instance (AuggieBackend, ClaudeBackend, etc.)
             config_manager: Optional ConfigManager for checking integrations
             timeout_seconds: Timeout for agent execution (default: 60s)
         """
-        self._auggie = auggie_client
+        self._backend = backend
         self._config = config_manager
         self._timeout_seconds = timeout_seconds
 
@@ -196,7 +205,7 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
         return platform_enum
 
     def supports_platform(self, platform: Platform) -> bool:
-        """Check if Auggie has integration for this platform.
+        """Check if the backend has integration for this platform.
 
         First checks if platform is in SUPPORTED_PLATFORMS, then
         consults AgentConfig if ConfigManager is available.
@@ -205,7 +214,7 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
             platform: Platform enum value to check
 
         Returns:
-            True if Auggie can fetch from this platform
+            True if the backend can fetch from this platform
         """
         if platform not in SUPPORTED_PLATFORMS:
             return False
@@ -253,7 +262,7 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
         platform: Platform,
         timeout_seconds: float | None = None,
     ) -> str:
-        """Execute fetch prompt via Auggie CLI with timeout.
+        """Execute fetch prompt via AI backend with timeout.
 
         Uses run_print_quiet() for non-interactive execution that
         captures the response for JSON parsing.
@@ -264,12 +273,12 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
             for it indefinitely.
 
         Args:
-            prompt: Structured prompt to send to Auggie
+            prompt: Structured prompt to send to the backend
             platform: Target platform (for logging/context)
             timeout_seconds: Timeout for this execution (defaults to self._timeout_seconds)
 
         Returns:
-            Raw response string from Auggie
+            Raw response string from the backend
 
         Raises:
             AgentFetchError: If execution fails or times out
@@ -278,7 +287,7 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
             timeout_seconds if timeout_seconds is not None else self._timeout_seconds
         )
         logger.debug(
-            "Executing Auggie fetch for %s (timeout: %.1fs)",
+            "Executing backend fetch for %s (timeout: %.1fs)",
             platform.name,
             effective_timeout,
         )
@@ -289,27 +298,26 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
             result = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
-                    lambda: self._auggie.run_print_quiet(prompt, dont_save_session=True),
+                    lambda: self._backend.run_print_quiet(prompt, dont_save_session=True),
                 ),
                 timeout=effective_timeout,
             )
         except TimeoutError:
             raise AgentFetchError(
-                message=(f"Auggie CLI execution timed out after {effective_timeout}s"),
+                message=(f"Backend execution timed out after {effective_timeout}s"),
                 agent_name=self.name,
             ) from None
         except Exception as e:
             raise AgentFetchError(
-                message=f"Auggie CLI invocation failed: {e}",
+                message=f"Backend invocation failed: {e}",
                 agent_name=self.name,
                 original_error=e,
             ) from e
 
         # run_print_quiet returns a string directly, not CompletedProcess
-        # (verified from AuggieClient.run_print_quiet implementation)
         if not result:
             raise AgentFetchError(
-                message="Auggie returned empty response",
+                message="Backend returned empty response",
                 agent_name=self.name,
             )
 

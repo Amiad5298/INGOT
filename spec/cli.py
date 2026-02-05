@@ -14,7 +14,7 @@ from typing import Annotated, TypeVar
 import typer
 
 from spec.config.manager import ConfigManager
-from spec.integrations.auggie import AuggieClient, check_auggie_installed, install_auggie
+from spec.integrations.auggie import check_auggie_installed, install_auggie
 from spec.integrations.auth import AuthenticationManager
 from spec.integrations.git import is_git_repo
 from spec.integrations.providers import GenericTicket, Platform
@@ -223,7 +223,7 @@ async def create_ticket_service_from_config(config: ConfigManager) -> TicketServ
     """Create a TicketService with dependencies wired from configuration.
 
     This is a dependency injection helper that centralizes the creation of
-    AuggieClient and AuthenticationManager, making the CLI code cleaner
+    the AI backend and AuthenticationManager, making the CLI code cleaner
     and easier to test.
 
     Args:
@@ -237,11 +237,13 @@ async def create_ticket_service_from_config(config: ConfigManager) -> TicketServ
         async with service as svc:
             ticket = await svc.get_ticket("PROJ-123")
     """
-    auggie_client = AuggieClient()
+    from spec.integrations.backends.auggie import AuggieBackend
+
+    backend = AuggieBackend()
     auth_manager = AuthenticationManager(config)
 
     return await create_ticket_service(
-        auggie_client=auggie_client,
+        backend=backend,
         auth_manager=auth_manager,
         config_manager=config,
     )

@@ -513,7 +513,7 @@ class TestCreateTicketService:
             mock_direct_fetcher_class.return_value.close = AsyncMock()
 
             service = await create_ticket_service(
-                auggie_client=mock_auggie,
+                backend=mock_auggie,
                 auth_manager=mock_auth,
             )
 
@@ -525,7 +525,7 @@ class TestCreateTicketService:
 
     @pytest.mark.asyncio
     async def test_create_with_auth_manager_only(self):
-        """Should use DirectAPIFetcher as primary when no auggie_client."""
+        """Should use DirectAPIFetcher as primary when no backend."""
         mock_auth = MagicMock()
 
         with patch(
@@ -584,7 +584,7 @@ class TestCreateTicketService:
             mock_auggie_fetcher_class.return_value.name = "AuggieMediatedFetcher"
 
             service = await create_ticket_service(
-                auggie_client=mock_auggie,
+                backend=mock_auggie,
                 auth_manager=mock_auth,
                 enable_fallback=False,
             )
