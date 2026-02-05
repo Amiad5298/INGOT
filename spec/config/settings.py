@@ -53,6 +53,8 @@ class Settings:
         subagent_reviewer: Agent name for task validation
         subagent_doc_updater: Agent name for documentation update step
         auto_update_docs: Enable automatic documentation updates after code changes
+        default_platform: Default platform for ambiguous ticket IDs (jira, linear, etc.)
+        ai_backend: AI backend selection (auggie, claude, cursor) - must be explicitly configured
     """
 
     # Model settings
@@ -99,7 +101,6 @@ class Settings:
     )
 
     # Fetch strategy settings
-    agent_platform: str = "auggie"  # Legacy - use ai_backend instead
     fetch_strategy_default: str = "auto"
     fetch_cache_duration_hours: int = 24
     fetch_timeout_seconds: int = 30
@@ -133,8 +134,7 @@ class Settings:
             "DEFAULT_PLATFORM": "default_platform",
             # Backend settings
             "AI_BACKEND": "ai_backend",
-            # Fetch strategy settings (legacy AGENT_PLATFORM kept for backward compatibility)
-            "AGENT_PLATFORM": "agent_platform",
+            # Fetch strategy settings
             "FETCH_STRATEGY_DEFAULT": "fetch_strategy_default",
             "FETCH_CACHE_DURATION_HOURS": "fetch_cache_duration_hours",
             "FETCH_TIMEOUT_SECONDS": "fetch_timeout_seconds",
