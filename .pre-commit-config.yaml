@@ -17,7 +17,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: mypy spec --config-file=pyproject.toml
+        entry: .venv/bin/mypy spec --config-file=pyproject.toml
         language: system
         types: [python]
         pass_filenames: false

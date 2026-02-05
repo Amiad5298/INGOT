@@ -268,7 +268,28 @@ def mock_config_for_cli():
     mock_config.settings.max_parallel_tasks = 3
     mock_config.settings.parallel_execution_enabled = True
     mock_config.settings.fail_fast = False
+    # Support backend resolution: resolve_backend_platform calls config.get("AI_BACKEND", "")
+    # Use side_effect so only AI_BACKEND returns "auggie"; other keys return their defaults
+    mock_config.get.side_effect = lambda key, default="": {"AI_BACKEND": "auggie"}.get(key, default)
     return mock_config
+
+
+@pytest.fixture
+def mock_backend_resolution():
+    """Pre-configured backend resolution mocks for Layer B tests.
+
+    Sets up resolve_backend_platform and BackendFactory.create to return
+    an AUGGIE backend, matching the standard test configuration.
+    """
+    from spec.config.fetch_config import AgentPlatform
+
+    mock_backend_instance = MagicMock()
+    mock_backend_instance.platform = AgentPlatform.AUGGIE
+
+    return {
+        "platform": AgentPlatform.AUGGIE,
+        "backend_instance": mock_backend_instance,
+    }
 
 
 @pytest.fixture
@@ -294,7 +315,7 @@ def mock_ticket_service_factory():
         """
 
         async def mock_create_ticket_service(*args, **kwargs):
-            """Async mock that returns a TicketService-like object."""
+            """Async mock that returns a (TicketService, AIBackend) tuple."""
             mock_service = MagicMock()
 
             async def mock_get_ticket(ticket_input: str, **kwargs):
@@ -311,8 +332,8 @@ def mock_ticket_service_factory():
             mock_service.get_ticket = AsyncMock(side_effect=mock_get_ticket)
             mock_service.close = AsyncMock()
 
-            # Use standard async CM pattern helper
-            return make_async_context_manager(mock_service)
+            # Return (service, backend) tuple matching new return type
+            return make_async_context_manager(mock_service), MagicMock()
 
         return mock_create_ticket_service
 

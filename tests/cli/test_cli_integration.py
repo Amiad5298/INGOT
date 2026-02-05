@@ -334,6 +334,8 @@ class TestCLIServiceIntegration:
 
     @pytest.mark.parametrize("platform", list(PLATFORM_TEST_DATA.keys()))
     @patch("spec.workflow.runner.run_spec_driven_workflow")  # Mock at workflow runner level
+    @patch("spec.integrations.backends.factory.BackendFactory.create")  # Mock backend creation
+    @patch("spec.config.backend_resolver.resolve_backend_platform")  # Mock backend resolution
     @patch("spec.cli.show_banner")
     @patch("spec.cli._check_prerequisites", return_value=True)
     @patch("spec.cli.ConfigManager")
@@ -342,15 +344,19 @@ class TestCLIServiceIntegration:
         mock_config_class,
         mock_prereq,
         mock_banner,
+        mock_resolve_backend,
+        mock_backend_create,
         mock_workflow_runner,
         platform,
         mock_config_for_cli,
+        mock_backend_resolution,
         request,
     ):
         """Layer B: All 6 platforms work through CLI→TicketService→Provider chain.
 
         Mocking boundaries:
         - Fetcher constructors: AuggieMediatedFetcher and DirectAPIFetcher (SEPARATE instances)
+        - Backend resolution: resolve_backend_platform and BackendFactory.create
         - Workflow runner: run_spec_driven_workflow
         - ConfigManager, show_banner, _check_prerequisites (CLI infrastructure)
 
@@ -362,6 +368,8 @@ class TestCLIServiceIntegration:
         raw_data = request.getfixturevalue(test_data["raw_fixture"])
 
         mock_config_class.return_value = mock_config_for_cli
+        mock_resolve_backend.return_value = mock_backend_resolution["platform"]
+        mock_backend_create.return_value = mock_backend_resolution["backend_instance"]
 
         # Create SEPARATE mock fetchers for primary and fallback
         # This ensures we don't hide bugs where primary vs fallback are confused
@@ -428,6 +436,8 @@ class TestFallbackBehaviorViaCLI:
     """
 
     @patch("spec.workflow.runner.run_spec_driven_workflow")  # Mock at workflow runner level
+    @patch("spec.integrations.backends.factory.BackendFactory.create")  # Mock backend creation
+    @patch("spec.config.backend_resolver.resolve_backend_platform")  # Mock backend resolution
     @patch("spec.cli.show_banner")
     @patch("spec.cli._check_prerequisites", return_value=True)
     @patch("spec.cli.ConfigManager")
@@ -436,20 +446,26 @@ class TestFallbackBehaviorViaCLI:
         mock_config_class,
         mock_prereq,
         mock_banner,
+        mock_resolve_backend,
+        mock_backend_create,
         mock_workflow_runner,
         mock_jira_raw_data,
         mock_config_for_cli,
+        mock_backend_resolution,
     ):
         """Primary fetcher failure triggers fallback - both fetchers called.
 
         Mocking boundaries:
         - Primary fetcher: raises AgentIntegrationError
         - Fallback fetcher: returns valid raw data
+        - Backend resolution: resolve_backend_platform and BackendFactory.create
         - Workflow runner: mocked to verify ticket passed correctly
         """
         from spec.integrations.fetchers.exceptions import AgentIntegrationError
 
         mock_config_class.return_value = mock_config_for_cli
+        mock_resolve_backend.return_value = mock_backend_resolution["platform"]
+        mock_backend_create.return_value = mock_backend_resolution["backend_instance"]
 
         # Create a parent mock to track call order across fetchers
         call_order_tracker = MagicMock()
@@ -522,6 +538,8 @@ class TestFallbackBehaviorViaCLI:
         assert ticket.title == "Test Jira Ticket"
 
     @patch("spec.workflow.runner.run_spec_driven_workflow")  # Mock at workflow runner level
+    @patch("spec.integrations.backends.factory.BackendFactory.create")  # Mock backend creation
+    @patch("spec.config.backend_resolver.resolve_backend_platform")  # Mock backend resolution
     @patch("spec.cli.show_banner")
     @patch("spec.cli._check_prerequisites", return_value=True)
     @patch("spec.cli.ConfigManager")
@@ -530,17 +548,23 @@ class TestFallbackBehaviorViaCLI:
         mock_config_class,
         mock_prereq,
         mock_banner,
+        mock_resolve_backend,
+        mock_backend_create,
         mock_workflow_runner,
         mock_jira_raw_data,
         mock_config_for_cli,
+        mock_backend_resolution,
     ):
         """When primary succeeds, fallback should NOT be called.
 
         Mocking boundaries:
         - Primary fetcher: returns valid raw data (success case)
         - Fallback fetcher: should NOT be invoked
+        - Backend resolution: resolve_backend_platform and BackendFactory.create
         """
         mock_config_class.return_value = mock_config_for_cli
+        mock_resolve_backend.return_value = mock_backend_resolution["platform"]
+        mock_backend_create.return_value = mock_backend_resolution["backend_instance"]
 
         # Primary fetcher SUCCEEDS
         mock_primary = MagicMock()
@@ -612,7 +636,7 @@ class TestCLIErrorContract:
                 side_effect=TicketNotFoundError(ticket_id="NOTFOUND-999", platform="jira")
             )
             mock_service.close = AsyncMock()
-            return make_async_context_manager(mock_service)
+            return make_async_context_manager(mock_service), MagicMock()
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -656,7 +680,7 @@ class TestCLIErrorContract:
                 side_effect=AuthenticationError("Invalid API token", platform="jira")
             )
             mock_service.close = AsyncMock()
-            return make_async_context_manager(mock_service)
+            return make_async_context_manager(mock_service), MagicMock()
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -704,7 +728,7 @@ class TestCLIErrorContract:
                 )
             )
             mock_service.close = AsyncMock()
-            return make_async_context_manager(mock_service)
+            return make_async_context_manager(mock_service), MagicMock()
 
         with patch(
             "spec.cli.create_ticket_service_from_config",

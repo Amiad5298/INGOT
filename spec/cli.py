@@ -16,6 +16,8 @@ import typer
 from spec.config.manager import ConfigManager
 from spec.integrations.auggie import check_auggie_installed, install_auggie
 from spec.integrations.auth import AuthenticationManager
+from spec.integrations.backends.base import AIBackend
+from spec.integrations.backends.errors import BackendNotConfiguredError, BackendNotInstalledError
 from spec.integrations.git import is_git_repo
 from spec.integrations.providers import GenericTicket, Platform
 from spec.integrations.providers.exceptions import (
@@ -219,7 +221,11 @@ def _disambiguate_platform(ticket_input: str, config: ConfigManager) -> Platform
     return options[choice]
 
 
-async def create_ticket_service_from_config(config: ConfigManager) -> TicketService:
+async def create_ticket_service_from_config(
+    config_manager: ConfigManager,
+    auth_manager: AuthenticationManager | None = None,
+    cli_backend_override: str | None = None,
+) -> tuple[TicketService, AIBackend]:
     """Create a TicketService with dependencies wired from configuration.
 
     This is a dependency injection helper that centralizes the creation of
@@ -227,32 +233,45 @@ async def create_ticket_service_from_config(config: ConfigManager) -> TicketServ
     and easier to test.
 
     Args:
-        config: Configuration manager
+        config_manager: Configuration manager
+        auth_manager: Optional pre-configured AuthenticationManager.
+            If None, creates one from config_manager.
+        cli_backend_override: CLI --backend flag value for runtime override
 
     Returns:
-        Configured TicketService ready for use as an async context manager
+        Tuple of (TicketService, AIBackend) for backend reuse downstream
+
+    Raises:
+        BackendNotConfiguredError: If no backend is configured
+        BackendNotInstalledError: If backend CLI is not installed
 
     Example:
-        service = await create_ticket_service_from_config(config)
+        service, backend = await create_ticket_service_from_config(config)
         async with service as svc:
             ticket = await svc.get_ticket("PROJ-123")
     """
-    from spec.integrations.backends.auggie import AuggieBackend
+    from spec.config.backend_resolver import resolve_backend_platform
+    from spec.integrations.backends.factory import BackendFactory
 
-    backend = AuggieBackend()
-    auth_manager = AuthenticationManager(config)
+    platform = resolve_backend_platform(config_manager, cli_backend_override)
+    backend = BackendFactory.create(platform, verify_installed=True)
 
-    return await create_ticket_service(
+    if auth_manager is None:
+        auth_manager = AuthenticationManager(config_manager)
+
+    service = await create_ticket_service(
         backend=backend,
         auth_manager=auth_manager,
-        config_manager=config,
+        config_manager=config_manager,
     )
+    return service, backend
 
 
 async def _fetch_ticket_async(
     ticket_input: str,
     config: ConfigManager,
     platform_hint: Platform | None = None,
+    cli_backend_override: str | None = None,
 ) -> GenericTicket:
     """Fetch ticket using TicketService.
 
@@ -262,6 +281,7 @@ async def _fetch_ticket_async(
         ticket_input: Ticket ID or URL
         config: Configuration manager
         platform_hint: Optional platform override for ambiguous ticket IDs
+        cli_backend_override: CLI --backend flag value for runtime override
 
     Returns:
         GenericTicket from TicketService
@@ -270,6 +290,8 @@ async def _fetch_ticket_async(
         TicketNotFoundError: If ticket cannot be found
         AuthenticationError: If authentication fails
         PlatformNotSupportedError: If platform is not supported
+        BackendNotConfiguredError: If no backend is configured
+        BackendNotInstalledError: If backend CLI is not installed
     """
     # Handle platform hint by constructing a more specific input
     effective_input = ticket_input
@@ -277,7 +299,12 @@ async def _fetch_ticket_async(
         effective_input = _resolve_with_platform_hint(ticket_input, platform_hint)
 
     # Use the dependency injection helper for cleaner code
-    service: TicketService = await create_ticket_service_from_config(config)
+    # TODO: Forward _backend to _run_workflow once run_spec_driven_workflow
+    # accepts an AIBackend parameter (see Pluggable Multi-Agent Support spec).
+    service, _backend = await create_ticket_service_from_config(
+        config_manager=config,
+        cli_backend_override=cli_backend_override,
+    )
     async with service:
         ticket: GenericTicket = await service.get_ticket(effective_input)
         return ticket
@@ -499,6 +526,14 @@ def main(
             help="Enable automatic documentation updates (default: from config)",
         ),
     ] = None,
+    backend: Annotated[
+        str | None,
+        typer.Option(
+            "--backend",
+            "-b",
+            help="Override AI backend for this run (auggie, claude, cursor)",
+        ),
+    ] = None,
     show_config: Annotated[
         bool,
         typer.Option(
@@ -565,6 +600,7 @@ def main(
                 ticket=ticket,
                 config=config,
                 platform=platform_enum,
+                backend=backend,
                 model=model,
                 planning_model=planning_model,
                 impl_model=impl_model,
@@ -742,6 +778,7 @@ def _run_workflow(
     ticket: str,
     config: ConfigManager,
     platform: Platform | None = None,
+    backend: str | None = None,
     model: str | None = None,
     planning_model: str | None = None,
     impl_model: str | None = None,
@@ -764,6 +801,7 @@ def _run_workflow(
         ticket: Ticket ID or URL from any supported platform
         config: Configuration manager
         platform: Explicit platform override (from --platform flag)
+        backend: Override AI backend for this run (from --backend flag)
         model: Override model for all phases
         planning_model: Model for planning phases
         impl_model: Model for implementation phase
@@ -792,7 +830,12 @@ def _run_workflow(
     # Use run_async helper to safely handle existing event loops
     try:
         generic_ticket = run_async(
-            lambda: _fetch_ticket_async(ticket, config, platform_hint=effective_platform)
+            lambda: _fetch_ticket_async(
+                ticket,
+                config,
+                platform_hint=effective_platform,
+                cli_backend_override=backend,
+            )
         )
     except TicketNotFoundError as e:
         print_error(f"Ticket not found: {e}")
@@ -805,6 +848,18 @@ def _run_workflow(
         raise typer.Exit(ExitCode.GENERAL_ERROR) from e
     except AsyncLoopAlreadyRunningError as e:
         print_error(str(e))
+        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
+    except BackendNotConfiguredError as e:
+        print_error(str(e))
+        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
+    except BackendNotInstalledError as e:
+        print_error(str(e))
+        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
+    except NotImplementedError as e:
+        print_error(f"Backend not available: {e}")
+        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
+    except ValueError as e:
+        print_error(f"Invalid backend configuration: {e}")
         raise typer.Exit(ExitCode.GENERAL_ERROR) from e
     except (typer.Exit, SystemExit, KeyboardInterrupt):
         # Allow typer.Exit, SystemExit, and KeyboardInterrupt to propagate

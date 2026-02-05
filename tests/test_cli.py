@@ -1,6 +1,6 @@
 """Tests for spec.cli module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -1040,7 +1040,6 @@ class TestFetchTicketAsyncIntegration:
     @pytest.mark.asyncio
     async def test_fetch_ticket_async_calls_ticket_service(self):
         """_fetch_ticket_async properly calls TicketService.get_ticket."""
-        from unittest.mock import AsyncMock
 
         from spec.cli import _fetch_ticket_async
         from spec.integrations.providers import GenericTicket, Platform
@@ -1062,9 +1061,9 @@ class TestFetchTicketAsyncIntegration:
 
         mock_config = MagicMock()
 
-        # Patch create_ticket_service_from_config to return our mock service
+        # Patch create_ticket_service_from_config to return (service, backend) tuple
         async def mock_create_service_from_config(*args, **kwargs):
-            return mock_service
+            return mock_service, MagicMock()
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -1082,7 +1081,6 @@ class TestFetchTicketAsyncIntegration:
     @pytest.mark.asyncio
     async def test_fetch_ticket_async_with_platform_hint_linear(self):
         """_fetch_ticket_async converts ambiguous ID to Linear URL when hint provided."""
-        from unittest.mock import AsyncMock
 
         from spec.cli import _fetch_ticket_async
         from spec.integrations.providers import GenericTicket, Platform
@@ -1103,7 +1101,7 @@ class TestFetchTicketAsyncIntegration:
         mock_config = MagicMock()
 
         async def mock_create_service_from_config(*args, **kwargs):
-            return mock_service
+            return mock_service, MagicMock()
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -1122,7 +1120,6 @@ class TestFetchTicketAsyncIntegration:
     @pytest.mark.asyncio
     async def test_fetch_ticket_async_url_not_modified(self):
         """_fetch_ticket_async does not modify URL inputs even with platform hint."""
-        from unittest.mock import AsyncMock
 
         from spec.cli import _fetch_ticket_async
         from spec.integrations.providers import GenericTicket, Platform
@@ -1144,7 +1141,7 @@ class TestFetchTicketAsyncIntegration:
         original_url = "https://jira.example.com/browse/PROJ-123"
 
         async def mock_create_service_from_config(*args, **kwargs):
-            return mock_service
+            return mock_service, MagicMock()
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -1390,3 +1387,248 @@ class TestCLIProviderRegistryReset:
         # Second run should NOT have the stale config from first run
         # It should be empty string (the default when not configured)
         assert second_run_config.get("default_jira_project") == ""
+
+
+class TestCreateTicketServiceFromConfig:
+    """Tests for create_ticket_service_from_config with dynamic backend resolution."""
+
+    @pytest.mark.asyncio
+    async def test_calls_resolve_backend_platform(self):
+        """create_ticket_service_from_config calls resolve_backend_platform with correct args."""
+
+        from spec.cli import create_ticket_service_from_config
+
+        mock_config = MagicMock()
+        mock_platform = MagicMock()
+        mock_backend = MagicMock()
+        mock_service = AsyncMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+        ) as mock_resolve, patch(
+            "spec.integrations.backends.factory.BackendFactory"
+        ) as mock_factory_class, patch(
+            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        ):
+            mock_factory_class.create.return_value = mock_backend
+
+            service, backend = await create_ticket_service_from_config(
+                config_manager=mock_config,
+                cli_backend_override="auggie",
+            )
+
+        mock_resolve.assert_called_once_with(mock_config, "auggie")
+
+    @pytest.mark.asyncio
+    async def test_calls_backend_factory_create(self):
+        """create_ticket_service_from_config calls BackendFactory.create with resolved platform."""
+
+        from spec.cli import create_ticket_service_from_config
+
+        mock_config = MagicMock()
+        mock_platform = MagicMock()
+        mock_backend = MagicMock()
+        mock_service = AsyncMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
+            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        ):
+            mock_factory_class.create.return_value = mock_backend
+
+            service, backend = await create_ticket_service_from_config(
+                config_manager=mock_config,
+            )
+
+        mock_factory_class.create.assert_called_once_with(mock_platform, verify_installed=True)
+
+    @pytest.mark.asyncio
+    async def test_returns_service_and_backend_tuple(self):
+        """create_ticket_service_from_config returns (TicketService, AIBackend) tuple."""
+
+        from spec.cli import create_ticket_service_from_config
+
+        mock_config = MagicMock()
+        mock_platform = MagicMock()
+        mock_backend = MagicMock()
+        mock_service = AsyncMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
+            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        ):
+            mock_factory_class.create.return_value = mock_backend
+
+            result = await create_ticket_service_from_config(
+                config_manager=mock_config,
+            )
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert result[0] == mock_service
+        assert result[1] == mock_backend
+
+    @pytest.mark.asyncio
+    async def test_cli_backend_override_passed_to_resolver(self):
+        """cli_backend_override is forwarded to resolve_backend_platform."""
+
+        from spec.cli import create_ticket_service_from_config
+
+        mock_config = MagicMock()
+        mock_platform = MagicMock()
+        mock_backend = MagicMock()
+        mock_service = AsyncMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+        ) as mock_resolve, patch(
+            "spec.integrations.backends.factory.BackendFactory"
+        ) as mock_factory_class, patch(
+            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        ):
+            mock_factory_class.create.return_value = mock_backend
+
+            await create_ticket_service_from_config(
+                config_manager=mock_config,
+                cli_backend_override="claude",
+            )
+
+        mock_resolve.assert_called_once_with(mock_config, "claude")
+
+    @pytest.mark.asyncio
+    async def test_backend_not_configured_error_propagates(self):
+        """BackendNotConfiguredError propagates from resolve_backend_platform."""
+        from spec.cli import create_ticket_service_from_config
+        from spec.integrations.backends.errors import BackendNotConfiguredError
+
+        mock_config = MagicMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform",
+            side_effect=BackendNotConfiguredError("No backend configured"),
+        ), pytest.raises(BackendNotConfiguredError, match="No backend configured"):
+            await create_ticket_service_from_config(config_manager=mock_config)
+
+    @pytest.mark.asyncio
+    async def test_backend_not_installed_error_propagates(self):
+        """BackendNotInstalledError propagates from BackendFactory.create."""
+        from spec.cli import create_ticket_service_from_config
+        from spec.integrations.backends.errors import BackendNotInstalledError
+
+        mock_config = MagicMock()
+        mock_platform = MagicMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+        ), patch(
+            "spec.integrations.backends.factory.BackendFactory"
+        ) as mock_factory_class, pytest.raises(BackendNotInstalledError, match="CLI not installed"):
+            mock_factory_class.create.side_effect = BackendNotInstalledError("CLI not installed")
+            await create_ticket_service_from_config(config_manager=mock_config)
+
+    @pytest.mark.asyncio
+    async def test_default_auth_manager_created_when_none(self):
+        """AuthenticationManager is created from config when not provided."""
+
+        from spec.cli import create_ticket_service_from_config
+
+        mock_config = MagicMock()
+        mock_platform = MagicMock()
+        mock_backend = MagicMock()
+        mock_service = AsyncMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
+            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        ), patch("spec.cli.AuthenticationManager") as mock_auth_class:
+            mock_factory_class.create.return_value = mock_backend
+
+            await create_ticket_service_from_config(config_manager=mock_config)
+
+        mock_auth_class.assert_called_once_with(mock_config)
+
+    @pytest.mark.asyncio
+    async def test_provided_auth_manager_used(self):
+        """Provided auth_manager is used instead of creating a new one."""
+
+        from spec.cli import create_ticket_service_from_config
+
+        mock_config = MagicMock()
+        mock_platform = MagicMock()
+        mock_backend = MagicMock()
+        mock_service = AsyncMock()
+        mock_auth = MagicMock()
+
+        with patch(
+            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
+            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        ) as mock_create, patch("spec.cli.AuthenticationManager") as mock_auth_class:
+            mock_factory_class.create.return_value = mock_backend
+
+            await create_ticket_service_from_config(
+                config_manager=mock_config,
+                auth_manager=mock_auth,
+            )
+
+        # Should NOT create a new AuthenticationManager
+        mock_auth_class.assert_not_called()
+        # Should pass the provided auth_manager to create_ticket_service
+        call_kwargs = mock_create.call_args[1]
+        assert call_kwargs["auth_manager"] == mock_auth
+
+
+class TestBackendFlag:
+    """Tests for --backend CLI flag."""
+
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
+    def test_backend_flag_passed_to_workflow(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """--backend flag is passed to _run_workflow."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config_class.return_value = mock_config
+
+        runner.invoke(app, ["--backend", "auggie", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["backend"] == "auggie"
+
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
+    def test_backend_short_flag(self, mock_run, mock_prereq, mock_config_class, mock_banner):
+        """-b shorthand works for --backend."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config_class.return_value = mock_config
+
+        runner.invoke(app, ["-b", "claude", "TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["backend"] == "claude"
+
+    @patch("spec.cli.show_banner")
+    @patch("spec.cli.ConfigManager")
+    @patch("spec.cli._check_prerequisites")
+    @patch("spec.cli._run_workflow")
+    def test_backend_none_when_not_provided(
+        self, mock_run, mock_prereq, mock_config_class, mock_banner
+    ):
+        """No --backend flag passes None to workflow."""
+        mock_prereq.return_value = True
+        mock_config = MagicMock()
+        mock_config_class.return_value = mock_config
+
+        runner.invoke(app, ["TEST-123"])
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["backend"] is None
