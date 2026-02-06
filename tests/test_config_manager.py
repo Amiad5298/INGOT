@@ -2262,8 +2262,8 @@ FETCH_STRATEGY_LINEAR=agent
         # Should have errors for active platforms that can't use agent strategy
         assert len(errors) > 0
 
-    def test_validate_fetch_config_strict_raises_on_invalid_agent_platform(self, tmp_path):
-        """strict=True raises ConfigValidationError for invalid agent platform."""
+    def test_validate_fetch_config_strict_raises_on_invalid_ai_backend(self, tmp_path):
+        """strict=True raises ConfigValidationError for invalid AI backend."""
         from spec.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
@@ -2271,11 +2271,11 @@ FETCH_STRATEGY_LINEAR=agent
         manager = ConfigManager(config_path)
         manager.load()
 
-        with pytest.raises(ConfigValidationError, match="Invalid agent platform"):
+        with pytest.raises(ConfigValidationError, match="Invalid AI backend"):
             manager.validate_fetch_config(strict=True)
 
-    def test_validate_fetch_config_nonstrict_collects_invalid_agent_platform(self, tmp_path):
-        """strict=False collects error for invalid agent platform without raising."""
+    def test_validate_fetch_config_nonstrict_collects_invalid_ai_backend(self, tmp_path):
+        """strict=False collects error for invalid AI backend without raising."""
         config_path = tmp_path / "config"
         config_path.write_text("AI_BACKEND=invalid_platform\n")
         manager = ConfigManager(config_path)
@@ -2286,7 +2286,7 @@ FETCH_STRATEGY_LINEAR=agent
 
         # Should have collected the error
         assert len(errors) >= 1
-        assert any("invalid agent platform" in e.lower() for e in errors)
+        assert any("invalid ai backend" in e.lower() for e in errors)
 
     def test_validate_fetch_config_strict_raises_on_invalid_strategy(self, tmp_path):
         """strict=True raises ConfigValidationError for invalid fetch strategy."""
@@ -2333,7 +2333,7 @@ FETCH_STRATEGY_JIRA=also_invalid
         # Should have collected multiple errors
         assert len(errors) >= 2
         error_text = " ".join(errors).lower()
-        assert "invalid agent platform" in error_text
+        assert "invalid ai backend" in error_text
         assert "invalid fetch strategy" in error_text
 
 
