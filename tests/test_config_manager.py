@@ -1402,8 +1402,8 @@ class TestFetchConfigEnums:
         with pytest.raises(ValueError):
             FetchStrategy("invalid")
 
-    def test_agent_platform_values(self):
-        """AgentPlatform enum has correct values."""
+    def test_ai_backend_values(self):
+        """AI backend enum has correct values."""
         from spec.config.fetch_config import AgentPlatform
 
         assert AgentPlatform.AUGGIE.value == "auggie"
@@ -1412,16 +1412,16 @@ class TestFetchConfigEnums:
         assert AgentPlatform.AIDER.value == "aider"
         assert AgentPlatform.MANUAL.value == "manual"
 
-    def test_agent_platform_from_string(self):
-        """AgentPlatform can be created from string value."""
+    def test_ai_backend_from_string(self):
+        """AI backend enum can be created from string value."""
         from spec.config.fetch_config import AgentPlatform
 
         assert AgentPlatform("auggie") == AgentPlatform.AUGGIE
         assert AgentPlatform("claude") == AgentPlatform.CLAUDE
         assert AgentPlatform("cursor") == AgentPlatform.CURSOR
 
-    def test_agent_platform_invalid_value(self):
-        """AgentPlatform raises ValueError for invalid value."""
+    def test_ai_backend_invalid_value(self):
+        """AI backend enum raises ValueError for invalid value."""
         from spec.config.fetch_config import AgentPlatform
 
         with pytest.raises(ValueError):
@@ -2652,112 +2652,3 @@ FALLBACK_LINEAR_API_KEY=${MISSING_TOKEN}
         # Should NOT have errors about missing env vars (using agent, not direct)
         error_text = " ".join(errors).lower()
         assert "missing_token" not in error_text
-
-
-class TestLegacyKeyMigration:
-    """Tests for legacy config key migration (AGENT_PLATFORM -> AI_BACKEND)."""
-
-    def test_agent_platform_migrated_to_ai_backend(self, tmp_path):
-        """Legacy AGENT_PLATFORM key is transparently migrated to AI_BACKEND."""
-        config_path = tmp_path / "config"
-        config_path.write_text("AGENT_PLATFORM=cursor\n")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        # Should be accessible via new key
-        assert manager.get("AI_BACKEND") == "cursor"
-        # Old key should be removed
-        assert manager.get("AGENT_PLATFORM") == ""
-
-    def test_ai_backend_takes_precedence_over_agent_platform(self, tmp_path):
-        """AI_BACKEND wins when both keys exist in config."""
-        config_path = tmp_path / "config"
-        config_path.write_text("AGENT_PLATFORM=manual\nAI_BACKEND=cursor\n")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        assert manager.get("AI_BACKEND") == "cursor"
-        assert manager.get("AGENT_PLATFORM") == ""
-
-    def test_migrated_value_works_with_get_agent_config(self, tmp_path):
-        """Migrated AGENT_PLATFORM value flows through to get_agent_config()."""
-        from spec.config.fetch_config import AgentPlatform
-
-        config_path = tmp_path / "config"
-        config_path.write_text("AGENT_PLATFORM=cursor\n")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        config = manager.get_agent_config()
-        assert config.platform == AgentPlatform.CURSOR
-
-    def test_migrated_value_works_with_backend_resolver(self, tmp_path):
-        """Migrated value is accessible via manager.get('AI_BACKEND')."""
-        config_path = tmp_path / "config"
-        config_path.write_text("AGENT_PLATFORM=aider\n")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        assert manager.get("AI_BACKEND") == "aider"
-
-    def test_no_migration_when_only_ai_backend_set(self, tmp_path):
-        """No migration needed when only AI_BACKEND is set."""
-        config_path = tmp_path / "config"
-        config_path.write_text("AI_BACKEND=claude\n")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        assert manager.get("AI_BACKEND") == "claude"
-        assert manager.get("AGENT_PLATFORM") == ""
-
-    def test_migration_logs_deprecation_warning(self, tmp_path, caplog):
-        """Migration logs a deprecation warning."""
-        import logging
-
-        config_path = tmp_path / "config"
-        config_path.write_text("AGENT_PLATFORM=cursor\n")
-        manager = ConfigManager(config_path)
-
-        with caplog.at_level(logging.WARNING, logger="spec.config.manager"):
-            manager.load()
-
-        assert any(
-            "AGENT_PLATFORM" in record.message and "deprecated" in record.message
-            for record in caplog.records
-        )
-
-    def test_agent_platform_env_var_migrated(self, tmp_path, monkeypatch):
-        """AGENT_PLATFORM set as env var is migrated to AI_BACKEND."""
-        monkeypatch.setenv("AGENT_PLATFORM", "cursor")
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        assert manager.get("AI_BACKEND") == "cursor"
-        assert manager.get("AGENT_PLATFORM") == ""
-
-    def test_ai_backend_env_var_wins_over_agent_platform_env_var(self, tmp_path, monkeypatch):
-        """AI_BACKEND env var takes precedence over AGENT_PLATFORM env var."""
-        monkeypatch.setenv("AGENT_PLATFORM", "manual")
-        monkeypatch.setenv("AI_BACKEND", "cursor")
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        assert manager.get("AI_BACKEND") == "cursor"
-        assert manager.get("AGENT_PLATFORM") == ""
-
-    def test_agent_platform_env_var_flows_to_get_agent_config(self, tmp_path, monkeypatch):
-        """AGENT_PLATFORM env var is migrated and usable via get_agent_config()."""
-        from spec.config.fetch_config import AgentPlatform
-
-        monkeypatch.setenv("AGENT_PLATFORM", "aider")
-        config_path = tmp_path / "config"
-        config_path.write_text("")
-        manager = ConfigManager(config_path)
-        manager.load()
-
-        config = manager.get_agent_config()
-        assert config.platform == AgentPlatform.AIDER
