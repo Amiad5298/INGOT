@@ -44,9 +44,6 @@ def resolve_backend_platform(
         return parse_ai_backend(cli_backend_override.strip())
 
     # 2. Check AI_BACKEND in persisted config
-    # Note: Legacy AGENT_PLATFORM migration is handled separately.
-    # This resolver only reads AI_BACKEND. Migration from AGENT_PLATFORM to AI_BACKEND
-    # is out of scope for this ticket.
     ai_backend = config_manager.get("AI_BACKEND", "")
     if ai_backend.strip():
         return parse_ai_backend(ai_backend)

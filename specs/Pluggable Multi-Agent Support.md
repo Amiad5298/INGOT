@@ -69,19 +69,19 @@ grep -rn "\.run_print(" --include="*.py" spec/ | grep -v "run_print_"
 # Expected output: spec/workflow/step1_plan.py:296:    success = auggie.run_print(...)
 ```
 
-### C. AGENT_PLATFORM Legacy Config — Verified Existing References
+### C. AI_BACKEND Legacy Config — Verified Existing References
 
-**Contrary to v3.1 assertion, AGENT_PLATFORM DOES exist in the codebase. Full removal plan included below.**
+**Contrary to v3.1 assertion, AI_BACKEND DOES exist in the codebase. Full removal plan included below.**
 
 | Category | File | Line | Current State | Required Action |
 |----------|------|------|---------------|-----------------|
-| SpecSettings field | `spec/config/settings.py:95` | `agent_platform: str = "auggie"` | Legacy field | **REMOVE or RENAME to `ai_backend`** |
-| Config key mapping | `spec/config/settings.py:128` | `"AGENT_PLATFORM": "agent_platform"` | Maps env var | **REMOVE from mapping** |
-| ConfigManager parse | `spec/config/manager.py:580` | `platform_str = self._raw_values.get("AGENT_PLATFORM")` | Reads legacy key | **CHANGE to `AI_BACKEND`** |
-| Parser function | `spec/config/fetch_config.py:101` | `def parse_agent_platform(...)` | Used by manager | **RENAME to `parse_ai_backend()` or deprecate with alias** |
-| Config template | `spec/config/templates/fetch_config.template:24-25` | `AGENT_PLATFORM=auggie` and `claude_desktop` reference | Template file | **UPDATE to `AI_BACKEND=auggie` and `claude`** |
+| SpecSettings field | `spec/config/settings.py:95` | `ai_backend: str = "auggie"` | Legacy field | **REMOVE or RENAME to `ai_backend`** |
+| Config key mapping | `spec/config/settings.py:128` | `"AI_BACKEND": "ai_backend"` | Maps env var | **REMOVE from mapping** |
+| ConfigManager parse | `spec/config/manager.py:580` | `platform_str = self._raw_values.get("AI_BACKEND")` | Reads legacy key | **CHANGE to `AI_BACKEND`** |
+| Parser function | `spec/config/fetch_config.py:101` | `def parse_ai_backend(...)` | Used by manager | **RENAME to `parse_ai_backend()` or deprecate with alias** |
+| Config template | `spec/config/templates/fetch_config.template:24-25` | `AI_BACKEND=auggie` and `claude_desktop` reference | Template file | **UPDATE to `AI_BACKEND=auggie` and `claude`** |
 | Tests | `tests/test_config_manager.py` (22+ refs) | Various | Tests legacy behavior | **UPDATE all tests** |
-| Documentation | `docs/platform-configuration.md:490` | Example shows `AGENT_PLATFORM=auggie` | Docs reference | **UPDATE to `AI_BACKEND=auggie`** |
+| Documentation | `docs/platform-configuration.md:490` | Example shows `AI_BACKEND=auggie` | Docs reference | **UPDATE to `AI_BACKEND=auggie`** |
 | Spec docs | `specs/AMI-33-implementation-plan.md`, `specs/AMI-39-implementation-plan.md` | Various | Plan references | **UPDATE to `AI_BACKEND`** |
 
 ### D. Verified Grep Checklist
@@ -90,15 +90,15 @@ Run these commands to verify migration progress:
 
 ```bash
 # BEFORE migration - these WILL return matches:
-grep -rn "AGENT_PLATFORM" --include="*.py" spec/
+grep -rn "AI_BACKEND" --include="*.py" spec/
 # Expected: ~6 matches in settings.py, manager.py, fetch_config.py
 
-grep -rn "agent_platform" --include="*.py" spec/config/
+grep -rn "ai_backend" --include="*.py" spec/config/
 # Expected: ~4 matches
 
 # AFTER migration - these should return 0 matches:
-grep -rn "AGENT_PLATFORM" --include="*.py" spec/
-grep -rn 'agent_platform.*=.*"auggie"' --include="*.py" spec/
+grep -rn "AI_BACKEND" --include="*.py" spec/
+grep -rn 'ai_backend.*=.*"auggie"' --include="*.py" spec/
 
 # These are ALLOWED (enum name, not config key):
 grep -rn "AgentPlatform" --include="*.py" spec/
@@ -147,10 +147,10 @@ This section summarizes the architectural decisions that govern this implementat
 
 2. **Configuration Terminology — With Legacy Migration**
    - `AI_BACKEND` is the **only** configuration key for backend selection (target state)
-   - **Legacy `AGENT_PLATFORM` exists and must be removed** — see "AGENT_PLATFORM Removal Plan" section
+   - **Legacy `AI_BACKEND` exists and must be removed** — see "AI_BACKEND Removal Plan" section
    - Onboarding writes only `AI_BACKEND`
     - **Claude naming:** CLI/config uses `claude` (canonical). `AgentPlatform.CLAUDE` has value `"claude"` (rename from the current `CLAUDE_DESKTOP`).
-   - `settings.ai_backend` replaces `settings.agent_platform` (single source of truth)
+   - `settings.ai_backend` replaces `settings.ai_backend` (single source of truth)
    - **No default backend**: if neither CLI `--backend` nor `AI_BACKEND` config is set, fail fast with `BackendNotConfiguredError`
 
 3. **WorkflowState Stores Only Enum, Not Backend Instances**
@@ -212,11 +212,11 @@ This section summarizes the architectural decisions that govern this implementat
     - Concrete backends (`AuggieBackend`, `ClaudeBackend`, `CursorBackend`) extend `BaseBackend`
     - This reduces code duplication and ensures consistent behavior
 
-14. **AGENT_PLATFORM Legacy Removal (REQUIRED)**
-    - **Contrary to v3.1 assertion**, `AGENT_PLATFORM` exists in the current codebase
+14. **AI_BACKEND Legacy Removal (REQUIRED)**
+    - **Contrary to v3.1 assertion**, `AI_BACKEND` exists in the current codebase
     - This is **legacy code that must be removed** before the new backend system is complete
     - All references must be migrated to `AI_BACKEND`
-    - See "AGENT_PLATFORM Removal Plan" section below for complete migration steps
+    - See "AI_BACKEND Removal Plan" section below for complete migration steps
 
 15. **run_streaming Semantics (RESOLVED)**
     - `run_streaming()` returns `tuple[bool, str]` (not a generator)
@@ -248,10 +248,10 @@ This section summarizes the architectural decisions that govern this implementat
 
 ---
 
-### AGENT_PLATFORM Removal Plan
+### AI_BACKEND Removal Plan
 
 **Current State (Verified):**
-The legacy `AGENT_PLATFORM` config key exists in multiple locations. This section provides the complete removal plan.
+The legacy `AI_BACKEND` config key exists in multiple locations. This section provides the complete removal plan.
 
 #### Step 1: Update SpecSettings
 
@@ -259,13 +259,13 @@ The legacy `AGENT_PLATFORM` config key exists in multiple locations. This sectio
 
 ```python
 # REMOVE (line 95):
-agent_platform: str = "auggie"
+ai_backend: str = "auggie"
 
 # ADD:
 ai_backend: str = ""  # No default - must be configured
 
 # REMOVE from CONFIG_KEY_MAPPING (line 128):
-"AGENT_PLATFORM": "agent_platform",
+"AI_BACKEND": "ai_backend",
 
 # ADD to CONFIG_KEY_MAPPING:
 "AI_BACKEND": "ai_backend",
@@ -278,31 +278,31 @@ ai_backend: str = ""  # No default - must be configured
 ```python
 # CHANGE (line 580):
 # FROM:
-platform_str = self._raw_values.get("AGENT_PLATFORM")
+platform_str = self._raw_values.get("AI_BACKEND")
 
 # TO:
 platform_str = self._raw_values.get("AI_BACKEND")
 
 # UPDATE context string (line 593):
 # FROM:
-context="AGENT_PLATFORM",
+context="AI_BACKEND",
 
 # TO:
 context="AI_BACKEND",
 ```
 
-#### Step 3: Rename parse_agent_platform (Optional Alias)
+#### Step 3: Rename parse_ai_backend (Optional Alias)
 
 **File:** `spec/config/fetch_config.py`
 
 ```python
-# Keep parse_agent_platform() for backward compatibility with callers
+# Keep parse_ai_backend() for backward compatibility with callers
 # but update the context default:
 
-def parse_agent_platform(
+def parse_ai_backend(
     value: str | None,
     default: AgentPlatform | None = None,
-    context: str = "AI_BACKEND",  # Changed from "AGENT_PLATFORM"
+    context: str = "AI_BACKEND",  # Changed from "AI_BACKEND"
 ) -> AgentPlatform:
     # IMPORTANT: No default backend.
     # If value is missing/empty and default is None, raise ConfigValidationError.
@@ -326,7 +326,7 @@ def parse_agent_platform(
         ) from None
 
 # Add alias for clarity (preferred name in new code):
-parse_ai_backend = parse_agent_platform
+parse_ai_backend = parse_ai_backend
 ```
 
 #### Step 4: Update Tests
@@ -334,44 +334,44 @@ parse_ai_backend = parse_agent_platform
 **File:** `tests/test_config_manager.py`
 
 Replace all occurrences of:
-- `'AGENT_PLATFORM="auggie"'` → `'AI_BACKEND="auggie"'`
-- `"AGENT_PLATFORM=cursor"` → `"AI_BACKEND=cursor"`
-- Test method names referencing `agent_platform` → `ai_backend`
+- `'AI_BACKEND="auggie"'` → `'AI_BACKEND="auggie"'`
+- `"AI_BACKEND=cursor"` → `"AI_BACKEND=cursor"`
+- Test method names referencing `ai_backend` → `ai_backend`
 
 Affected test methods (22+ occurrences):
-- `test_agent_platform_values` → `test_ai_backend_values`
-- `test_agent_platform_from_string` → `test_ai_backend_from_string`
-- `test_agent_platform_invalid_value` → `test_ai_backend_invalid_value`
-- `test_validate_fetch_config_strict_raises_on_invalid_agent_platform` → `test_validate_fetch_config_strict_raises_on_invalid_ai_backend`
+- `test_ai_backend_values` → `test_ai_backend_values`
+- `test_ai_backend_from_string` → `test_ai_backend_from_string`
+- `test_ai_backend_invalid_value` → `test_ai_backend_invalid_value`
+- `test_validate_fetch_config_strict_raises_on_invalid_ai_backend` → `test_validate_fetch_config_strict_raises_on_invalid_ai_backend`
 
 #### Step 5: Update Documentation
 
 **File:** `docs/platform-configuration.md`
 
 ```diff
-- AGENT_PLATFORM=auggie
+- AI_BACKEND=auggie
 + AI_BACKEND=auggie
 ```
 
 **Files:** `specs/AMI-33-implementation-plan.md`, `specs/AMI-39-implementation-plan.md`
 
-Update all references to use `AI_BACKEND` instead of `AGENT_PLATFORM`.
+Update all references to use `AI_BACKEND` instead of `AI_BACKEND`.
 
 #### Step 6: Add CI Guard
 
 **File:** `.github/workflows/lint.yml` (or equivalent)
 
 ```yaml
-- name: Verify no AGENT_PLATFORM references in source
+- name: Verify no AI_BACKEND references in source
   run: |
-    # Check for AGENT_PLATFORM in Python source (excluding tests temporarily)
-    if grep -rn "AGENT_PLATFORM" --include="*.py" spec/; then
-      echo "ERROR: Found AGENT_PLATFORM reference in spec/. Use AI_BACKEND instead."
+    # Check for AI_BACKEND in Python source (excluding tests temporarily)
+    if grep -rn "AI_BACKEND" --include="*.py" spec/; then
+      echo "ERROR: Found AI_BACKEND reference in spec/. Use AI_BACKEND instead."
       exit 1
     fi
-    # Check for agent_platform as config field (excluding AgentPlatform enum)
-    if grep -rn 'agent_platform.*=.*"' --include="*.py" spec/; then
-      echo "ERROR: Found agent_platform field in spec/. Use ai_backend instead."
+    # Check for ai_backend as config field (excluding AgentPlatform enum)
+    if grep -rn 'ai_backend.*=.*"' --include="*.py" spec/; then
+      echo "ERROR: Found ai_backend field in spec/. Use ai_backend instead."
       exit 1
     fi
 ```
@@ -380,8 +380,8 @@ Update all references to use `AI_BACKEND` instead of `AGENT_PLATFORM`.
 
 ```bash
 # After migration, these should return 0 matches in spec/:
-grep -rn "AGENT_PLATFORM" --include="*.py" spec/
-grep -rn 'agent_platform:' --include="*.py" spec/config/settings.py
+grep -rn "AI_BACKEND" --include="*.py" spec/
+grep -rn 'ai_backend:' --include="*.py" spec/config/settings.py
 
 # These are ALLOWED (enum name):
 grep -rn "AgentPlatform" --include="*.py" spec/  # Enum references OK
@@ -404,7 +404,7 @@ grep -rn "AI_BACKEND" --include="*.py" spec/
 │       ▼                                                              │
 │  No default → BackendNotConfiguredError (fail fast)                 │
 │                                                                      │
-│  ⚠️  AGENT_PLATFORM is REMOVED - only AI_BACKEND exists             │
+│  ⚠️  AI_BACKEND is REMOVED - only AI_BACKEND exists             │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1322,7 +1322,7 @@ class AIBackend(Protocol):
 
     @property
     def platform(self) -> AgentPlatform:
-        """The agent platform enum value."""
+        """The AI backend enum value."""
         ...
 
     @property
@@ -1476,7 +1476,7 @@ class BaseBackend(ABC):
     @property
     @abstractmethod
     def platform(self) -> AgentPlatform:
-        """The agent platform enum value."""
+        """The AI backend enum value."""
         ...
 
     @property
@@ -1923,7 +1923,7 @@ class AuggieBackend(BaseBackend):
 
 ```python
 """Factory for creating AI backend instances."""
-from spec.config.fetch_config import AgentPlatform, parse_agent_platform
+from spec.config.fetch_config import AgentPlatform, parse_ai_backend
 from spec.integrations.backends.base import AIBackend
 from spec.integrations.backends.errors import BackendNotInstalledError
 
@@ -1944,7 +1944,7 @@ class BackendFactory:
         """Create an AI backend instance.
 
         Args:
-            platform: Agent platform enum or string name
+            platform: AI backend enum or string name
             model: Default model to use
             verify_installed: If True, verify CLI is installed
 
@@ -1956,7 +1956,7 @@ class BackendFactory:
             BackendNotInstalledError: If verify_installed=True and CLI missing
         """
         if isinstance(platform, str):
-            platform = parse_agent_platform(platform)
+            platform = parse_ai_backend(platform)
 
         backend: AIBackend
 
@@ -1995,7 +1995,7 @@ class BackendFactory:
 
 ```python
 """Single source of truth for backend platform resolution."""
-from spec.config.fetch_config import AgentPlatform, parse_agent_platform
+from spec.config.fetch_config import AgentPlatform, parse_ai_backend
 from spec.config.manager import ConfigManager
 from spec.integrations.backends.errors import BackendNotConfiguredError
 
@@ -2024,12 +2024,12 @@ def resolve_backend_platform(
     """
     # 1. CLI override takes precedence (one-run override)
     if cli_backend_override:
-        return parse_agent_platform(cli_backend_override)
+        return parse_ai_backend(cli_backend_override)
 
     # 2. Check AI_BACKEND in persisted config
     ai_backend = config_manager.get("AI_BACKEND", "")
     if ai_backend.strip():
-        return parse_agent_platform(ai_backend)
+        return parse_ai_backend(ai_backend)
 
     # 3. No backend configured - raise error
     raise BackendNotConfiguredError(
@@ -4646,7 +4646,7 @@ This is a new system with no prior releases. There are no backward compatibility
 - [ ] Helper functions (`conflict_detection`, `autofix`, `review`) refactored
 - [ ] `AuggieRateLimitError` replaced with `BackendRateLimitError` in `step3_execute.py`
 - [ ] `_looks_like_rate_limit()` replaced with `backend.detect_rate_limit()` usage
-- [ ] Verified: No `AGENT_PLATFORM` string exists in codebase (grep returns 0 matches)
+- [ ] Verified: No `AI_BACKEND` string exists in codebase (grep returns 0 matches)
 - [ ] Only `AI_BACKEND` used for backend configuration key
 
 ### Phase 3: Claude Backend
@@ -4762,9 +4762,9 @@ Phase 1.5: Fetcher Refactoring (Medium Risk)
     ├── 1.5.3 Update CLI Entry Point for Ticket Fetching
     └── 1.5.4 Phase 1.5 Testing
           ↓
-Phase 1.6: AGENT_PLATFORM Removal (REQUIRED)
-    ├── Update spec/config/settings.py (remove agent_platform, add ai_backend)
-    ├── Update spec/config/manager.py (AGENT_PLATFORM → AI_BACKEND)
+Phase 1.6: AI_BACKEND Removal (REQUIRED)
+    ├── Update spec/config/settings.py (remove ai_backend, add ai_backend)
+    ├── Update spec/config/manager.py (AI_BACKEND → AI_BACKEND)
     ├── Update spec/config/fetch_config.py (context param)
     ├── Update all tests
     ├── Update documentation
@@ -4793,14 +4793,14 @@ Phase 5: Onboarding UX
 - Zero `AuggieClientProtocol` usage
 - Zero `run_print()` calls (all converted to TUI + `run_streaming()`)
 - All subagent constants in `spec/workflow/constants.py`
-- Zero occurrences of `AGENT_PLATFORM` string (verified via grep)
+- Zero occurrences of `AI_BACKEND` string (verified via grep)
 - Only `AI_BACKEND` used for backend configuration
 
 **Verification Command:**
 ```bash
 # Run after Phase 2 completion to verify clean state:
 echo "Checking for legacy patterns..."
-if grep -ri "AGENT_PLATFORM\|AuggieClientProtocol\|run_print()" --include="*.py" . 2>/dev/null | grep -v "test_" | grep -v "__pycache__"; then
+if grep -ri "AI_BACKEND\|AuggieClientProtocol\|run_print()" --include="*.py" . 2>/dev/null | grep -v "test_" | grep -v "__pycache__"; then
   echo "FAIL: Legacy patterns found"
   exit 1
 else

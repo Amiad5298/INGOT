@@ -156,9 +156,6 @@ class ConfigManager:
         # Step 4: Environment variables override everything
         self._load_environment()
 
-        # Step 5: Migrate legacy config keys (AGENT_PLATFORM -> AI_BACKEND)
-        self._migrate_legacy_keys()
-
         # Apply all values to settings
         for key, value in self._raw_values.items():
             self._apply_value_to_settings(key, value)
@@ -229,53 +226,18 @@ class ConfigManager:
                     self._raw_values[key] = value
                     self._config_sources[key] = source
 
-    # Legacy config keys that should still be read from environment
-    # variables so that _migrate_legacy_keys() can detect and migrate them.
-    _LEGACY_ENV_KEYS: frozenset[str] = frozenset({"AGENT_PLATFORM"})
-
     def _load_environment(self) -> None:
         """Override config with environment variables.
 
         Only loads environment variables for known config keys
         to avoid polluting the configuration with unrelated env vars.
-        Also loads legacy keys so _migrate_legacy_keys() can handle them.
         """
         known_keys = Settings.get_config_keys()
-        for key in list(known_keys) + list(self._LEGACY_ENV_KEYS):
+        for key in known_keys:
             env_value = os.environ.get(key)
             if env_value is not None:
                 self._raw_values[key] = env_value
                 self._config_sources[key] = "environment"
-
-    def _migrate_legacy_keys(self) -> None:
-        """Migrate legacy config keys to their modern equivalents.
-
-        Currently handles:
-        - AGENT_PLATFORM -> AI_BACKEND
-
-        Must be called after all sources are loaded (global, local, env)
-        but before applying values to settings.
-        """
-        old_key = "AGENT_PLATFORM"
-        new_key = "AI_BACKEND"
-
-        if old_key in self._raw_values and new_key not in self._raw_values:
-            # Migrate legacy key to new key
-            self._raw_values[new_key] = self._raw_values.pop(old_key)
-            if old_key in self._config_sources:
-                self._config_sources[new_key] = self._config_sources.pop(old_key)
-            logger.warning(
-                "Config key 'AGENT_PLATFORM' is deprecated, use 'AI_BACKEND' instead. "
-                "Value has been migrated automatically."
-            )
-        elif old_key in self._raw_values and new_key in self._raw_values:
-            # Both keys exist - new key wins, discard legacy key
-            self._raw_values.pop(old_key)
-            self._config_sources.pop(old_key, None)
-            logger.warning(
-                "Both 'AGENT_PLATFORM' and 'AI_BACKEND' are set. "
-                "Using 'AI_BACKEND' value; ignoring deprecated 'AGENT_PLATFORM'."
-            )
 
     def _apply_value_to_settings(self, key: str, value: str) -> None:
         """Apply a raw config value to the settings object.

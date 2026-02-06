@@ -251,7 +251,7 @@ DEFAULT_PLATFORM=jira
 # ============================================================
 # AGENT CONFIGURATION (for Auggie users)
 # ============================================================
-AGENT_PLATFORM=auggie
+AI_BACKEND=auggie
 AGENT_INTEGRATION_JIRA=true
 AGENT_INTEGRATION_LINEAR=true
 AGENT_INTEGRATION_GITHUB=true

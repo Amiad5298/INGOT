@@ -197,7 +197,7 @@ class AIBackend(Protocol):
 
     @property
     def platform(self) -> AgentPlatform:
-        """The agent platform enum value.
+        """The AI backend enum value.
 
         Returns the AgentPlatform enum member for this backend.
         Used for configuration and logging.

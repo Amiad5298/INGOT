@@ -162,7 +162,7 @@ if TYPE_CHECKING:
 
 2. **Remove AuggieClient import**: Since we now accept `AIBackend`, there's no need to import `AuggieClient` at all.
 
-3. **Preserve ConfigManager**: The `ConfigManager` parameter remains for checking agent platform support.
+3. **Preserve ConfigManager**: The `ConfigManager` parameter remains for checking AI backend support.
 
 4. **Backend-agnostic naming**: Despite the class name `AuggieMediatedFetcher`, it can now work with any `AIBackend`. The class name is preserved for backwards compatibility.
 

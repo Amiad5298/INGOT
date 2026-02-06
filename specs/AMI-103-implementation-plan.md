@@ -29,7 +29,7 @@ This ticket addresses a follow-up task discovered during the code review of AMI-
 - Verify no other template files reference `claude_desktop`
 
 **Out of Scope:**
-- This ticket does NOT change `AGENT_PLATFORM` → `AI_BACKEND` in templates (tracked separately in the multi-backend migration, see parent spec Section "AGENT_PLATFORM Removal Plan")
+- This ticket does NOT change `AI_BACKEND` → `AI_BACKEND` in templates (tracked separately in the multi-backend migration, see parent spec Section "AI_BACKEND Removal Plan")
 - This ticket only addresses the `claude_desktop` → `claude` comment update
 
 **Reference:** Code review feedback from AMI-46 implementation
@@ -43,7 +43,7 @@ This ticket addresses a follow-up task discovered during the code review of AMI-
 Upon investigation, the template file has **already been updated**. The current state of `spec/config/templates/fetch_config.template` line 24 is:
 
 ```
-# Agent platform: auggie, claude, cursor, aider, manual
+# AI backend: auggie, claude, cursor, aider, manual
 ```
 
 This matches the target state specified in the Linear ticket. Verification:
@@ -63,7 +63,7 @@ The change was made in commit `440fc046` on 2026-01-31:
 
 ```bash
 $ git blame -L 24,24 spec/config/templates/fetch_config.template
-440fc046 (Amiad5298 2026-01-31 19:55:13 +0200 24) # Agent platform: auggie, claude, cursor, aider, manual
+440fc046 (Amiad5298 2026-01-31 19:55:13 +0200 24) # AI backend: auggie, claude, cursor, aider, manual
 ```
 
 Additional verification (no `claude_desktop` references in source code):
@@ -89,12 +89,12 @@ $ rg -n 'claude_desktop' spec/ tests/
 
 **Original Code (line 24, per AMI-103 ticket):**
 ```
-# Agent platform: auggie, claude_desktop, cursor, aider, manual
+# AI backend: auggie, claude_desktop, cursor, aider, manual
 ```
 
 **Current Code (line 24):**
 ```
-# Agent platform: auggie, claude, cursor, aider, manual
+# AI backend: auggie, claude, cursor, aider, manual
 ```
 
 The change has already been applied.
@@ -126,7 +126,7 @@ sed -n '24p' spec/config/templates/fetch_config.template
 
 **Expected Output:**
 ```
-# Agent platform: auggie, claude, cursor, aider, manual
+# AI backend: auggie, claude, cursor, aider, manual
 ```
 
 **Result:** ✅ Verified - Line 24 matches expected content

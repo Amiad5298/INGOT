@@ -126,7 +126,7 @@ This is **Phase 1.6** of the Backend Infrastructure work (AMI-45), positioned im
 
 4. **`spec/config/fetch_config.py`**
    - `AgentPlatform` enum: `AUGGIE`, `CLAUDE`, `CURSOR`, `AIDER`, `MANUAL`
-   - `parse_agent_platform()` - Converts string to enum
+   - `parse_ai_backend()` - Converts string to enum
 
 ### Future Backends (Placeholder Handling)
 
@@ -150,7 +150,7 @@ This is **Phase 1.6** of the Backend Infrastructure work (AMI-45), positioned im
 
 ```python
 """Factory for creating AI backend instances."""
-from spec.config.fetch_config import AgentPlatform, parse_agent_platform
+from spec.config.fetch_config import AgentPlatform, parse_ai_backend
 from spec.integrations.backends.base import AIBackend
 from spec.integrations.backends.errors import BackendNotInstalledError
 
@@ -176,7 +176,7 @@ class BackendFactory:
         """Create an AI backend instance.
 
         Args:
-            platform: Agent platform enum or string name (e.g., "auggie", "claude")
+            platform: AI backend enum or string name (e.g., "auggie", "claude")
             model: Default model to use for this backend instance
             verify_installed: If True, verify CLI is installed before returning
 
@@ -184,13 +184,13 @@ class BackendFactory:
             Configured AIBackend instance
 
         Raises:
-            ConfigValidationError: If the platform string is invalid (from parse_agent_platform)
+            ConfigValidationError: If the platform string is invalid (from parse_ai_backend)
             NotImplementedError: If the platform is planned but not yet implemented (Claude, Cursor)
             ValueError: If the platform is not supported (Aider, Manual)
             BackendNotInstalledError: If verify_installed=True and CLI is missing
         """
         if isinstance(platform, str):
-            platform = parse_agent_platform(platform)
+            platform = parse_ai_backend(platform)
 
         backend: AIBackend
 
@@ -240,7 +240,7 @@ class BackendFactory:
 
 2. **Lazy imports**: Backend classes are imported inside the `if` branches to avoid circular dependencies and reduce import time when only some backends are needed.
 
-3. **String-to-enum conversion**: Accepts both `AgentPlatform` enum and string values (e.g., `"auggie"`, `"claude"`). Uses `parse_agent_platform()` from fetch_config.py for consistent parsing.
+3. **String-to-enum conversion**: Accepts both `AgentPlatform` enum and string values (e.g., `"auggie"`, `"claude"`). Uses `parse_ai_backend()` from fetch_config.py for consistent parsing.
 
 4. **verify_installed option**: When `True`, calls `backend.check_installed()` and raises `BackendNotInstalledError` if CLI is missing. This provides fail-fast behavior at creation time rather than at first use.
 
@@ -390,7 +390,7 @@ class TestBackendFactoryInvalidInput:
 
         Note: The parent spec's TestBackendFactory (line 4366-4368) shows
         `pytest.raises(ValueError)`, but the actual behavior is ConfigValidationError
-        because parse_agent_platform() raises ConfigValidationError for invalid values.
+        because parse_ai_backend() raises ConfigValidationError for invalid values.
         This test reflects the actual implementation behavior.
         """
         from spec.config.fetch_config import ConfigValidationError
@@ -414,9 +414,9 @@ class TestBackendFactoryStringNormalization:
     def test_create_empty_string_returns_default(self):
         """Empty string returns default platform (AUGGIE).
 
-        Note: This behavior comes from parse_agent_platform() which has
+        Note: This behavior comes from parse_ai_backend() which has
         default=AgentPlatform.AUGGIE. If the "no default backend" policy
-        from Final Decision #2 is enforced in parse_agent_platform(),
+        from Final Decision #2 is enforced in parse_ai_backend(),
         this test should be updated to expect ConfigValidationError.
         """
         # Current behavior: empty string returns default (AUGGIE)
@@ -591,19 +591,19 @@ except BackendNotInstalledError as e:
 
 **Scenario:** User passes an invalid platform string like "chatgpt" or "openai".
 
-**Handling:** `parse_agent_platform()` raises `ConfigValidationError` with list of valid platforms.
+**Handling:** `parse_ai_backend()` raises `ConfigValidationError` with list of valid platforms.
 
 **Example:**
 ```python
 >>> BackendFactory.create("chatgpt")
-ConfigValidationError: Invalid agent platform 'chatgpt'. Allowed values: auggie, claude, cursor, aider, manual
+ConfigValidationError: Invalid AI backend 'chatgpt'. Allowed values: auggie, claude, cursor, aider, manual
 ```
 
 ### Edge Case 2.5: Empty or Whitespace-Only String
 
 **Scenario:** User passes an empty string `""` or whitespace-only string `"   "`.
 
-**Current Handling:** `parse_agent_platform()` has `default=AgentPlatform.AUGGIE`, so empty/whitespace strings return AUGGIE.
+**Current Handling:** `parse_ai_backend()` has `default=AgentPlatform.AUGGIE`, so empty/whitespace strings return AUGGIE.
 
 ```python
 >>> BackendFactory.create("")
@@ -613,9 +613,9 @@ ConfigValidationError: Invalid agent platform 'chatgpt'. Allowed values: auggie,
 <AuggieBackend>  # Returns default
 ```
 
-**⚠️ Note on "No Default Backend" Policy:** The parent specification (Final Decision #2) states "No default backend: if neither CLI `--backend` nor `AI_BACKEND` config is set, fail fast with `BackendNotConfiguredError`." However, this policy is enforced at the **resolver level** (`resolve_backend_platform()`), not at the factory level. The factory delegates to `parse_agent_platform()` which currently has a default.
+**⚠️ Note on "No Default Backend" Policy:** The parent specification (Final Decision #2) states "No default backend: if neither CLI `--backend` nor `AI_BACKEND` config is set, fail fast with `BackendNotConfiguredError`." However, this policy is enforced at the **resolver level** (`resolve_backend_platform()`), not at the factory level. The factory delegates to `parse_ai_backend()` which currently has a default.
 
-If the "no default" policy should be enforced at the factory level, `parse_agent_platform()` would need to be called with `default=None` and handle the resulting error. This is a design decision for a future ticket if needed.
+If the "no default" policy should be enforced at the factory level, `parse_ai_backend()` would need to be called with `default=None` and handle the resulting error. This is a design decision for a future ticket if needed.
 
 ### Edge Case 3: Model Configuration Precedence
 
@@ -828,7 +828,7 @@ print('No import cycles detected')
 | `spec/integrations/backends/errors.py` | BackendNotInstalledError definition |
 | `spec/integrations/backends/base.py` | AIBackend protocol, BaseBackend class |
 | `spec/integrations/backends/auggie.py` | AuggieBackend implementation |
-| `spec/config/fetch_config.py` | AgentPlatform enum, parse_agent_platform() |
+| `spec/config/fetch_config.py` | AgentPlatform enum, parse_ai_backend() |
 | `spec/integrations/providers/registry.py` | ProviderRegistry for pattern comparison |
 
 ### Related Implementation Plans

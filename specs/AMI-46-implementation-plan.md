@@ -71,7 +71,7 @@ grep -rn "AgentPlatform.CLAUDE" --include="*.py" spec/ tests/
 **Current Code (lines 49-64):**
 ```python
 class AgentPlatform(Enum):
-    """Supported AI agent platforms.
+    """Supported AI backends.
 
     Attributes:
         AUGGIE: Augment Code agent
@@ -91,7 +91,7 @@ class AgentPlatform(Enum):
 **New Code:**
 ```python
 class AgentPlatform(Enum):
-    """Supported AI agent platforms.
+    """Supported AI backends.
 
     Attributes:
         AUGGIE: Augment Code agent
@@ -123,7 +123,7 @@ class AgentPlatform(Enum):
 
 **Current Code (lines 1409-1413):**
 ```python
-    def test_agent_platform_values(self):
+    def test_ai_backend_values(self):
         """AgentPlatform enum has correct values."""
         from spec.config.fetch_config import AgentPlatform
 
@@ -136,7 +136,7 @@ class AgentPlatform(Enum):
 
 **New Code:**
 ```python
-    def test_agent_platform_values(self):
+    def test_ai_backend_values(self):
         """AgentPlatform enum has correct values."""
         from spec.config.fetch_config import AgentPlatform
 
@@ -151,11 +151,11 @@ class AgentPlatform(Enum):
 
 **File:** `tests/test_config_manager.py`
 
-The existing `test_agent_platform_from_string` test (lines 1415-1420) tests `auggie` and `cursor` but not `claude`. Add a test case for the renamed value.
+The existing `test_ai_backend_from_string` test (lines 1415-1420) tests `auggie` and `cursor` but not `claude`. Add a test case for the renamed value.
 
 **Current Code (lines 1415-1420):**
 ```python
-    def test_agent_platform_from_string(self):
+    def test_ai_backend_from_string(self):
         """AgentPlatform can be created from string value."""
         from spec.config.fetch_config import AgentPlatform
 
@@ -165,7 +165,7 @@ The existing `test_agent_platform_from_string` test (lines 1415-1420) tests `aug
 
 **New Code:**
 ```python
-    def test_agent_platform_from_string(self):
+    def test_ai_backend_from_string(self):
         """AgentPlatform can be created from string value."""
         from spec.config.fetch_config import AgentPlatform
 
@@ -223,7 +223,7 @@ The existing `test_agent_platform_from_string` test (lines 1415-1420) tests `aug
 pytest tests/ -v
 
 # Run config manager tests specifically
-pytest tests/test_config_manager.py -v -k "agent_platform"
+pytest tests/test_config_manager.py -v -k "ai_backend"
 
 # Run type checking
 mypy spec/config/fetch_config.py
@@ -250,12 +250,12 @@ except AttributeError:
     print('✅ CLAUDE_DESKTOP correctly removed')
 "
 
-# 3. Verify parse_agent_platform accepts 'claude'
+# 3. Verify parse_ai_backend accepts 'claude'
 python -c "
-from spec.config.fetch_config import parse_agent_platform, AgentPlatform
-result = parse_agent_platform('claude')
+from spec.config.fetch_config import parse_ai_backend, AgentPlatform
+result = parse_ai_backend('claude')
 assert result == AgentPlatform.CLAUDE
-print('✅ parse_agent_platform correctly parses claude')
+print('✅ parse_ai_backend correctly parses claude')
 "
 
 # 4. Verify no old references remain
@@ -287,11 +287,11 @@ Since this is Phase 1.0 of the multi-backend refactoring and the enum is not yet
 
 | Config Key | Old Value | New Value |
 |------------|-----------|-----------|
-| `AGENT_PLATFORM` / `AI_BACKEND` | `claude_desktop` | `claude` |
+| `AI_BACKEND` | `claude_desktop` | `claude` |
 
 Users with existing configuration files using `claude_desktop` will need to update to `claude`. This is acceptable because:
 1. The multi-backend system is not yet released
-2. `AGENT_PLATFORM` is legacy and will be replaced by `AI_BACKEND` (per specification)
+2. `AI_BACKEND` is the current config key (the legacy key has been removed)
 3. Early renaming prevents future migration pain
 
 ---
@@ -323,8 +323,8 @@ Users with existing configuration files using `claude_desktop` will need to upda
 | File | Change | Lines Changed |
 |------|--------|---------------|
 | `spec/config/fetch_config.py` | Rename `CLAUDE_DESKTOP` → `CLAUDE`, value `"claude_desktop"` → `"claude"`, update docstring | ~3 lines |
-| `tests/test_config_manager.py` | Update `test_agent_platform_values` assertion for new enum name/value | 1 line |
-| `tests/test_config_manager.py` | Add `claude` test case to `test_agent_platform_from_string` | 1 line |
+| `tests/test_config_manager.py` | Update `test_ai_backend_values` assertion for new enum name/value | 1 line |
+| `tests/test_config_manager.py` | Add `claude` test case to `test_ai_backend_from_string` | 1 line |
 
 ---
 
