@@ -1,7 +1,7 @@
 """Fetch strategy configuration for SPECFLOW.
 
 This module defines configuration classes for the hybrid ticket fetching
-architecture, including agent platform settings, fetch strategies, and
+architecture, including AI backend settings, fetch strategies, and
 performance tuning options.
 
 Validation:
@@ -47,14 +47,14 @@ class FetchStrategy(Enum):
 
 
 class AgentPlatform(Enum):
-    """Supported AI agent platforms.
+    """Supported AI backends.
 
     Attributes:
-        AUGGIE: Augment Code agent
+        AUGGIE: Augment Code backend
         CLAUDE: Claude Code CLI
         CURSOR: Cursor IDE
         AIDER: Aider CLI tool
-        MANUAL: Manual/no agent (direct API only)
+        MANUAL: Manual/no AI backend (direct API only)
     """
 
     AUGGIE = "auggie"
@@ -105,16 +105,20 @@ def parse_agent_platform(
 ) -> AgentPlatform:
     """Safely parse an AgentPlatform from a string value.
 
+    This function parses AI backend configuration values. The function name
+    is retained for backward compatibility; prefer using parse_ai_backend
+    alias in new code.
+
     Args:
         value: The string value to parse (e.g., "auggie", "cursor", "manual")
-        default: Default platform to return if value is None or empty
+        default: Default backend to return if value is None or empty
         context: Context string for error messages (e.g., "AI_BACKEND")
 
     Returns:
         Parsed AgentPlatform enum member
 
     Raises:
-        ConfigValidationError: If value is not a valid AgentPlatform
+        ConfigValidationError: If value is not a valid AI backend
     """
     if value is None or value.strip() == "":
         return default
@@ -127,9 +131,13 @@ def parse_agent_platform(
     except ValueError:
         context_msg = f" in {context}" if context else ""
         raise ConfigValidationError(
-            f"Invalid agent platform '{value}'{context_msg}. "
+            f"Invalid AI backend '{value}'{context_msg}. "
             f"Allowed values: {', '.join(valid_values)}"
         ) from None
+
+
+# Alias for clarity in new code - preferred name going forward
+parse_ai_backend = parse_agent_platform
 
 
 # Known ticket platforms for validation
@@ -205,12 +213,12 @@ AUGGIE_DEFAULT_INTEGRATIONS: frozenset[str] = frozenset({"jira", "linear", "gith
 
 @dataclass
 class AgentConfig:
-    """Configuration for the connected AI agent.
+    """Configuration for the connected AI backend.
 
     Attributes:
-        platform: The AI agent platform being used
+        platform: The AI backend being used (AgentPlatform enum value)
         integrations: Dict mapping platform names to integration availability.
-            None means no explicit config was set (use platform defaults).
+            None means no explicit config was set (use backend defaults).
             Empty dict {} means user explicitly disabled all integrations.
     """
 
@@ -218,17 +226,17 @@ class AgentConfig:
     integrations: dict[str, bool] | None = None
 
     def supports_platform(self, platform: str) -> bool:
-        """Check if agent has integration for platform.
+        """Check if AI backend has integration for ticket platform.
 
         When integrations is None (no explicit config), applies default
-        integrations for Auggie platform (jira, linear, github).
-        For other platforms with no config, returns False.
+        integrations for Auggie backend (jira, linear, github).
+        For other backends with no config, returns False.
 
         Args:
-            platform: Platform name (e.g., 'jira', 'linear', 'github')
+            platform: Ticket platform name (e.g., 'jira', 'linear', 'github')
 
         Returns:
-            True if the agent has an integration for this platform
+            True if the AI backend has an integration for this ticket platform
         """
         platform_lower = platform.lower()
 
@@ -487,7 +495,7 @@ def validate_strategy_for_platform(
         if not has_agent_support:
             msg = (
                 f"Strategy 'agent' for platform '{platform}' requires agent "
-                f"integration, but agent platform '{agent_config.platform.value}' "
+                f"integration, but AI backend '{agent_config.platform.value}' "
                 f"does not have '{platform}' integration enabled"
             )
             errors.append(msg)
@@ -576,6 +584,7 @@ __all__ = [
     "MAX_RETRY_DELAY_SECONDS",
     "parse_fetch_strategy",
     "parse_agent_platform",
+    "parse_ai_backend",
     "canonicalize_credentials",
     "get_active_platforms",
     "validate_credentials",
