@@ -70,3 +70,12 @@ jobs:
         run: |
           mypy spec --ignore-missing-imports
 
+      - name: Check for legacy AGENT_PLATFORM naming
+        run: |
+          echo "Checking for forbidden AGENT_PLATFORM pattern in spec/ and tests/..."
+          if grep -r -i -n "agent_platform" --include="*.py" spec/ tests/; then
+            echo ""
+            echo "ERROR: Found legacy AGENT_PLATFORM naming. Use AI_BACKEND instead. See AMI-66."
+            exit 1
+          fi
+          echo "No legacy naming patterns found."
