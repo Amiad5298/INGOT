@@ -25,9 +25,9 @@ repos:
         # No need to duplicate deps - just run: pip install -e ".[dev]"
       - id: no-legacy-naming
         name: no-legacy-naming (forbid AGENT_PLATFORM)
-        entry: "bash -c 'if grep -r -i -n \"agent_platform\" --include=\"*.py\" spec/ tests/ 2>/dev/null; then echo \"\"; echo \"ERROR: Found legacy AGENT_PLATFORM naming. Use AI_BACKEND instead. See AMI-66.\"; exit 1; fi'"
+        entry: bash scripts/check-legacy-naming.sh
         language: system
-        types: [python]
+        always_run: true
         pass_filenames: false
 
   # General pre-commit hooks
