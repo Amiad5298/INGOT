@@ -676,6 +676,7 @@ We welcome contributions! Here's how to get started:
 - Add tests for new functionality
 - Update documentation as needed
 - Keep commits atomic and well-described
+- **Do not use `AGENT_PLATFORM` / `agent_platform` naming** — the codebase uses `AI_BACKEND` / `ai_backend`. CI and pre-commit hooks reject `.py` files containing the legacy pattern (see AMI-66).
 
 ### Code Style
 

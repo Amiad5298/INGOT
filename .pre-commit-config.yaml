@@ -23,6 +23,12 @@ repos:
         pass_filenames: false
         # Uses dependencies from the active virtual environment
         # No need to duplicate deps - just run: pip install -e ".[dev]"
+      - id: no-legacy-naming
+        name: no-legacy-naming (forbid AGENT_PLATFORM)
+        entry: bash scripts/check-legacy-naming.sh
+        language: system
+        always_run: true
+        pass_filenames: false
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
