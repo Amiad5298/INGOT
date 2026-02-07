@@ -28,7 +28,7 @@ This ticket creates the `resolve_backend_platform()` function that serves as the
 
 > **Note:** The Linear ticket AMI-53 shows a different parameter order and names (`cli_backend: str | None, config: ConfigManager`) and states that invalid platforms raise `ValueError`. This implementation plan follows the **parent specification** as the source of truth:
 > - Parameter order: `config_manager: ConfigManager, cli_backend_override: str | None = None`
-> - Invalid platforms raise `ConfigValidationError` (from `parse_agent_platform()`)
+> - Invalid platforms raise `ConfigValidationError` (from `parse_ai_backend()`)
 > The Linear ticket should be updated to match.
 
 ---
@@ -123,16 +123,16 @@ The resolver answers "which backend?" while the factory answers "give me that ba
 
 2. **`spec/config/fetch_config.py`**
    - `AgentPlatform` enum: `AUGGIE`, `CLAUDE`, `CURSOR`, `AIDER`, `MANUAL`
-   - `parse_agent_platform()` - Converts string to enum, raises `ConfigValidationError`
+   - `parse_ai_backend()` - Converts string to enum, raises `ConfigValidationError`
 
 3. **`spec/config/manager.py`**
    - `ConfigManager` class - Provides `get(key, default)` method for reading config values
-   - Currently reads `AGENT_PLATFORM` key (to be migrated to `AI_BACKEND` in future)
+   - Currently reads `AI_BACKEND` key (to be migrated to `AI_BACKEND` in future)
 
 ### Current Backend Resolution (To Be Replaced)
 
 The current codebase has scattered backend resolution logic:
-- `spec/config/manager.py` line 580: `self._raw_values.get("AGENT_PLATFORM")`
+- `spec/config/manager.py` line 580: `self._raw_values.get("AI_BACKEND")`
 - `spec/cli.py` line 98: `_disambiguate_platform()` for ticket platforms (different concern)
 
 This ticket creates a single source of truth that will eventually replace scattered logic.
@@ -149,7 +149,7 @@ This ticket creates a single source of truth that will eventually replace scatte
 
 ```python
 """Single source of truth for backend platform resolution."""
-from spec.config.fetch_config import AgentPlatform, parse_agent_platform
+from spec.config.fetch_config import AgentPlatform, parse_ai_backend
 from spec.config.manager import ConfigManager
 from spec.integrations.backends.errors import BackendNotConfiguredError
 
@@ -180,15 +180,15 @@ def resolve_backend_platform(
     # 1. CLI override takes precedence (one-run override)
     # Note: Check both truthiness and non-whitespace to handle "" and "   " cases
     if cli_backend_override and cli_backend_override.strip():
-        return parse_agent_platform(cli_backend_override.strip())
+        return parse_ai_backend(cli_backend_override.strip())
 
     # 2. Check AI_BACKEND in persisted config
-    # Note: Legacy AGENT_PLATFORM migration is handled separately (see Final Decision #2).
-    # This resolver only reads AI_BACKEND. Migration from AGENT_PLATFORM to AI_BACKEND
+    # Note: Legacy AI_BACKEND migration is handled separately (see Final Decision #2).
+    # This resolver only reads AI_BACKEND. Migration from AI_BACKEND to AI_BACKEND
     # is out of scope for this ticket.
     ai_backend = config_manager.get("AI_BACKEND", "")
     if ai_backend.strip():
-        return parse_agent_platform(ai_backend)
+        return parse_ai_backend(ai_backend)
 
     # 3. No backend configured - raise error with helpful message
     raise BackendNotConfiguredError(
@@ -203,15 +203,15 @@ def resolve_backend_platform(
 
 2. **Persisted config second**: The `AI_BACKEND` key in config (set by `spec init` or manual edit) is the default for normal usage.
 
-3. **No implicit default**: Unlike `parse_agent_platform()` which accepts a `default` parameter, the resolver explicitly raises `BackendNotConfiguredError` when no backend is configured. This enforces the "no default backend" policy from Final Decision #2.
+3. **No implicit default**: Unlike `parse_ai_backend()` which accepts a `default` parameter, the resolver explicitly raises `BackendNotConfiguredError` when no backend is configured. This enforces the "no default backend" policy from Final Decision #2.
 
-4. **Delegation to parse_agent_platform()**: Uses the existing parser for string-to-enum conversion. This ensures consistent validation and error messages.
+4. **Delegation to parse_ai_backend()**: Uses the existing parser for string-to-enum conversion. This ensures consistent validation and error messages.
 
 5. **Helpful error messages**: The `BackendNotConfiguredError` message guides users to either run `spec init` or use `--backend` flag.
 
 6. **Whitespace handling**: CLI override is stripped of whitespace before parsing. Empty string `""` and whitespace-only `"   "` are treated as "no override" (falsy check + strip).
 
-7. **Legacy migration out of scope**: This resolver only reads `AI_BACKEND`. Migration from legacy `AGENT_PLATFORM` to `AI_BACKEND` is a separate concern (see Final Decision #2 in parent spec).
+7. **Legacy migration out of scope**: This resolver only reads `AI_BACKEND`. Migration from legacy `AI_BACKEND` to `AI_BACKEND` is a separate concern (see Final Decision #2 in parent spec).
 
 ---
 
@@ -332,7 +332,7 @@ class TestResolveBackendPlatformNoBackend:
         """Whitespace-only CLI + empty config raises BackendNotConfiguredError.
 
         This ensures whitespace CLI doesn't silently fall through to
-        parse_agent_platform()'s default (AUGGIE).
+        parse_ai_backend()'s default (AUGGIE).
         """
         config = MagicMock()
         config.get.return_value = ""
@@ -345,7 +345,7 @@ class TestResolveBackendPlatformInvalidInput:
     """Tests for invalid platform string handling.
 
     Note: The Linear ticket states that invalid platforms raise ValueError,
-    but the actual behavior is ConfigValidationError because parse_agent_platform()
+    but the actual behavior is ConfigValidationError because parse_ai_backend()
     raises ConfigValidationError for invalid values. This test reflects the
     actual implementation behavior per the parent specification.
     """
@@ -360,7 +360,7 @@ class TestResolveBackendPlatformInvalidInput:
 
         # Check error message indicates invalid platform (avoid asserting full list
         # of allowed values to prevent test brittleness when enum changes)
-        assert "Invalid agent platform" in str(exc_info.value)
+        assert "Invalid AI backend" in str(exc_info.value)
         assert "chatgpt" in str(exc_info.value)
 
     def test_invalid_config_value_raises_config_validation_error(self):
@@ -423,12 +423,12 @@ BackendNotConfiguredError: No AI backend configured. Please run 'spec init' to c
 
 **Scenario:** User provides invalid platform string via `--backend=openai` or config.
 
-**Handling:** `parse_agent_platform()` raises `ConfigValidationError` with list of valid options.
+**Handling:** `parse_ai_backend()` raises `ConfigValidationError` with list of valid options.
 
 **Example:**
 ```python
 >>> resolve_backend_platform(config, cli_backend_override="openai")
-ConfigValidationError: Invalid agent platform 'openai'. Allowed values: auggie, claude, cursor, aider, manual
+ConfigValidationError: Invalid AI backend 'openai'. Allowed values: auggie, claude, cursor, aider, manual
 ```
 
 ### Edge Case 3: Whitespace-Only Values
@@ -540,7 +540,7 @@ config.get.return_value = ''
 try:
     resolve_backend_platform(config, cli_backend_override='chatgpt')
 except ConfigValidationError as e:
-    assert 'Invalid agent platform' in str(e)
+    assert 'Invalid AI backend' in str(e)
     print('Invalid platform error: OK')
 "
 
@@ -623,7 +623,7 @@ print('No import cycles detected')
 | **AC9** | Whitespace-only CLI override falls through to config | Unit test | [ ] |
 | **AC10** | Whitespace-only CLI + empty config raises `BackendNotConfiguredError` | Unit test | [ ] |
 
-> **Note on AC4:** The Linear ticket states `ValueError` for invalid platforms, but the actual behavior is `ConfigValidationError` because `parse_agent_platform()` raises `ConfigValidationError`. This follows the parent specification.
+> **Note on AC4:** The Linear ticket states `ValueError` for invalid platforms, but the actual behavior is `ConfigValidationError` because `parse_ai_backend()` raises `ConfigValidationError`. This follows the parent specification.
 
 ---
 
@@ -642,7 +642,7 @@ print('No import cycles detected')
 | File | Description |
 |------|-------------|
 | `spec/integrations/backends/errors.py` | BackendNotConfiguredError definition |
-| `spec/config/fetch_config.py` | AgentPlatform enum, parse_agent_platform() |
+| `spec/config/fetch_config.py` | AgentPlatform enum, parse_ai_backend() |
 | `spec/config/manager.py` | ConfigManager class |
 | `spec/integrations/backends/factory.py` | BackendFactory (companion to resolver) |
 
@@ -692,5 +692,5 @@ def run(
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-02-01 | AI Assistant | Initial draft created following AMI-52 template |
-| 2026-02-01 | AI Assistant | **Review fixes:** (1) Added discrepancy note about Linear ticket parameter order and ValueError vs ConfigValidationError; (2) Added `.strip()` to CLI override handling for whitespace safety; (3) Added test cases for empty string and whitespace-only CLI override; (4) Clarified legacy AGENT_PLATFORM migration is out of scope; (5) Added ConfigValidationError note to test class docstring; (6) Added AC8 and AC9 for empty/whitespace CLI override tests; (7) Added Key Design Decisions #6 and #7 for whitespace handling and legacy migration scope |
+| 2026-02-01 | AI Assistant | **Review fixes:** (1) Added discrepancy note about Linear ticket parameter order and ValueError vs ConfigValidationError; (2) Added `.strip()` to CLI override handling for whitespace safety; (3) Added test cases for empty string and whitespace-only CLI override; (4) Clarified legacy AI_BACKEND migration is out of scope; (5) Added ConfigValidationError note to test class docstring; (6) Added AC8 and AC9 for empty/whitespace CLI override tests; (7) Added Key Design Decisions #6 and #7 for whitespace handling and legacy migration scope |
 | 2026-02-01 | AI Assistant | **Peer review fixes:** (1) Fixed `AgentPlatform.CLAUDE_DESKTOP` → `AgentPlatform.CLAUDE` to match actual codebase (enum is `CLAUDE`, not `CLAUDE_DESKTOP`); (2) Added missing test `test_whitespace_cli_and_empty_config_raises_error()` for whitespace CLI + empty config edge case; (3) Made error message assertions less brittle by avoiding full allowed-values list checks; (4) Added AC10 for whitespace CLI + empty config test |

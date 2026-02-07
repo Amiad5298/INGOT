@@ -11,7 +11,7 @@
 
 This ticket extends the SPECFLOW configuration schema to support the hybrid ticket fetching architecture. The implementation adds:
 
-1. **AgentConfig** - AI agent platform and integration settings (which platforms the agent has MCP integrations for)
+1. **AgentConfig** - AI backend and integration settings (which platforms the agent has MCP integrations for)
 2. **FetchStrategyConfig** - Default strategy (agent/direct/auto) with per-platform overrides
 3. **FetchPerformanceConfig** - Timeout, retry, and cache settings
 4. **Fallback credentials** - Direct API credentials for platforms without agent integration
@@ -72,7 +72,7 @@ spec/config/
 
 | File | Purpose |
 |------|---------|
-| `spec/config/fetch_config.py` | Dataclasses: `FetchStrategy`, `AgentPlatform`, `AgentConfig`, `FetchStrategyConfig`, `FetchPerformanceConfig`; Validation: `ConfigValidationError`, `validate_credentials()`, `validate_strategy_for_platform()`, `get_active_platforms()`, `canonicalize_credentials()`; Parser helpers: `parse_fetch_strategy()`, `parse_agent_platform()` |
+| `spec/config/fetch_config.py` | Dataclasses: `FetchStrategy`, `AgentPlatform`, `AgentConfig`, `FetchStrategyConfig`, `FetchPerformanceConfig`; Validation: `ConfigValidationError`, `validate_credentials()`, `validate_strategy_for_platform()`, `get_active_platforms()`, `canonicalize_credentials()`; Parser helpers: `parse_fetch_strategy()`, `parse_ai_backend()` |
 | `spec/utils/env_utils.py` | Environment variable utilities: `expand_env_vars()`, `expand_env_vars_strict()`, `is_sensitive_key()`, `EnvVarExpansionError`, `SENSITIVE_KEY_PATTERNS` |
 | `tests/test_fetch_config.py` | 39 comprehensive unit tests |
 
@@ -119,7 +119,7 @@ Add methods:
 **File:** `spec/config/settings.py`
 
 Add new flat config keys for simple settings:
-- `AGENT_PLATFORM` → agent platform
+- `AI_BACKEND` → AI backend
 - `FETCH_STRATEGY_DEFAULT` → default fetch strategy
 - `FETCH_CACHE_DURATION_HOURS` → cache TTL
 - `FETCH_TIMEOUT_SECONDS` → HTTP timeout
@@ -162,7 +162,7 @@ class FetchStrategy(Enum):
 
 
 class AgentPlatform(Enum):
-    """Supported AI agent platforms."""
+    """Supported AI backends."""
     AUGGIE = "auggie"
     CLAUDE_DESKTOP = "claude_desktop"
     CURSOR = "cursor"
@@ -224,7 +224,7 @@ def _expand_env_vars(self, value: Any) -> Any:
 def get_agent_config(self) -> AgentConfig:
     """Get AI agent configuration."""
     from spec.config.fetch_config import AgentConfig, AgentPlatform
-    platform_str = self._raw_values.get("AGENT_PLATFORM", "auggie")
+    platform_str = self._raw_values.get("AI_BACKEND", "auggie")
     integrations = {}
     # Parse AGENT_INTEGRATIONS_* keys
     for key, value in self._raw_values.items():
@@ -268,7 +268,7 @@ Add to `_key_mapping`:
 
 ```python
 # Fetch strategy settings
-"AGENT_PLATFORM": "agent_platform",
+"AI_BACKEND": "ai_backend",
 "FETCH_STRATEGY_DEFAULT": "fetch_strategy_default",
 "FETCH_CACHE_DURATION_HOURS": "fetch_cache_duration_hours",
 "FETCH_TIMEOUT_SECONDS": "fetch_timeout_seconds",
@@ -280,7 +280,7 @@ Add new attributes to `Settings` dataclass:
 
 ```python
 # Fetch strategy settings
-agent_platform: str = "auggie"
+ai_backend: str = "auggie"
 fetch_strategy_default: str = "auto"
 fetch_cache_duration_hours: int = 24
 fetch_timeout_seconds: int = 30
@@ -296,7 +296,7 @@ fetch_retry_delay_seconds: float = 1.0
 
 ```bash
 # Agent configuration
-AGENT_PLATFORM=auggie
+AI_BACKEND=auggie
 AGENT_INTEGRATION_JIRA=true
 AGENT_INTEGRATION_LINEAR=true
 AGENT_INTEGRATION_GITHUB=true
@@ -488,7 +488,7 @@ if is_sensitive_key("FALLBACK_JIRA_TOKEN"):
 **File:** `spec/config/fetch_config.py`
 
 - **`parse_fetch_strategy(value, default, context)`** - Returns `FetchStrategy` with proper error messages
-- **`parse_agent_platform(value, default, context)`** - Returns `AgentPlatform` with proper error messages
+- **`parse_ai_backend(value, default, context)`** - Returns `AgentPlatform` with proper error messages
 
 ```python
 strategy = parse_fetch_strategy("invalid", context="FETCH_STRATEGY_DEFAULT")
@@ -509,7 +509,7 @@ All validation supports both modes:
 
 | Category | Tests |
 |----------|-------|
-| Enum parsing | `parse_fetch_strategy()`, `parse_agent_platform()` with valid/invalid/empty values |
+| Enum parsing | `parse_fetch_strategy()`, `parse_ai_backend()` with valid/invalid/empty values |
 | Dataclass defaults | All fields have sensible defaults |
 | `AgentConfig.supports_platform()` | Case-insensitive platform matching |
 | `FetchStrategyConfig.get_strategy()` | Per-platform overrides and default fallback |
