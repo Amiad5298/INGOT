@@ -33,8 +33,13 @@ def is_first_run(config: ConfigManager) -> bool:
     Returns True when no backend is configured, meaning the user has
     never completed backend selection.
 
-    Checks both the agent config (for migrating users) and the
-    AI_BACKEND config key.
+    Checks the raw AI_BACKEND config key directly. This is the same key
+    that resolve_backend_platform() uses, ensuring consistent detection.
+
+    Note: We intentionally do NOT check agent_config.platform here because
+    get_agent_config() defaults to AgentPlatform.AUGGIE when AI_BACKEND is
+    empty, making that check always truthy and preventing onboarding from
+    ever triggering.
 
     Args:
         config: Configuration manager (must already be loaded)
@@ -42,9 +47,6 @@ def is_first_run(config: ConfigManager) -> bool:
     Returns:
         True if no backend is configured
     """
-    agent_config = config.get_agent_config()
-    if agent_config and agent_config.platform:
-        return False
     return not config.get("AI_BACKEND", "").strip()
 
 

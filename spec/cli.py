@@ -9,7 +9,7 @@ Supports tickets from all 6 platforms: Jira, Linear, GitHub, Azure DevOps, Monda
 import asyncio
 import re
 from collections.abc import Callable, Coroutine
-from typing import Annotated, TypeVar
+from typing import Annotated, NoReturn, TypeVar
 
 import typer
 
@@ -766,6 +766,37 @@ def _configure_settings(config: ConfigManager) -> None:
     print_info("Configuration saved!")
 
 
+def _handle_fetch_error(exc: Exception) -> NoReturn:
+    """Map a ticket-fetch exception to a user-facing message and raise typer.Exit.
+
+    This provides a single source of truth for error-to-message mapping,
+    used by both the initial fetch and the retry-after-onboarding paths
+    in _fetch_ticket_with_onboarding.
+
+    Re-raises typer.Exit, SystemExit, and KeyboardInterrupt directly.
+    """
+    if isinstance(exc, typer.Exit | SystemExit | KeyboardInterrupt):
+        raise exc
+    if isinstance(exc, TicketNotFoundError):
+        print_error(f"Ticket not found: {exc}")
+    elif isinstance(exc, AuthenticationError):
+        print_error(f"Authentication failed: {exc}")
+    elif isinstance(exc, PlatformNotSupportedError):
+        print_error(f"Platform not supported: {exc}")
+    elif isinstance(exc, AsyncLoopAlreadyRunningError | BackendNotInstalledError):
+        print_error(str(exc))
+    elif isinstance(exc, NotImplementedError):
+        print_error(f"Backend not available: {exc}")
+    elif isinstance(exc, ValueError):
+        print_error(f"Invalid backend configuration: {exc}")
+    elif isinstance(exc, SpecError):
+        print_error(str(exc))
+        raise typer.Exit(exc.exit_code) from exc
+    else:
+        print_error(f"Failed to fetch ticket: {exc}")
+    raise typer.Exit(ExitCode.GENERAL_ERROR) from exc
+
+
 def _fetch_ticket_with_onboarding(
     ticket: str,
     config: ConfigManager,
@@ -821,37 +852,9 @@ def _fetch_ticket_with_onboarding(
                 )
             )
         except Exception as retry_exc:
-            print_error(f"Failed to fetch ticket after onboarding: {retry_exc}")
-            raise typer.Exit(ExitCode.GENERAL_ERROR) from retry_exc
-    except TicketNotFoundError as e:
-        print_error(f"Ticket not found: {e}")
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
-    except AuthenticationError as e:
-        print_error(f"Authentication failed: {e}")
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
-    except PlatformNotSupportedError as e:
-        print_error(f"Platform not supported: {e}")
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
-    except AsyncLoopAlreadyRunningError as e:
-        print_error(str(e))
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
-    except BackendNotInstalledError as e:
-        print_error(str(e))
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
-    except NotImplementedError as e:
-        print_error(f"Backend not available: {e}")
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
-    except ValueError as e:
-        print_error(f"Invalid backend configuration: {e}")
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
-    except (typer.Exit, SystemExit, KeyboardInterrupt):
-        raise
-    except SpecError as e:
-        print_error(str(e))
-        raise typer.Exit(e.exit_code) from e
+            _handle_fetch_error(retry_exc)
     except Exception as e:
-        print_error(f"Failed to fetch ticket: {e}")
-        raise typer.Exit(ExitCode.GENERAL_ERROR) from e
+        _handle_fetch_error(e)
 
 
 def _run_workflow(

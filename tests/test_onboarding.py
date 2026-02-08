@@ -46,27 +46,32 @@ class TestIsFirstRun:
         config = _make_config("   ")
         assert is_first_run(config) is True
 
-    def test_agent_config_platform_set(self):
-        """Existing agent_config.platform means no onboarding needed."""
-        config = _make_config("", platform_enum=AgentPlatform.AUGGIE)
-        assert is_first_run(config) is False
+    def test_ai_backend_set_regardless_of_agent_config(self):
+        """is_first_run checks only raw AI_BACKEND, not agent_config.platform.
 
-    def test_agent_config_platform_none_and_no_backend(self):
-        """No agent_config.platform and no AI_BACKEND means first run."""
+        get_agent_config().platform always defaults to AUGGIE, so checking it
+        would make is_first_run() always return False (never trigger onboarding).
+        """
+        # AI_BACKEND empty but agent_config.platform set → still first run
+        config = _make_config("", platform_enum=AgentPlatform.AUGGIE)
+        assert is_first_run(config) is True
+
+    def test_ai_backend_empty_platform_none(self):
+        """No AI_BACKEND and no agent platform means first run."""
         config = _make_config("", platform_enum=None)
         assert is_first_run(config) is True
 
-    def test_get_agent_config_returns_none(self):
-        """is_first_run handles get_agent_config() returning None."""
-        config = _make_config("")
-        config.get_agent_config.return_value = None
-        assert is_first_run(config) is True
-
-    def test_get_agent_config_returns_none_with_backend_set(self):
-        """is_first_run returns False when AI_BACKEND is set even if agent_config is None."""
+    def test_ai_backend_set_agent_config_none(self):
+        """is_first_run returns False when AI_BACKEND is set regardless of agent_config."""
         config = _make_config("auggie")
         config.get_agent_config.return_value = None
         assert is_first_run(config) is False
+
+    def test_only_checks_raw_ai_backend_key(self):
+        """is_first_run does not call get_agent_config (relies on raw key only)."""
+        config = _make_config("claude")
+        is_first_run(config)
+        config.get_agent_config.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -345,6 +350,42 @@ class TestFullFlow:
         assert result.success is False
         assert "cancelled" in result.error_message.lower()
 
+    @patch("spec.onboarding.flow.print_error")
+    @patch("spec.onboarding.flow.print_success")
+    @patch("spec.onboarding.flow.print_info")
+    @patch("spec.onboarding.flow.print_header")
+    @patch("spec.onboarding.flow.BackendFactory")
+    @patch("spec.onboarding.flow.prompt_select")
+    def test_full_flow_save_spec_error_returns_failure(
+        self,
+        mock_select,
+        mock_factory,
+        mock_header,
+        mock_info,
+        mock_print_success,
+        mock_print_error,
+    ):
+        """SpecError from _save_configuration returns failure result instead of crashing."""
+        mock_select.return_value = "Auggie (Augment Code CLI)"
+
+        backend_instance = MagicMock()
+        backend_instance.check_installed.return_value = (True, "Auggie v1.0")
+        mock_factory.create.return_value = backend_instance
+
+        config = _make_config()
+        # Simulate readback mismatch: save succeeds but readback returns wrong value
+        config.get.side_effect = lambda key, default="": (
+            "wrong_value" if key == "AI_BACKEND" else default
+        )
+
+        flow = OnboardingFlow(config)
+        result = flow.run()
+
+        assert result.success is False
+        assert "readback mismatch" in result.error_message
+        mock_print_error.assert_called_once()
+        assert "Onboarding failed" in mock_print_error.call_args[0][0]
+
     def test_subsequent_run_skips_onboarding(self):
         config = _make_config("auggie")
         assert is_first_run(config) is False
@@ -534,3 +575,54 @@ class TestFetchTicketWithOnboarding:
         mock_onboard.assert_not_called()
         # Config should have been reloaded
         config.load.assert_called_once()
+
+    @patch("spec.cli.print_error")
+    @patch("spec.cli.run_async")
+    @patch("spec.cli.is_first_run")
+    @patch("spec.cli.run_onboarding")
+    def test_specific_error_after_onboarding_uses_same_message(
+        self, mock_onboard, mock_first_run, mock_run_async, mock_print_error
+    ):
+        """TicketNotFoundError after onboarding produces the same message as before onboarding."""
+        import typer
+
+        from spec.cli import _fetch_ticket_with_onboarding
+        from spec.integrations.backends.errors import BackendNotConfiguredError
+        from spec.integrations.providers.exceptions import TicketNotFoundError
+
+        mock_run_async.side_effect = [
+            BackendNotConfiguredError("No backend"),
+            TicketNotFoundError(ticket_id="TICKET-999"),
+        ]
+        mock_first_run.return_value = True
+        mock_onboard.return_value = OnboardingResult(success=True, backend=AgentPlatform.AUGGIE)
+        config = _make_config()
+
+        with pytest.raises(typer.Exit):
+            _fetch_ticket_with_onboarding("TICKET-999", config, None, None)
+
+        # Must show the specific "Ticket not found" message, not a generic error
+        mock_print_error.assert_called_once()
+        error_msg = mock_print_error.call_args[0][0]
+        assert "Ticket not found" in error_msg
+        assert "TICKET-999" in error_msg
+
+    @patch("spec.cli.print_error")
+    @patch("spec.cli.run_async")
+    def test_ticket_not_found_before_onboarding_message(self, mock_run_async, mock_print_error):
+        """TicketNotFoundError on initial fetch shows the same message format."""
+        import typer
+
+        from spec.cli import _fetch_ticket_with_onboarding
+        from spec.integrations.providers.exceptions import TicketNotFoundError
+
+        mock_run_async.side_effect = TicketNotFoundError(ticket_id="TICKET-999")
+        config = _make_config("auggie")
+
+        with pytest.raises(typer.Exit):
+            _fetch_ticket_with_onboarding("TICKET-999", config, None, None)
+
+        mock_print_error.assert_called_once()
+        error_msg = mock_print_error.call_args[0][0]
+        assert "Ticket not found" in error_msg
+        assert "TICKET-999" in error_msg

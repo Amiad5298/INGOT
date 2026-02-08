@@ -78,6 +78,12 @@ class OnboardingFlow:
                 success=False,
                 error_message="Onboarding cancelled by user.",
             )
+        except SpecError as e:
+            print_error(f"Onboarding failed: {e}")
+            return OnboardingResult(
+                success=False,
+                error_message=str(e),
+            )
 
     def _select_backend(self) -> AgentPlatform | None:
         """Prompt user to choose an AI backend.
