@@ -23,6 +23,7 @@ _SPECFLOW_AGENT_TASKLIST = "spec-tasklist"
 _SPECFLOW_AGENT_TASKLIST_REFINER = "spec-tasklist-refiner"
 _SPECFLOW_AGENT_IMPLEMENTER = "spec-implementer"
 _SPECFLOW_AGENT_REVIEWER = "spec-reviewer"
+_SPECFLOW_AGENT_FIXER = "spec-implementer"  # Autofix reuses the implementer agent
 _SPECFLOW_AGENT_DOC_UPDATER = "spec-doc-updater"
 
 
@@ -87,6 +88,7 @@ class Settings:
     subagent_tasklist_refiner: str = _SPECFLOW_AGENT_TASKLIST_REFINER
     subagent_implementer: str = _SPECFLOW_AGENT_IMPLEMENTER
     subagent_reviewer: str = _SPECFLOW_AGENT_REVIEWER
+    subagent_fixer: str = _SPECFLOW_AGENT_FIXER
     subagent_doc_updater: str = _SPECFLOW_AGENT_DOC_UPDATER
 
     # Documentation update settings
@@ -128,6 +130,7 @@ class Settings:
             "SUBAGENT_TASKLIST_REFINER": "subagent_tasklist_refiner",
             "SUBAGENT_IMPLEMENTER": "subagent_implementer",
             "SUBAGENT_REVIEWER": "subagent_reviewer",
+            "SUBAGENT_FIXER": "subagent_fixer",
             "SUBAGENT_DOC_UPDATER": "subagent_doc_updater",
             "AUTO_UPDATE_DOCS": "auto_update_docs",
             # Platform settings

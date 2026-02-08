@@ -285,7 +285,7 @@ class TestExecuteTask:
 
     def test_returns_true_on_success(self, mock_backend, workflow_state, sample_task):
         """Returns True on backend success."""
-        mock_backend.run_print_with_output.return_value = (True, "Output")
+        mock_backend.run_with_callback.return_value = (True, "Output")
 
         result = _execute_task(
             workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend
@@ -295,7 +295,7 @@ class TestExecuteTask:
 
     def test_returns_false_on_failure(self, mock_backend, workflow_state, sample_task):
         """Returns False on backend failure."""
-        mock_backend.run_print_with_output.return_value = (False, "Error")
+        mock_backend.run_with_callback.return_value = (False, "Error")
 
         result = _execute_task(
             workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend
@@ -305,7 +305,7 @@ class TestExecuteTask:
 
     def test_returns_false_on_exception(self, mock_backend, workflow_state, sample_task):
         """Returns False on exception."""
-        mock_backend.run_print_with_output.side_effect = RuntimeError("Connection failed")
+        mock_backend.run_with_callback.side_effect = RuntimeError("Connection failed")
 
         result = _execute_task(
             workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend
@@ -315,12 +315,12 @@ class TestExecuteTask:
 
     def test_uses_spec_implementer_agent(self, mock_backend, workflow_state, sample_task):
         """Uses state.subagent_names implementer agent."""
-        mock_backend.run_print_with_output.return_value = (True, "Output")
+        mock_backend.run_with_callback.return_value = (True, "Output")
 
         _execute_task(workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend)
 
-        # Verify subagent from state.subagent_names is passed to run_print_with_output
-        call_kwargs = mock_backend.run_print_with_output.call_args[1]
+        # Verify subagent from state.subagent_names is passed to run_with_callback
+        call_kwargs = mock_backend.run_with_callback.call_args[1]
         assert call_kwargs["subagent"] == workflow_state.subagent_names["implementer"]
         assert call_kwargs["dont_save_session"] is True
 
@@ -507,7 +507,7 @@ class TestRunPostImplementationTests:
     def test_prompts_user_to_run_tests(self, mock_confirm, mock_backend, workflow_state):
         """Prompts user to run tests."""
         mock_confirm.return_value = True
-        mock_backend.run_print_with_output.return_value = (True, "Tests passed")
+        mock_backend.run_with_callback.return_value = (True, "Tests passed")
 
         _run_post_implementation_tests(workflow_state, mock_backend)
 

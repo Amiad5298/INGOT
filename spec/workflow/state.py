@@ -14,6 +14,7 @@ from spec.integrations.providers import GenericTicket
 # Import subagent constants as single source of truth
 from spec.workflow.constants import (
     SPECFLOW_AGENT_DOC_UPDATER,
+    SPECFLOW_AGENT_FIXER,
     SPECFLOW_AGENT_IMPLEMENTER,
     SPECFLOW_AGENT_PLANNER,
     SPECFLOW_AGENT_REVIEWER,
@@ -143,6 +144,10 @@ class WorkflowState:
 
     # AI Backend platform (set by runner from injected backend)
     backend_platform: AgentPlatform | None = None
+    # AI Backend model (set by runner from injected backend)
+    backend_model: str | None = None
+    # AI Backend display name (set by runner from injected backend)
+    backend_name: str | None = None
 
     # Subagent configuration (names loaded from settings)
     # Defaults from auggie.py constants - the single source of truth
@@ -153,6 +158,7 @@ class WorkflowState:
             "tasklist_refiner": SPECFLOW_AGENT_TASKLIST_REFINER,
             "implementer": SPECFLOW_AGENT_IMPLEMENTER,
             "reviewer": SPECFLOW_AGENT_REVIEWER,
+            "fixer": SPECFLOW_AGENT_FIXER,
             "doc_updater": SPECFLOW_AGENT_DOC_UPDATER,
         }
     )

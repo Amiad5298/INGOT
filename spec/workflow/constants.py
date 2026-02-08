@@ -14,6 +14,7 @@ SPECFLOW_AGENT_TASKLIST = "spec-tasklist"
 SPECFLOW_AGENT_TASKLIST_REFINER = "spec-tasklist-refiner"
 SPECFLOW_AGENT_IMPLEMENTER = "spec-implementer"
 SPECFLOW_AGENT_REVIEWER = "spec-reviewer"
+SPECFLOW_AGENT_FIXER = "spec-implementer"  # Autofix reuses the implementer agent
 SPECFLOW_AGENT_DOC_UPDATER = "spec-doc-updater"
 
 # Default timeout values (seconds)
@@ -28,6 +29,7 @@ __all__ = [
     "SPECFLOW_AGENT_TASKLIST_REFINER",
     "SPECFLOW_AGENT_IMPLEMENTER",
     "SPECFLOW_AGENT_REVIEWER",
+    "SPECFLOW_AGENT_FIXER",
     "SPECFLOW_AGENT_DOC_UPDATER",
     # Timeout constants
     "DEFAULT_EXECUTION_TIMEOUT",

@@ -39,16 +39,16 @@ class TestRunAutoFix:
 
     def test_returns_true_on_success(self, mock_backend, workflow_state, log_dir):
         """Returns True when agent completes successfully."""
-        mock_backend.run_print_with_output.return_value = (True, "Fixed all issues")
+        mock_backend.run_with_callback.return_value = (True, "Fixed all issues")
 
         result = run_auto_fix(workflow_state, "Missing tests", log_dir, mock_backend)
 
         assert result is True
-        mock_backend.run_print_with_output.assert_called_once()
+        mock_backend.run_with_callback.assert_called_once()
 
     def test_returns_false_on_agent_failure(self, mock_backend, workflow_state, log_dir):
         """Returns False when agent reports failure."""
-        mock_backend.run_print_with_output.return_value = (False, "Could not fix")
+        mock_backend.run_with_callback.return_value = (False, "Could not fix")
 
         result = run_auto_fix(workflow_state, "Complex issues", log_dir, mock_backend)
 
@@ -56,7 +56,7 @@ class TestRunAutoFix:
 
     def test_returns_false_on_exception(self, mock_backend, workflow_state, log_dir):
         """Returns False when exception occurs."""
-        mock_backend.run_print_with_output.side_effect = RuntimeError("Connection failed")
+        mock_backend.run_with_callback.side_effect = RuntimeError("Connection failed")
 
         result = run_auto_fix(workflow_state, "Some feedback", log_dir, mock_backend)
 
@@ -64,42 +64,45 @@ class TestRunAutoFix:
 
     def test_prompt_contains_review_feedback(self, mock_backend, workflow_state, log_dir):
         """Prompt includes the review feedback."""
-        mock_backend.run_print_with_output.return_value = (True, "Done")
+        mock_backend.run_with_callback.return_value = (True, "Done")
 
         feedback = "[MISSING_TEST] Function foo() has no test coverage"
         run_auto_fix(workflow_state, feedback, log_dir, mock_backend)
 
-        call_args = mock_backend.run_print_with_output.call_args
+        call_args = mock_backend.run_with_callback.call_args
         prompt = call_args[0][0]
         assert feedback in prompt
 
     def test_prompt_contains_plan_path(self, mock_backend, workflow_state, log_dir):
         """Prompt includes the plan path for context."""
-        mock_backend.run_print_with_output.return_value = (True, "Done")
+        mock_backend.run_with_callback.return_value = (True, "Done")
 
         run_auto_fix(workflow_state, "Issues found", log_dir, mock_backend)
 
-        call_args = mock_backend.run_print_with_output.call_args
+        call_args = mock_backend.run_with_callback.call_args
         prompt = call_args[0][0]
         assert str(workflow_state.get_plan_path()) in prompt
 
-    def test_uses_implementer_agent(self, mock_backend, workflow_state, log_dir):
-        """Uses the implementer agent from subagent_names."""
-        mock_backend.run_print_with_output.return_value = (True, "Done")
+    def test_uses_fixer_agent(self, mock_backend, workflow_state, log_dir):
+        """Uses the fixer agent from subagent_names, falling back to implementer."""
+        mock_backend.run_with_callback.return_value = (True, "Done")
 
         run_auto_fix(workflow_state, "Fix this", log_dir, mock_backend)
 
-        call_args = mock_backend.run_print_with_output.call_args
-        assert call_args[1]["subagent"] == workflow_state.subagent_names["implementer"]
+        call_args = mock_backend.run_with_callback.call_args
+        expected = workflow_state.subagent_names.get(
+            "fixer", workflow_state.subagent_names["implementer"]
+        )
+        assert call_args[1]["subagent"] == expected
         assert call_args[1]["dont_save_session"] is True
 
     def test_prompt_includes_no_commit_instruction(self, mock_backend, workflow_state, log_dir):
         """Prompt explicitly tells agent not to commit."""
-        mock_backend.run_print_with_output.return_value = (True, "Done")
+        mock_backend.run_with_callback.return_value = (True, "Done")
 
         run_auto_fix(workflow_state, "Issues", log_dir, mock_backend)
 
-        call_args = mock_backend.run_print_with_output.call_args
+        call_args = mock_backend.run_with_callback.call_args
         prompt = call_args[0][0]
         assert "Do NOT commit" in prompt
 

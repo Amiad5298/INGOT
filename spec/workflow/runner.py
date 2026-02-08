@@ -115,12 +115,15 @@ def run_spec_driven_workflow(
         enable_phase_review=enable_phase_review,
         dirty_tree_policy=dirty_tree_policy,
         backend_platform=backend.platform,
+        backend_model=backend.model or "",
+        backend_name=backend.name,
         subagent_names={
             "planner": config.settings.subagent_planner,
             "tasklist": config.settings.subagent_tasklist,
             "tasklist_refiner": config.settings.subagent_tasklist_refiner,
             "implementer": config.settings.subagent_implementer,
             "reviewer": config.settings.subagent_reviewer,
+            "fixer": config.settings.subagent_fixer,
             "doc_updater": config.settings.subagent_doc_updater,
         },
     )

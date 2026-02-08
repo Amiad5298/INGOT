@@ -519,7 +519,7 @@ class TestWorkflowStepBehavior:
     def test_all_subagent_keys_present(self, mock_state):
         """Verify all expected subagent keys are present.
 
-        Contract: WorkflowState must have all 6 subagent keys.
+        Contract: WorkflowState must have all 7 subagent keys.
         """
         expected_keys = {
             "planner",
@@ -527,6 +527,7 @@ class TestWorkflowStepBehavior:
             "tasklist_refiner",
             "implementer",
             "reviewer",
+            "fixer",
             "doc_updater",
         }
         assert set(mock_state.subagent_names.keys()) == expected_keys

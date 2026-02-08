@@ -62,9 +62,10 @@ Instructions:
 Do NOT commit any changes."""
 
     try:
-        success, _ = backend.run_print_with_output(
+        success, _ = backend.run_with_callback(
             prompt,
-            subagent=state.subagent_names["implementer"],
+            subagent=state.subagent_names.get("fixer", state.subagent_names["implementer"]),
+            output_callback=lambda _line: None,
             dont_save_session=True,
         )
         if success:

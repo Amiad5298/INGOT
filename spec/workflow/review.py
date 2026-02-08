@@ -247,9 +247,10 @@ def _run_rereview_after_fix(
     prompt = build_review_prompt(state, phase, diff_output, is_truncated)
 
     try:
-        success, output = backend.run_print_with_output(
+        success, output = backend.run_with_callback(
             prompt,
             subagent=state.subagent_names["reviewer"],
+            output_callback=lambda _line: None,
             dont_save_session=True,
         )
 
@@ -327,9 +328,10 @@ def run_phase_review(
 
     # Run review
     try:
-        success, output = backend.run_print_with_output(
+        success, output = backend.run_with_callback(
             prompt,
             subagent=state.subagent_names["reviewer"],
+            output_callback=lambda _line: None,
             dont_save_session=True,
         )
     except Exception as e:

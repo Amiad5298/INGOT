@@ -418,7 +418,7 @@ class TestRunPhaseReview:
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
         mock_backend = MagicMock()
-        mock_backend.run_print_with_output.return_value = (True, "**Status**: PASS")
+        mock_backend.run_with_callback.return_value = (True, "**Status**: PASS")
 
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
@@ -486,7 +486,7 @@ class TestRunPhaseReview:
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
         mock_backend = MagicMock()
-        mock_backend.run_print_with_output.return_value = (
+        mock_backend.run_with_callback.return_value = (
             True,
             "**Status**: NEEDS_ATTENTION\n**Issues**: 1. Bug",
         )
@@ -517,7 +517,7 @@ class TestRunPhaseReview:
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
         mock_backend = MagicMock()
-        mock_backend.run_print_with_output.return_value = (
+        mock_backend.run_with_callback.return_value = (
             True,
             "**Status**: NEEDS_ATTENTION",
         )
@@ -550,7 +550,7 @@ class TestRunPhaseReview:
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
         mock_backend = MagicMock()
-        mock_backend.run_print_with_output.side_effect = Exception("Network error")
+        mock_backend.run_with_callback.side_effect = Exception("Network error")
 
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
@@ -575,7 +575,7 @@ class TestRunPhaseReview:
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
         mock_backend = MagicMock()
-        mock_backend.run_print_with_output.return_value = (False, "Error output")
+        mock_backend.run_with_callback.return_value = (False, "Error output")
 
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
@@ -642,7 +642,7 @@ class TestRunRereviewAfterFix:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
         auggie_client = MagicMock()
-        auggie_client.run_print_with_output.return_value = (True, "**Status**: PASS")
+        auggie_client.run_with_callback.return_value = (True, "**Status**: PASS")
 
         with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
             mock_confirm.return_value = True
@@ -666,7 +666,7 @@ class TestRunRereviewAfterFix:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
         auggie_client = MagicMock()
-        auggie_client.run_print_with_output.return_value = (True, "**Status**: NEEDS_ATTENTION")
+        auggie_client.run_with_callback.return_value = (True, "**Status**: NEEDS_ATTENTION")
 
         with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
             mock_confirm.return_value = True
@@ -713,7 +713,7 @@ class TestRunRereviewAfterFix:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
         auggie_client = MagicMock()
-        auggie_client.run_print_with_output.return_value = (False, "error")
+        auggie_client.run_with_callback.return_value = (False, "error")
 
         with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
             mock_confirm.return_value = True
@@ -737,7 +737,7 @@ class TestRunRereviewAfterFix:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
         auggie_client = MagicMock()
-        auggie_client.run_print_with_output.side_effect = Exception("Network error")
+        auggie_client.run_with_callback.side_effect = Exception("Network error")
 
         with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
             mock_confirm.return_value = True

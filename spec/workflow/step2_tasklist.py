@@ -303,10 +303,11 @@ Implementation Plan:
 
 Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
 
-    # Use run_print_with_output to capture AI output
-    success, output = backend.run_print_with_output(
+    # Use run_with_callback to capture AI output (Phase 2 migration)
+    success, output = backend.run_with_callback(
         prompt,
         subagent=state.subagent_names["tasklist"],
+        output_callback=lambda _line: None,
         dont_save_session=True,
     )
 
@@ -444,9 +445,10 @@ def _post_process_tasklist(state: WorkflowState, tasklist_path: Path, backend: A
 
 Output ONLY the refined task list markdown."""
 
-    success, output = backend.run_print_with_output(
+    success, output = backend.run_with_callback(
         prompt,
         subagent=state.subagent_names["tasklist_refiner"],
+        output_callback=lambda _line: None,
         dont_save_session=True,
     )
 

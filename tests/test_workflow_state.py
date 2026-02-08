@@ -248,6 +248,7 @@ class TestWorkflowStateParallelFields:
             "tasklist_refiner": "spec-tasklist-refiner",
             "implementer": "spec-implementer",
             "reviewer": "spec-reviewer",
+            "fixer": "spec-implementer",
             "doc_updater": "spec-doc-updater",
         }
 

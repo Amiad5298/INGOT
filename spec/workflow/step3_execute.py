@@ -855,9 +855,10 @@ def _execute_task(
     prompt = _build_task_prompt(task, plan_path, is_parallel=False)
 
     try:
-        success, _ = backend.run_print_with_output(
+        success, _ = backend.run_with_callback(
             prompt,
             subagent=state.subagent_names["implementer"],
+            output_callback=lambda _line: None,
             dont_save_session=True,
         )
         if success:

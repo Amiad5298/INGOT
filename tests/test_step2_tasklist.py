@@ -462,7 +462,7 @@ class TestGenerateTasklist:
         plan_path = workflow_state.plan_file
 
         # Mock backend to return success with task list in output
-        mock_backend.run_print_with_output.return_value = (
+        mock_backend.run_with_callback.return_value = (
             True,
             """Here's the task list:
 - [ ] Create user module
@@ -510,13 +510,13 @@ class TestGenerateTasklist:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-456-tasklist.md"
 
-        mock_backend.run_print_with_output.return_value = (True, "- [ ] Single task\n")
+        mock_backend.run_with_callback.return_value = (True, "- [ ] Single task\n")
 
         # Act
         result = _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
 
         # Assert - subagent from state is used
-        call_kwargs = mock_backend.run_print_with_output.call_args.kwargs
+        call_kwargs = mock_backend.run_with_callback.call_args.kwargs
         assert "subagent" in call_kwargs
         assert call_kwargs["subagent"] == state.subagent_names["tasklist"]
         assert result is True
@@ -543,7 +543,7 @@ class TestGenerateTasklist:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-789-tasklist.md"
 
-        mock_backend.run_print_with_output.return_value = (
+        mock_backend.run_with_callback.return_value = (
             True,
             "I couldn't understand the plan. Please clarify.",
         )
@@ -944,7 +944,7 @@ class TestGenerateTasklistRetry:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-FAIL-tasklist.md"
 
-        mock_backend.run_print_with_output.return_value = (False, "Error occurred")
+        mock_backend.run_with_callback.return_value = (False, "Error occurred")
 
         result = _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
 
