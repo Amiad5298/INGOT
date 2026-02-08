@@ -20,6 +20,7 @@ from spec.integrations.backends.base import (
     SubagentMetadata,
 )
 from spec.integrations.backends.claude import ClaudeBackend
+from spec.integrations.backends.cursor import CursorBackend
 from spec.integrations.backends.errors import (
     BackendNotConfiguredError,
     BackendNotInstalledError,
@@ -38,6 +39,7 @@ __all__ = [
     # Backend implementations
     "AuggieBackend",
     "ClaudeBackend",
+    "CursorBackend",
     # Error types
     "BackendRateLimitError",
     "BackendNotInstalledError",

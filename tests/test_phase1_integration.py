@@ -372,7 +372,7 @@ class TestBaselineRegressionChecks:
     def test_auggie_backend_rate_limit_detection_matches_baseline(self):
         """Rate limit detection uses same patterns as baseline AuggieClient."""
         # Import the actual rate limit detection function used by AuggieBackend
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
         # Test known rate limit patterns - these MUST be detected as rate limits
         positive_samples = [
@@ -384,7 +384,7 @@ class TestBaselineRegressionChecks:
             "503 Service Unavailable",
         ]
         for output in positive_samples:
-            result = _looks_like_rate_limit(output)
+            result = looks_like_rate_limit(output)
             assert result is True, f"Rate limit pattern not detected: '{output}' returned {result}"
 
         # Test negative samples - these should NOT be detected as rate limits
@@ -395,7 +395,7 @@ class TestBaselineRegressionChecks:
             "Connection established",
         ]
         for output in negative_samples:
-            result = _looks_like_rate_limit(output)
+            result = looks_like_rate_limit(output)
             assert (
                 result is False
             ), f"False positive rate limit detection: '{output}' returned {result}"

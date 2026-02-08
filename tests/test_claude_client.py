@@ -8,8 +8,8 @@ import pytest
 from spec.integrations.claude import (
     CLAUDE_CLI_NAME,
     ClaudeClient,
-    _looks_like_rate_limit,
     check_claude_installed,
+    looks_like_rate_limit,
 )
 
 
@@ -427,55 +427,55 @@ class TestCheckClaudeInstalled:
 
 
 class TestLooksLikeRateLimit:
-    """Tests for _looks_like_rate_limit() function."""
+    """Tests for looks_like_rate_limit() function."""
 
     def test_detects_429(self):
         """Detects HTTP 429 status code."""
-        assert _looks_like_rate_limit("Error 429: Too Many Requests") is True
+        assert looks_like_rate_limit("Error 429: Too Many Requests") is True
 
     def test_detects_rate_limit(self):
         """Detects 'rate limit' text."""
-        assert _looks_like_rate_limit("rate limit exceeded") is True
+        assert looks_like_rate_limit("rate limit exceeded") is True
 
     def test_detects_overloaded(self):
         """Detects 'overloaded' (Anthropic-specific)."""
-        assert _looks_like_rate_limit("API is overloaded") is True
+        assert looks_like_rate_limit("API is overloaded") is True
 
     def test_detects_529(self):
         """Detects HTTP 529 status code (Anthropic-specific)."""
-        assert _looks_like_rate_limit("Error 529") is True
+        assert looks_like_rate_limit("Error 529") is True
 
     def test_detects_quota_exceeded(self):
         """Detects 'quota exceeded'."""
-        assert _looks_like_rate_limit("quota exceeded for this account") is True
+        assert looks_like_rate_limit("quota exceeded for this account") is True
 
     def test_detects_throttling(self):
         """Detects 'throttl' prefix (throttle, throttling, throttled)."""
-        assert _looks_like_rate_limit("request throttled") is True
+        assert looks_like_rate_limit("request throttled") is True
 
     def test_detects_capacity(self):
         """Detects 'capacity' keyword."""
-        assert _looks_like_rate_limit("insufficient capacity") is True
+        assert looks_like_rate_limit("insufficient capacity") is True
 
     def test_detects_502(self):
         """Detects HTTP 502."""
-        assert _looks_like_rate_limit("502 Bad Gateway") is True
+        assert looks_like_rate_limit("502 Bad Gateway") is True
 
     def test_detects_503(self):
         """Detects HTTP 503."""
-        assert _looks_like_rate_limit("503 Service Unavailable") is True
+        assert looks_like_rate_limit("503 Service Unavailable") is True
 
     def test_detects_504(self):
         """Detects HTTP 504."""
-        assert _looks_like_rate_limit("504 Gateway Timeout") is True
+        assert looks_like_rate_limit("504 Gateway Timeout") is True
 
     def test_normal_output_returns_false(self):
         """Normal output returns False."""
-        assert _looks_like_rate_limit("Successfully generated code") is False
+        assert looks_like_rate_limit("Successfully generated code") is False
 
     def test_empty_string_returns_false(self):
         """Empty string returns False."""
-        assert _looks_like_rate_limit("") is False
+        assert looks_like_rate_limit("") is False
 
 
 class TestClaudeClientModuleExports:
@@ -492,4 +492,9 @@ class TestClaudeClientModuleExports:
         """Only expected public names are exported."""
         from spec.integrations.claude import __all__
 
-        assert set(__all__) == {"CLAUDE_CLI_NAME", "ClaudeClient", "check_claude_installed"}
+        assert set(__all__) == {
+            "CLAUDE_CLI_NAME",
+            "ClaudeClient",
+            "check_claude_installed",
+            "looks_like_rate_limit",
+        }

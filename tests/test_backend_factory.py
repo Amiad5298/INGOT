@@ -52,10 +52,12 @@ class TestBackendFactoryUnimplementedPlatforms:
         assert backend.platform == AgentPlatform.CLAUDE
         assert isinstance(backend, AIBackend)
 
-    def test_create_cursor_raises_not_implemented(self):
-        """Cursor backend raises NotImplementedError until implemented."""
-        with pytest.raises(NotImplementedError, match="Cursor backend not yet implemented"):
-            BackendFactory.create(AgentPlatform.CURSOR)
+    def test_create_cursor_backend(self):
+        """Cursor backend creates CursorBackend instance."""
+        backend = BackendFactory.create(AgentPlatform.CURSOR)
+        assert backend.name == "Cursor"
+        assert backend.platform == AgentPlatform.CURSOR
+        assert isinstance(backend, AIBackend)
 
     def test_create_aider_raises_value_error(self):
         """Aider backend raises ValueError (deferred indefinitely, not a planned phase)."""

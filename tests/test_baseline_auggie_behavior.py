@@ -31,19 +31,19 @@ class TestImportability:
     private functions are not accessible.
     """
 
-    def test_looks_like_rate_limit_is_importable(self):
-        """Verify _looks_like_rate_limit can be imported.
+    def testlooks_like_rate_limit_is_importable(self):
+        """Verify looks_like_rate_limit can be imported.
 
         Contract: The private function must be accessible for testing.
         If this fails, the function may have been renamed or made truly private.
         """
         try:
-            from spec.integrations.auggie import _looks_like_rate_limit
+            from spec.integrations.auggie import looks_like_rate_limit
 
-            assert callable(_looks_like_rate_limit), "Must be callable"
+            assert callable(looks_like_rate_limit), "Must be callable"
         except ImportError as e:
             pytest.fail(
-                f"Cannot import _looks_like_rate_limit: {e}\n"
+                f"Cannot import looks_like_rate_limit: {e}\n"
                 "This function is required for rate limit detection tests."
             )
 
@@ -296,20 +296,20 @@ class TestRateLimitDetection:
     """Capture current rate limit detection behavior.
 
     These are UNIT TESTS that don't require the Auggie CLI.
-    They document the exact patterns that _looks_like_rate_limit() matches.
+    They document the exact patterns that looks_like_rate_limit() matches.
     """
 
-    def test_looks_like_rate_limit_http_429(self):
+    def testlooks_like_rate_limit_http_429(self):
         """Verify HTTP 429 status code is detected."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
-        assert _looks_like_rate_limit("Error 429: Too many requests")
-        assert _looks_like_rate_limit("HTTP/1.1 429")
-        assert _looks_like_rate_limit("Status: 429")
+        assert looks_like_rate_limit("Error 429: Too many requests")
+        assert looks_like_rate_limit("HTTP/1.1 429")
+        assert looks_like_rate_limit("Status: 429")
 
-    def test_looks_like_rate_limit_explicit_messages(self):
+    def testlooks_like_rate_limit_explicit_messages(self):
         """Verify explicit rate limit messages are detected."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
         rate_limit_outputs = [
             "rate limit exceeded",
@@ -318,46 +318,46 @@ class TestRateLimitDetection:
             "You have exceeded your rate limit",
         ]
         for output in rate_limit_outputs:
-            assert _looks_like_rate_limit(output), f"Should detect: {output}"
+            assert looks_like_rate_limit(output), f"Should detect: {output}"
 
-    def test_looks_like_rate_limit_quota_messages(self):
+    def testlooks_like_rate_limit_quota_messages(self):
         """Verify quota exceeded messages are detected.
 
         Contract: Only "quota exceeded" pattern is matched, not just "quota".
         """
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
-        assert _looks_like_rate_limit("quota exceeded for today")
-        assert _looks_like_rate_limit("Monthly quota exceeded")
+        assert looks_like_rate_limit("quota exceeded for today")
+        assert looks_like_rate_limit("Monthly quota exceeded")
         # Note: "API quota reached" does NOT match because pattern is "quota exceeded"
-        assert not _looks_like_rate_limit("API quota reached")
+        assert not looks_like_rate_limit("API quota reached")
 
-    def test_looks_like_rate_limit_capacity_messages(self):
+    def testlooks_like_rate_limit_capacity_messages(self):
         """Verify capacity-related messages are detected."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
-        assert _looks_like_rate_limit("System at capacity")
-        assert _looks_like_rate_limit("Capacity limit reached")
+        assert looks_like_rate_limit("System at capacity")
+        assert looks_like_rate_limit("Capacity limit reached")
 
-    def test_looks_like_rate_limit_throttle_variants(self):
+    def testlooks_like_rate_limit_throttle_variants(self):
         """Verify throttle message variants are detected."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
-        assert _looks_like_rate_limit("Request throttled")
-        assert _looks_like_rate_limit("Throttling in effect")
-        assert _looks_like_rate_limit("You are being throttled")
+        assert looks_like_rate_limit("Request throttled")
+        assert looks_like_rate_limit("Throttling in effect")
+        assert looks_like_rate_limit("You are being throttled")
 
-    def test_looks_like_rate_limit_server_errors(self):
+    def testlooks_like_rate_limit_server_errors(self):
         """Verify server error codes (often rate-limit related) are detected."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
-        assert _looks_like_rate_limit("502 Bad Gateway")
-        assert _looks_like_rate_limit("503 Service Unavailable")
-        assert _looks_like_rate_limit("504 Gateway Timeout")
+        assert looks_like_rate_limit("502 Bad Gateway")
+        assert looks_like_rate_limit("503 Service Unavailable")
+        assert looks_like_rate_limit("504 Gateway Timeout")
 
-    def test_looks_like_rate_limit_normal_success(self):
+    def testlooks_like_rate_limit_normal_success(self):
         """Verify normal success messages are NOT detected as rate limits."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
         normal_outputs = [
             "Task completed successfully",
@@ -368,9 +368,9 @@ class TestRateLimitDetection:
             "Changes committed",
         ]
         for output in normal_outputs:
-            assert not _looks_like_rate_limit(output), f"Should NOT detect: {output}"
+            assert not looks_like_rate_limit(output), f"Should NOT detect: {output}"
 
-    def test_looks_like_rate_limit_false_positives_documented(self):
+    def testlooks_like_rate_limit_false_positives_documented(self):
         """Document known false positives in current implementation.
 
         IMPORTANT: This test documents the CURRENT behavior, which includes
@@ -384,7 +384,7 @@ class TestRateLimitDetection:
 
         This is a known limitation that may be addressed in future versions.
         """
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
         # Document that these ARE false positives (current behavior)
         known_false_positives = [
@@ -397,15 +397,15 @@ class TestRateLimitDetection:
         # This documents the current behavior for regression testing
         for output in known_false_positives:
             # Current implementation has false positives - document this
-            result = _looks_like_rate_limit(output)
+            result = looks_like_rate_limit(output)
             # Assert the CURRENT behavior (true = false positive exists)
             assert (
                 result is True
             ), f"Documenting false positive: '{output}' should trigger rate limit detection"
 
-    def test_looks_like_rate_limit_true_negatives(self):
+    def testlooks_like_rate_limit_true_negatives(self):
         """Verify messages without rate-limit patterns are NOT detected."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
         # These should NOT be detected (no rate-limit patterns)
         true_negatives = [
@@ -417,15 +417,15 @@ class TestRateLimitDetection:
             "Permission denied",
         ]
         for output in true_negatives:
-            assert not _looks_like_rate_limit(output), f"Should NOT detect: {output}"
+            assert not looks_like_rate_limit(output), f"Should NOT detect: {output}"
 
-    def test_looks_like_rate_limit_case_insensitive(self):
+    def testlooks_like_rate_limit_case_insensitive(self):
         """Verify detection is case-insensitive."""
-        from spec.integrations.auggie import _looks_like_rate_limit
+        from spec.integrations.auggie import looks_like_rate_limit
 
-        assert _looks_like_rate_limit("RATE LIMIT EXCEEDED")
-        assert _looks_like_rate_limit("Rate Limit")
-        assert _looks_like_rate_limit("QUOTA EXCEEDED")
+        assert looks_like_rate_limit("RATE LIMIT EXCEEDED")
+        assert looks_like_rate_limit("Rate Limit")
+        assert looks_like_rate_limit("QUOTA EXCEEDED")
 
 
 class TestWorkflowStepBehavior:

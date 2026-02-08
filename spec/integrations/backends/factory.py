@@ -47,7 +47,7 @@ class BackendFactory:
             ConfigValidationError: If the platform string is invalid
                 (from parse_ai_backend)
             NotImplementedError: If the platform is planned but not yet
-                implemented (Claude, Cursor)
+                implemented
             ValueError: If the platform is not supported (Aider, Manual)
             BackendNotInstalledError: If verify_installed=True and CLI is missing
         """
@@ -67,10 +67,9 @@ class BackendFactory:
             backend = ClaudeBackend(model=model)
 
         elif platform == AgentPlatform.CURSOR:
-            # Phase 4: Replace with actual import when CursorBackend is implemented
-            # from spec.integrations.backends.cursor import CursorBackend
-            # backend = CursorBackend(model=model)
-            raise NotImplementedError("Cursor backend not yet implemented. See Phase 4 of AMI-45.")
+            from spec.integrations.backends.cursor import CursorBackend
+
+            backend = CursorBackend(model=model)
 
         elif platform == AgentPlatform.AIDER:
             # Future: Replace with actual import when AiderBackend is implemented

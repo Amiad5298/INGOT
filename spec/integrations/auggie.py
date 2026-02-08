@@ -137,7 +137,7 @@ class AuggieRateLimitError(Exception):
         self.output = output
 
 
-def _looks_like_rate_limit(output: str) -> bool:
+def looks_like_rate_limit(output: str) -> bool:
     """Heuristic check for rate limit errors in output.
 
     Detects rate limit errors by checking for common HTTP status codes
@@ -743,5 +743,5 @@ __all__ = [
     "check_auggie_installed",
     "install_auggie",
     "list_models",
-    "_looks_like_rate_limit",
+    "looks_like_rate_limit",
 ]

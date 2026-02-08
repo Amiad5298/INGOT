@@ -15,8 +15,8 @@ from collections.abc import Callable
 from spec.config.fetch_config import AgentPlatform
 from spec.integrations.auggie import (
     AuggieClient,
-    _looks_like_rate_limit,
     check_auggie_installed,
+    looks_like_rate_limit,
 )
 from spec.integrations.backends.base import BaseBackend
 
@@ -221,6 +221,6 @@ class AuggieBackend(BaseBackend):
         Returns:
             True if output looks like a rate limit error.
         """
-        return _looks_like_rate_limit(output)
+        return looks_like_rate_limit(output)
 
     # supports_parallel_execution() and close() inherited from BaseBackend

@@ -23,170 +23,46 @@ Historical Note:
     This class was originally designed for Auggie (hence the name
     "AuggieMediatedFetcher"). It now works with any AIBackend implementation.
     The class name is preserved for backwards compatibility.
+
+Timeout Note:
+    Unlike ClaudeMediatedFetcher and CursorMediatedFetcher which pass
+    timeout_seconds to the backend subprocess, AuggieMediatedFetcher
+    uses asyncio-only timeout (the backend does not receive a timeout
+    parameter). This is the original Auggie behaviour preserved for
+    backwards compatibility.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
 
-from spec.integrations.backends.base import AIBackend
-from spec.integrations.fetchers.base import AgentMediatedFetcher
+from spec.integrations.fetchers.base import DEFAULT_TIMEOUT_SECONDS, AgentMediatedFetcher
 from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
-    AgentIntegrationError,
-    AgentResponseParseError,
-    PlatformNotSupportedError,
-)
-from spec.integrations.fetchers.templates import (
-    PLATFORM_PROMPT_TEMPLATES,
-    REQUIRED_FIELDS,
-    SUPPORTED_PLATFORMS,
 )
 from spec.integrations.providers.base import Platform
 
-if TYPE_CHECKING:
-    from spec.config import ConfigManager
-
 logger = logging.getLogger(__name__)
-
-# Default timeout for agent execution (seconds)
-DEFAULT_TIMEOUT_SECONDS: float = 60.0
 
 
 class AuggieMediatedFetcher(AgentMediatedFetcher):
     """Fetches tickets through AI backend's MCP integrations.
 
-    This fetcher delegates to the AI backend's tool calls for platforms
-    like Jira, Linear, and GitHub. It's the primary fetch path when
-    running in an AI agent-enabled environment.
+    Inherits most behaviour from AgentMediatedFetcher. This subclass
+    overrides `_execute_fetch_prompt` to use asyncio-only timeout
+    (without passing timeout_seconds to the backend subprocess).
 
     Note:
         Despite the name "AuggieMediatedFetcher", this fetcher can work
         with any AIBackend implementation. The name is preserved for
         backwards compatibility.
-
-        This fetcher uses prompt-based invocation since the backend API
-        does not expose direct tool invocation. See module docstring for details.
-
-    Attributes:
-        _backend: AIBackend instance for prompt execution
-        _config: Optional ConfigManager for checking agent integrations
-        _timeout_seconds: Timeout for agent execution
     """
-
-    def __init__(
-        self,
-        backend: AIBackend,
-        config_manager: ConfigManager | None = None,
-        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-    ) -> None:
-        """Initialize with AI backend and optional config.
-
-        Args:
-            backend: AI backend instance (AuggieBackend, ClaudeBackend, etc.)
-            config_manager: Optional ConfigManager for checking integrations
-            timeout_seconds: Timeout for agent execution (default: 60s)
-        """
-        self._backend = backend
-        self._config = config_manager
-        self._timeout_seconds = timeout_seconds
 
     @property
     def name(self) -> str:
         """Human-readable fetcher name."""
         return "Auggie MCP Fetcher"
-
-    def _resolve_platform(self, platform: str) -> Platform:
-        """Resolve a platform string to Platform enum and validate support.
-
-        Args:
-            platform: Platform name as string (case-insensitive)
-
-        Returns:
-            Platform enum value (guaranteed to be in SUPPORTED_PLATFORMS)
-
-        Raises:
-            AgentIntegrationError: If platform string is not recognized or not supported
-        """
-        platform_upper = platform.upper()
-        valid_platforms = sorted(p.name for p in SUPPORTED_PLATFORMS)
-
-        try:
-            platform_enum = Platform[platform_upper]
-        except KeyError:
-            raise AgentIntegrationError(
-                message=(
-                    f"Unknown platform: '{platform}'. "
-                    f"Supported platforms: {', '.join(valid_platforms)}"
-                ),
-                agent_name=self.name,
-            ) from None
-
-        # Validate the resolved enum is actually supported
-        if platform_enum not in SUPPORTED_PLATFORMS:
-            raise AgentIntegrationError(
-                message=(
-                    f"Platform '{platform_enum.name}' is not supported. "
-                    f"Supported platforms: {', '.join(valid_platforms)}"
-                ),
-                agent_name=self.name,
-            )
-
-        return platform_enum
-
-    def supports_platform(self, platform: Platform) -> bool:
-        """Check if the backend has integration for this platform.
-
-        First checks if platform is in SUPPORTED_PLATFORMS, then
-        consults AgentConfig if ConfigManager is available.
-
-        Args:
-            platform: Platform enum value to check
-
-        Returns:
-            True if the backend can fetch from this platform
-        """
-        if platform not in SUPPORTED_PLATFORMS:
-            return False
-
-        if self._config:
-            agent_config = self._config.get_agent_config()
-            return agent_config.supports_platform(platform.name.lower())
-
-        # Default: assume support if no config to check against
-        return True
-
-    async def fetch(
-        self,
-        ticket_id: str,
-        platform: str,
-        timeout_seconds: float | None = None,
-    ) -> dict[str, Any]:
-        """Fetch raw ticket data using platform string.
-
-        This is the primary public interface for TicketService integration.
-        Accepts platform as a string and handles internal enum conversion.
-
-        Args:
-            ticket_id: The ticket identifier (e.g., 'PROJ-123', 'owner/repo#42')
-            platform: Platform name as string (e.g., 'jira', 'github', 'linear')
-            timeout_seconds: Optional timeout override for this request
-
-        Returns:
-            Raw ticket data as a dictionary
-
-        Raises:
-            AgentIntegrationError: If platform is not supported/configured
-            AgentFetchError: If tool execution fails
-            AgentResponseParseError: If response cannot be parsed or validated
-        """
-        platform_enum = self._resolve_platform(platform)
-        effective_timeout = (
-            timeout_seconds if timeout_seconds is not None else self._timeout_seconds
-        )
-        return await self.fetch_raw(ticket_id, platform_enum, timeout_seconds=effective_timeout)
 
     async def _execute_fetch_prompt(
         self,
@@ -194,15 +70,11 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
         platform: Platform,
         timeout_seconds: float | None = None,
     ) -> str:
-        """Execute fetch prompt via AI backend with timeout.
+        """Execute fetch prompt via AI backend with asyncio-only timeout.
 
-        Uses run_print_quiet() for non-interactive execution that
-        captures the response for JSON parsing.
-
-        Note:
-            The timeout is implemented at the asyncio level. The underlying
-            subprocess may continue running if cancelled, but we won't wait
-            for it indefinitely.
+        Unlike the base class implementation, this does NOT pass
+        timeout_seconds to the backend subprocess. The timeout is
+        implemented purely at the asyncio level.
 
         Args:
             prompt: Structured prompt to send to the backend
@@ -225,7 +97,6 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
         )
 
         try:
-            # run_print_quiet is synchronous - run in executor for async
             loop = asyncio.get_running_loop()
             result = await asyncio.wait_for(
                 loop.run_in_executor(
@@ -246,7 +117,6 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
                 original_error=e,
             ) from e
 
-        # run_print_quiet returns a string directly, not CompletedProcess
         if not result:
             raise AgentFetchError(
                 message="Backend returned empty response",
@@ -255,100 +125,8 @@ class AuggieMediatedFetcher(AgentMediatedFetcher):
 
         return result
 
-    def _get_prompt_template(self, platform: Platform) -> str:
-        """Get the prompt template for the given platform.
 
-        Args:
-            platform: Platform to get template for
-
-        Returns:
-            Prompt template string with {ticket_id} placeholder
-
-        Raises:
-            AgentIntegrationError: If platform has no template
-        """
-        template = PLATFORM_PROMPT_TEMPLATES.get(platform)
-        if not template:
-            raise AgentIntegrationError(
-                message=f"No prompt template for platform: {platform.name}",
-                agent_name=self.name,
-            )
-        return template
-
-    def _validate_response(self, data: dict[str, Any], platform: Platform) -> dict[str, Any]:
-        """Validate that required fields exist in the response.
-
-        Args:
-            data: Parsed JSON data from agent response
-            platform: Platform for field requirements
-
-        Returns:
-            The validated data (unchanged)
-
-        Raises:
-            AgentResponseParseError: If required fields are missing
-        """
-        required = REQUIRED_FIELDS.get(platform, set())
-        missing = required - set(data.keys())
-
-        if missing:
-            raise AgentResponseParseError(
-                message=(
-                    f"Response missing required fields for {platform.name}: "
-                    f"{', '.join(sorted(missing))}"
-                ),
-                agent_name=self.name,
-                raw_response=str(data),
-            )
-
-        return data
-
-    async def fetch_raw(
-        self,
-        ticket_id: str,
-        platform: Platform,
-        timeout_seconds: float | None = None,
-    ) -> dict[str, Any]:
-        """Fetch raw ticket data with validation.
-
-        Implements the full fetch logic with platform-specific validation.
-        This method does not call super() to allow passing timeout through
-        the call chain in a thread-safe manner.
-
-        Args:
-            ticket_id: The ticket identifier
-            platform: The platform to fetch from
-            timeout_seconds: Timeout for this request (defaults to self._timeout_seconds)
-
-        Returns:
-            Validated raw ticket data as a dictionary
-
-        Raises:
-            PlatformNotSupportedError: If platform is not supported
-            AgentFetchError: If agent execution fails
-            AgentResponseParseError: If response parsing or validation fails
-        """
-        if not self.supports_platform(platform):
-            raise PlatformNotSupportedError(
-                platform=platform.name,
-                fetcher_name=self.name,
-            )
-
-        prompt = self._build_prompt(ticket_id, platform)
-        try:
-            response = await self._execute_fetch_prompt(
-                prompt, platform, timeout_seconds=timeout_seconds
-            )
-        except (AgentIntegrationError, AgentFetchError, AgentResponseParseError):
-            raise
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            raise AgentFetchError(
-                message=f"Unexpected error during agent communication: {e}",
-                agent_name=self.name,
-                original_error=e,
-            ) from e
-
-        data = self._parse_response(response)
-        return self._validate_response(data, platform)
+__all__ = [
+    "AuggieMediatedFetcher",
+    "DEFAULT_TIMEOUT_SECONDS",
+]

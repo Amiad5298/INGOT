@@ -22,10 +22,12 @@ Exceptions:
 
 from spec.integrations.fetchers.auggie_fetcher import AuggieMediatedFetcher
 from spec.integrations.fetchers.base import (
+    DEFAULT_TIMEOUT_SECONDS,
     AgentMediatedFetcher,
     TicketFetcher,
 )
 from spec.integrations.fetchers.claude_fetcher import ClaudeMediatedFetcher
+from spec.integrations.fetchers.cursor_fetcher import CursorMediatedFetcher
 from spec.integrations.fetchers.direct_api_fetcher import DirectAPIFetcher
 from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
@@ -39,9 +41,11 @@ __all__ = [
     # Base classes
     "TicketFetcher",
     "AgentMediatedFetcher",
+    "DEFAULT_TIMEOUT_SECONDS",
     # Concrete fetchers
     "AuggieMediatedFetcher",
     "ClaudeMediatedFetcher",
+    "CursorMediatedFetcher",
     "DirectAPIFetcher",
     # Exceptions
     "TicketFetchError",

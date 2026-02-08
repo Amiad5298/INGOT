@@ -50,7 +50,7 @@ def check_claude_installed() -> tuple[bool, str]:
         return False, f"Error checking Claude Code CLI: {e}"
 
 
-def _looks_like_rate_limit(output: str) -> bool:
+def looks_like_rate_limit(output: str) -> bool:
     """Heuristic check for rate limit errors in Claude/Anthropic output.
 
     Detects rate limit errors by checking for common HTTP status codes
@@ -367,4 +367,5 @@ __all__ = [
     "CLAUDE_CLI_NAME",
     "ClaudeClient",
     "check_claude_installed",
+    "looks_like_rate_limit",
 ]

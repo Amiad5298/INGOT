@@ -11,9 +11,11 @@ Tests cover:
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
+from spec.integrations.backends.base import AIBackend
 from spec.integrations.fetchers import (
     AgentFetchError,
     AgentIntegrationError,
@@ -96,10 +98,16 @@ class TestTicketFetcherABC:
 
 
 class MockAgentFetcher(AgentMediatedFetcher):
-    """Mock implementation of AgentMediatedFetcher for testing."""
+    """Mock implementation of AgentMediatedFetcher for testing.
+
+    Overrides _execute_fetch_prompt to return a configurable response
+    without touching a real backend. Also overrides supports_platform
+    and _get_prompt_template for controlled test behavior.
+    """
 
     def __init__(self, response: str = '{"key": "value"}'):
         """Initialize with configurable response."""
+        super().__init__(backend=MagicMock(spec=AIBackend))
         self._response = response
         self._last_prompt: str | None = None
         self._last_platform: Platform | None = None
@@ -111,7 +119,12 @@ class MockAgentFetcher(AgentMediatedFetcher):
     def supports_platform(self, platform: Platform) -> bool:
         return platform in (Platform.JIRA, Platform.LINEAR)
 
-    async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+    async def _execute_fetch_prompt(
+        self,
+        prompt: str,
+        platform: Platform,
+        timeout_seconds: float | None = None,
+    ) -> str:
         self._last_prompt = prompt
         self._last_platform = platform
         return self._response
@@ -119,31 +132,31 @@ class MockAgentFetcher(AgentMediatedFetcher):
     def _get_prompt_template(self, platform: Platform) -> str:
         return f"Fetch ticket {{ticket_id}} from {platform.name}"
 
+    def _validate_response(self, data: dict[str, Any], platform: Platform) -> dict[str, Any]:
+        # Skip validation in mock — these tests focus on JSON parsing
+        return data
+
 
 class TestAgentMediatedFetcherABC:
     """Tests for AgentMediatedFetcher abstract methods."""
 
     def test_cannot_instantiate_directly(self):
-        """AgentMediatedFetcher cannot be instantiated directly."""
+        """AgentMediatedFetcher cannot be instantiated directly (name is abstract)."""
+        mock_backend = MagicMock(spec=AIBackend)
         with pytest.raises(TypeError, match="abstract"):
-            AgentMediatedFetcher()  # type: ignore[abstract]
+            AgentMediatedFetcher(backend=mock_backend)  # type: ignore[abstract]
 
-    def test_subclass_must_implement_execute_fetch_prompt(self):
-        """Subclass must implement _execute_fetch_prompt."""
+    def test_subclass_only_needs_name(self):
+        """Subclass only needs to implement the name property."""
 
-        class IncompleteFetcher(AgentMediatedFetcher):
+        class MinimalFetcher(AgentMediatedFetcher):
             @property
             def name(self) -> str:
-                return "Test"
+                return "Minimal"
 
-            def supports_platform(self, platform: Platform) -> bool:
-                return True
-
-            def _get_prompt_template(self, platform: Platform) -> str:
-                return "template"
-
-        with pytest.raises(TypeError, match="abstract"):
-            IncompleteFetcher()  # type: ignore[abstract]
+        mock_backend = MagicMock(spec=AIBackend)
+        fetcher = MinimalFetcher(backend=mock_backend)
+        assert fetcher.name == "Minimal"
 
     def test_mock_fetcher_can_be_instantiated(self):
         """MockAgentFetcher can be instantiated."""
@@ -311,7 +324,7 @@ class TestAgentMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_wraps_unexpected_exceptions(self):
-        """fetch_raw wraps unexpected exceptions in AgentIntegrationError."""
+        """fetch_raw wraps unexpected exceptions in AgentFetchError."""
 
         class FailingFetcher(AgentMediatedFetcher):
             @property
@@ -321,14 +334,16 @@ class TestAgentMediatedFetcherFetchRaw:
             def supports_platform(self, platform: Platform) -> bool:
                 return True
 
-            async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+            async def _execute_fetch_prompt(
+                self, prompt: str, platform: Platform, timeout_seconds: float | None = None
+            ) -> str:
                 raise ValueError("Network timeout")
 
             def _get_prompt_template(self, platform: Platform) -> str:
                 return "Fetch {ticket_id}"
 
-        fetcher = FailingFetcher()
-        with pytest.raises(AgentIntegrationError) as exc_info:
+        fetcher = FailingFetcher(backend=MagicMock(spec=AIBackend))
+        with pytest.raises(AgentFetchError) as exc_info:
             await fetcher.fetch_raw("TEST-1", Platform.JIRA)
         assert "Unexpected error" in str(exc_info.value)
         assert exc_info.value.original_error is not None
@@ -348,13 +363,15 @@ class TestAgentMediatedFetcherFetchRaw:
             def supports_platform(self, platform: Platform) -> bool:
                 return True
 
-            async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+            async def _execute_fetch_prompt(
+                self, prompt: str, platform: Platform, timeout_seconds: float | None = None
+            ) -> str:
                 raise AgentIntegrationError("Agent unavailable", agent_name="Test")
 
             def _get_prompt_template(self, platform: Platform) -> str:
                 return "Fetch {ticket_id}"
 
-        fetcher = AgentErrorFetcher()
+        fetcher = AgentErrorFetcher(backend=MagicMock(spec=AIBackend))
         with pytest.raises(AgentIntegrationError) as exc_info:
             await fetcher.fetch_raw("TEST-1", Platform.JIRA)
         assert str(exc_info.value) == "Agent unavailable"
@@ -372,13 +389,15 @@ class TestAgentMediatedFetcherFetchRaw:
             def supports_platform(self, platform: Platform) -> bool:
                 return True
 
-            async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+            async def _execute_fetch_prompt(
+                self, prompt: str, platform: Platform, timeout_seconds: float | None = None
+            ) -> str:
                 raise AgentFetchError("Timeout during fetch", agent_name="Test")
 
             def _get_prompt_template(self, platform: Platform) -> str:
                 return "Fetch {ticket_id}"
 
-        fetcher = FetchErrorFetcher()
+        fetcher = FetchErrorFetcher(backend=MagicMock(spec=AIBackend))
         with pytest.raises(AgentFetchError) as exc_info:
             await fetcher.fetch_raw("TEST-1", Platform.JIRA)
         assert str(exc_info.value) == "Timeout during fetch"
@@ -396,7 +415,9 @@ class TestAgentMediatedFetcherFetchRaw:
             def supports_platform(self, platform: Platform) -> bool:
                 return True
 
-            async def _execute_fetch_prompt(self, prompt: str, platform: Platform) -> str:
+            async def _execute_fetch_prompt(
+                self, prompt: str, platform: Platform, timeout_seconds: float | None = None
+            ) -> str:
                 raise AgentResponseParseError(
                     "Invalid JSON", agent_name="Test", raw_response="not json"
                 )
@@ -404,7 +425,7 @@ class TestAgentMediatedFetcherFetchRaw:
             def _get_prompt_template(self, platform: Platform) -> str:
                 return "Fetch {ticket_id}"
 
-        fetcher = ParseErrorFetcher()
+        fetcher = ParseErrorFetcher(backend=MagicMock(spec=AIBackend))
         with pytest.raises(AgentResponseParseError) as exc_info:
             await fetcher.fetch_raw("TEST-1", Platform.JIRA)
         assert str(exc_info.value) == "Invalid JSON"
