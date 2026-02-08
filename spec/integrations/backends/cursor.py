@@ -275,3 +275,8 @@ class CursorBackend(BaseBackend):
         return looks_like_rate_limit(output)
 
     # supports_parallel_execution() and close() inherited from BaseBackend
+
+
+__all__ = [
+    "CursorBackend",
+]

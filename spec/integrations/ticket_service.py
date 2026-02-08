@@ -369,11 +369,11 @@ async def create_ticket_service(
                 config_manager=config_manager,
             )
         elif backend.platform == AgentPlatform.CURSOR:
-            # TODO: Phase 2.x - Add CursorMediatedFetcher when implemented
-            logger.info(
-                "CursorMediatedFetcher not yet implemented for platform %s; "
-                "using direct API only",
-                backend.platform.value,
+            from spec.integrations.fetchers.cursor_fetcher import CursorMediatedFetcher
+
+            primary = CursorMediatedFetcher(
+                backend=backend,
+                config_manager=config_manager,
             )
         elif backend.platform in (AgentPlatform.AIDER, AgentPlatform.MANUAL):
             # AIDER and MANUAL have no mediated fetcher by design

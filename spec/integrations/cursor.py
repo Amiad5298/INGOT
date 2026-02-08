@@ -291,12 +291,13 @@ class CursorClient:
                 last_output = str(e)
 
             if attempt < CURSOR_SPAWN_MAX_RETRIES:
+                delay = CURSOR_SPAWN_RETRY_DELAY_S * (2**attempt)
                 log_message(
                     f"Transient spawn error on attempt {attempt + 1}, "
-                    f"retrying in {CURSOR_SPAWN_RETRY_DELAY_S}s "
+                    f"retrying in {delay}s "
                     f"({CURSOR_SPAWN_MAX_RETRIES - attempt} retries left)"
                 )
-                time.sleep(CURSOR_SPAWN_RETRY_DELAY_S)
+                time.sleep(delay)
 
         if last_error is not None:
             raise last_error
