@@ -362,11 +362,11 @@ async def create_ticket_service(
                 config_manager=config_manager,
             )
         elif backend.platform == AgentPlatform.CLAUDE:
-            # TODO: Phase 2.x - Add ClaudeMediatedFetcher when implemented
-            logger.info(
-                "ClaudeMediatedFetcher not yet implemented for platform %s; "
-                "using direct API only",
-                backend.platform.value,
+            from spec.integrations.fetchers.claude_fetcher import ClaudeMediatedFetcher
+
+            primary = ClaudeMediatedFetcher(
+                backend=backend,
+                config_manager=config_manager,
             )
         elif backend.platform == AgentPlatform.CURSOR:
             # TODO: Phase 2.x - Add CursorMediatedFetcher when implemented

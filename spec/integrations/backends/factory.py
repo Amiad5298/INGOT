@@ -62,10 +62,9 @@ class BackendFactory:
             backend = AuggieBackend(model=model)
 
         elif platform == AgentPlatform.CLAUDE:
-            # Phase 3: Replace with actual import when ClaudeBackend is implemented
-            # from spec.integrations.backends.claude import ClaudeBackend
-            # backend = ClaudeBackend(model=model)
-            raise NotImplementedError("Claude backend not yet implemented. See Phase 3 of AMI-45.")
+            from spec.integrations.backends.claude import ClaudeBackend
+
+            backend = ClaudeBackend(model=model)
 
         elif platform == AgentPlatform.CURSOR:
             # Phase 4: Replace with actual import when CursorBackend is implemented

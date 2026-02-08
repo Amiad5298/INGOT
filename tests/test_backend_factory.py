@@ -45,10 +45,12 @@ class TestBackendFactoryCreate:
 class TestBackendFactoryUnimplementedPlatforms:
     """Tests for unimplemented backend platforms."""
 
-    def test_create_claude_raises_not_implemented(self):
-        """Claude backend raises NotImplementedError until implemented."""
-        with pytest.raises(NotImplementedError, match="Claude backend not yet implemented"):
-            BackendFactory.create(AgentPlatform.CLAUDE)
+    def test_create_claude_backend(self):
+        """Claude backend creates ClaudeBackend instance."""
+        backend = BackendFactory.create(AgentPlatform.CLAUDE)
+        assert backend.name == "Claude Code"
+        assert backend.platform == AgentPlatform.CLAUDE
+        assert isinstance(backend, AIBackend)
 
     def test_create_cursor_raises_not_implemented(self):
         """Cursor backend raises NotImplementedError until implemented."""

@@ -603,10 +603,9 @@ class TestCreateTicketService:
         [
             AgentPlatform.MANUAL,
             AgentPlatform.AIDER,
-            AgentPlatform.CLAUDE,
             AgentPlatform.CURSOR,
         ],
-        ids=["manual", "aider", "claude", "cursor"],
+        ids=["manual", "aider", "cursor"],
     )
     async def test_create_with_non_auggie_platform_uses_direct_api(self, platform):
         """Should use DirectAPIFetcher as primary when backend platform has no mediated fetcher."""
@@ -628,15 +627,33 @@ class TestCreateTicketService:
             await service.close()
 
     @pytest.mark.asyncio
+    async def test_create_with_claude_platform_creates_claude_fetcher(self):
+        """Claude platform creates ClaudeMediatedFetcher as primary."""
+        mock_backend = MagicMock()
+        mock_backend.platform = AgentPlatform.CLAUDE
+
+        with patch("spec.integrations.fetchers.claude_fetcher.ClaudeMediatedFetcher") as mock_cls:
+            mock_cls.return_value.name = "ClaudeMediatedFetcher"
+            mock_cls.return_value.close = AsyncMock()
+
+            service = await create_ticket_service(backend=mock_backend)
+
+            assert service.primary_fetcher_name == "ClaudeMediatedFetcher"
+            mock_cls.assert_called_once_with(
+                backend=mock_backend,
+                config_manager=None,
+            )
+            await service.close()
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "platform",
         [
             AgentPlatform.MANUAL,
             AgentPlatform.AIDER,
-            AgentPlatform.CLAUDE,
             AgentPlatform.CURSOR,
         ],
-        ids=["manual", "aider", "claude", "cursor"],
+        ids=["manual", "aider", "cursor"],
     )
     async def test_create_with_non_auggie_platform_no_fallback_raises(self, platform):
         """Should raise ValueError when backend has no mediated fetcher and no fallback."""

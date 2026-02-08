@@ -25,6 +25,7 @@ from spec.integrations.fetchers.base import (
     AgentMediatedFetcher,
     TicketFetcher,
 )
+from spec.integrations.fetchers.claude_fetcher import ClaudeMediatedFetcher
 from spec.integrations.fetchers.direct_api_fetcher import DirectAPIFetcher
 from spec.integrations.fetchers.exceptions import (
     AgentFetchError,
@@ -40,6 +41,7 @@ __all__ = [
     "AgentMediatedFetcher",
     # Concrete fetchers
     "AuggieMediatedFetcher",
+    "ClaudeMediatedFetcher",
     "DirectAPIFetcher",
     # Exceptions
     "TicketFetchError",
