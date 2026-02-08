@@ -86,8 +86,7 @@ class AuggieBackend(BaseBackend):
             subagent: Optional subagent name (mapped to 'agent' in AuggieClient).
             model: Optional model override.
             dont_save_session: If True, don't save the session.
-            timeout_seconds: Optional timeout in seconds. Note: 0.0 is treated
-                as "no timeout" (falsy value).
+            timeout_seconds: Optional timeout in seconds (None = no timeout).
 
         Returns:
             Tuple of (success, output).
@@ -98,7 +97,7 @@ class AuggieBackend(BaseBackend):
         resolved_model = self._resolve_model(model, subagent)
 
         # Use streaming timeout wrapper from BaseBackend when timeout is specified
-        if timeout_seconds:
+        if timeout_seconds is not None:
             # Build auggie CLI command using AuggieClient's private method
             # Note: This coupling is intentional per the delegation pattern.
             # We only call _build_command() here to avoid duplicate work when

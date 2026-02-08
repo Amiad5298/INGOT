@@ -65,6 +65,11 @@ class AIBackend(Protocol):
     Note: This protocol does NOT include run_print() (interactive mode).
     SPEC owns interactive UX; backends operate in streaming/print mode only.
 
+    Note on timeout_seconds: Timeout enforcement is optional per backend.
+    run_with_callback() enforces timeouts via BaseBackend._run_streaming_with_timeout().
+    Other methods (run_print_with_output, run_print_quiet) may accept timeout_seconds
+    per the protocol but not enforce it. Check backend-specific docs for details.
+
     Example:
         >>> def run_workflow(backend: AIBackend) -> None:
         ...     success, output = backend.run_with_callback(
@@ -544,7 +549,7 @@ class BaseBackend(ABC):
                     process.wait()
 
         watchdog_thread: threading.Thread | None = None
-        if timeout_seconds:
+        if timeout_seconds is not None:
             watchdog_thread = threading.Thread(target=watchdog, daemon=True)
             watchdog_thread.start()
 
