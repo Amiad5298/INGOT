@@ -63,15 +63,15 @@ class TestCLIPrerequisites:
     @patch("spec.cli.show_banner")
     @patch("spec.cli.ConfigManager")
     @patch("spec.cli.is_git_repo")
-    @patch("spec.cli.check_auggie_installed")
-    @patch("spec.ui.prompts.prompt_confirm")
-    def test_prompts_auggie_install(
-        self, mock_confirm, mock_check, mock_git, mock_config_class, mock_banner
+    @patch("spec.onboarding.is_first_run")
+    @patch("spec.onboarding.run_onboarding")
+    def test_onboarding_failure_exits(
+        self, mock_onboard, mock_first_run, mock_git, mock_config_class, mock_banner
     ):
-        """Prompts to install Auggie when not installed."""
+        """Exits when onboarding fails (replaces old Auggie install test)."""
         mock_git.return_value = True
-        mock_check.return_value = (False, "Auggie not installed")
-        mock_confirm.return_value = False
+        mock_first_run.return_value = True
+        mock_onboard.return_value = MagicMock(success=False, error_message="User cancelled")
         mock_config = MagicMock()
         mock_config_class.return_value = mock_config
 
@@ -540,29 +540,27 @@ class TestDirtyTreePolicy:
         assert exc_info.value.exit_code == ExitCode.GENERAL_ERROR
 
 
-class TestAuggieInstallFlow:
-    """Tests for Auggie installation flow."""
+class TestOnboardingFlow:
+    """Tests for onboarding flow triggered from CLI."""
 
     @patch("spec.cli.show_banner")
     @patch("spec.cli.ConfigManager")
     @patch("spec.cli.is_git_repo")
-    @patch("spec.cli.check_auggie_installed")
-    @patch("spec.ui.prompts.prompt_confirm")
-    @patch("spec.cli.install_auggie")
-    def test_installs_auggie_when_user_accepts(
-        self, mock_install, mock_confirm, mock_check, mock_git, mock_config_class, mock_banner
+    @patch("spec.onboarding.is_first_run")
+    @patch("spec.onboarding.run_onboarding")
+    def test_onboarding_triggered_on_first_run(
+        self, mock_onboard, mock_first_run, mock_git, mock_config_class, mock_banner
     ):
-        """Installs Auggie when user accepts."""
+        """Onboarding is triggered when is_first_run returns True."""
         mock_git.return_value = True
-        mock_check.return_value = (False, "Auggie not installed")
-        mock_confirm.return_value = True
-        mock_install.return_value = False  # Installation fails
+        mock_first_run.return_value = True
+        mock_onboard.return_value = MagicMock(success=False, error_message="Setup failed")
         mock_config = MagicMock()
         mock_config_class.return_value = mock_config
 
         result = runner.invoke(app, ["TEST-123"])
 
-        mock_install.assert_called_once()
+        mock_onboard.assert_called_once()
         assert result.exit_code == ExitCode.GENERAL_ERROR
 
 
@@ -1301,16 +1299,16 @@ class TestForceIntegrationCheckWarning:
     """Tests for force_integration_check flag warning."""
 
     @patch("spec.cli.is_git_repo")
-    @patch("spec.cli.check_auggie_installed")
+    @patch("spec.onboarding.is_first_run")
     @patch("spec.cli.print_warning")
     def test_force_integration_check_prints_warning(
-        self, mock_print_warning, mock_check_auggie, mock_is_git_repo
+        self, mock_print_warning, mock_is_first_run, mock_is_git_repo
     ):
         """force_integration_check=True prints a warning about no effect."""
         from spec.cli import _check_prerequisites
 
         mock_is_git_repo.return_value = True
-        mock_check_auggie.return_value = (True, "Auggie installed")
+        mock_is_first_run.return_value = False
 
         mock_config = MagicMock()
         result = _check_prerequisites(mock_config, force_integration_check=True)
@@ -1321,16 +1319,16 @@ class TestForceIntegrationCheckWarning:
         assert "no effect" in warning_msg.lower() or "currently has no effect" in warning_msg
 
     @patch("spec.cli.is_git_repo")
-    @patch("spec.cli.check_auggie_installed")
+    @patch("spec.onboarding.is_first_run")
     @patch("spec.cli.print_warning")
     def test_force_integration_check_false_no_warning(
-        self, mock_print_warning, mock_check_auggie, mock_is_git_repo
+        self, mock_print_warning, mock_is_first_run, mock_is_git_repo
     ):
         """force_integration_check=False does not print warning."""
         from spec.cli import _check_prerequisites
 
         mock_is_git_repo.return_value = True
-        mock_check_auggie.return_value = (True, "Auggie installed")
+        mock_is_first_run.return_value = False
 
         mock_config = MagicMock()
         result = _check_prerequisites(mock_config, force_integration_check=False)
@@ -1413,12 +1411,14 @@ class TestCreateTicketServiceFromConfig:
         mock_backend = MagicMock()
         mock_service = AsyncMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
-        ) as mock_resolve, patch(
-            "spec.integrations.backends.factory.BackendFactory"
-        ) as mock_factory_class, patch(
-            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+            ) as mock_resolve,
+            patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class,
+            patch(
+                "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+            ),
         ):
             mock_factory_class.create.return_value = mock_backend
 
@@ -1440,10 +1440,14 @@ class TestCreateTicketServiceFromConfig:
         mock_backend = MagicMock()
         mock_service = AsyncMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
-        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
-            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+            ),
+            patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class,
+            patch(
+                "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+            ),
         ):
             mock_factory_class.create.return_value = mock_backend
 
@@ -1464,10 +1468,14 @@ class TestCreateTicketServiceFromConfig:
         mock_backend = MagicMock()
         mock_service = AsyncMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
-        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
-            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+            ),
+            patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class,
+            patch(
+                "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+            ),
         ):
             mock_factory_class.create.return_value = mock_backend
 
@@ -1491,12 +1499,14 @@ class TestCreateTicketServiceFromConfig:
         mock_backend = MagicMock()
         mock_service = AsyncMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
-        ) as mock_resolve, patch(
-            "spec.integrations.backends.factory.BackendFactory"
-        ) as mock_factory_class, patch(
-            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+            ) as mock_resolve,
+            patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class,
+            patch(
+                "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+            ),
         ):
             mock_factory_class.create.return_value = mock_backend
 
@@ -1515,10 +1525,13 @@ class TestCreateTicketServiceFromConfig:
 
         mock_config = MagicMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform",
-            side_effect=BackendNotConfiguredError("No backend configured"),
-        ), pytest.raises(BackendNotConfiguredError, match="No backend configured"):
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform",
+                side_effect=BackendNotConfiguredError("No backend configured"),
+            ),
+            pytest.raises(BackendNotConfiguredError, match="No backend configured"),
+        ):
             await create_ticket_service_from_config(config_manager=mock_config)
 
     @pytest.mark.asyncio
@@ -1530,11 +1543,13 @@ class TestCreateTicketServiceFromConfig:
         mock_config = MagicMock()
         mock_platform = MagicMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
-        ), patch(
-            "spec.integrations.backends.factory.BackendFactory"
-        ) as mock_factory_class, pytest.raises(BackendNotInstalledError, match="CLI not installed"):
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+            ),
+            patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class,
+            pytest.raises(BackendNotInstalledError, match="CLI not installed"),
+        ):
             mock_factory_class.create.side_effect = BackendNotInstalledError("CLI not installed")
             await create_ticket_service_from_config(config_manager=mock_config)
 
@@ -1549,11 +1564,16 @@ class TestCreateTicketServiceFromConfig:
         mock_backend = MagicMock()
         mock_service = AsyncMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
-        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
-            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
-        ), patch("spec.cli.AuthenticationManager") as mock_auth_class:
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+            ),
+            patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class,
+            patch(
+                "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+            ),
+            patch("spec.cli.AuthenticationManager") as mock_auth_class,
+        ):
             mock_factory_class.create.return_value = mock_backend
 
             await create_ticket_service_from_config(config_manager=mock_config)
@@ -1572,11 +1592,16 @@ class TestCreateTicketServiceFromConfig:
         mock_service = AsyncMock()
         mock_auth = MagicMock()
 
-        with patch(
-            "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
-        ), patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class, patch(
-            "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
-        ) as mock_create, patch("spec.cli.AuthenticationManager") as mock_auth_class:
+        with (
+            patch(
+                "spec.config.backend_resolver.resolve_backend_platform", return_value=mock_platform
+            ),
+            patch("spec.integrations.backends.factory.BackendFactory") as mock_factory_class,
+            patch(
+                "spec.cli.create_ticket_service", new_callable=AsyncMock, return_value=mock_service
+            ) as mock_create,
+            patch("spec.cli.AuthenticationManager") as mock_auth_class,
+        ):
             mock_factory_class.create.return_value = mock_backend
 
             await create_ticket_service_from_config(
