@@ -286,7 +286,6 @@ Some review text without a clear status marker.
         assert parse_review_status(output) == ReviewStatus.PASS
 
 
-
 class TestBuildReviewPrompt:
     """Tests for build_review_prompt function."""
 
@@ -404,7 +403,7 @@ class TestRunPhaseReview:
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("", False, False)  # Empty diff
             with patch("spec.workflow.review.print_info"):
-                result = run_phase_review(state, MagicMock(), "fundamental")
+                result = run_phase_review(state, MagicMock(), "fundamental", backend=MagicMock())
 
         assert result is True
 
@@ -418,15 +417,16 @@ class TestRunPhaseReview:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
+        mock_backend = MagicMock()
+        mock_backend.run_print_with_output.return_value = (True, "**Status**: PASS")
+
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
-            with patch("spec.workflow.review.AuggieClient") as mock_client_class:
-                mock_client = MagicMock()
-                mock_client.run_print_with_output.return_value = (True, "**Status**: PASS")
-                mock_client_class.return_value = mock_client
-                with patch("spec.workflow.review.print_step"):
-                    with patch("spec.workflow.review.print_success"):
-                        result = run_phase_review(state, MagicMock(), "fundamental")
+            with patch("spec.workflow.review.print_step"):
+                with patch("spec.workflow.review.print_success"):
+                    result = run_phase_review(
+                        state, MagicMock(), "fundamental", backend=mock_backend
+                    )
 
         assert result is True
 
@@ -446,7 +446,9 @@ class TestRunPhaseReview:
                 with patch("spec.workflow.review.print_warning"):
                     with patch("spec.workflow.review.print_info"):
                         with patch("spec.workflow.review.print_step"):
-                            result = run_phase_review(state, MagicMock(), "final")
+                            result = run_phase_review(
+                                state, MagicMock(), "final", backend=MagicMock()
+                            )
 
         assert result is True
         mock_confirm.assert_called_once()
@@ -467,7 +469,9 @@ class TestRunPhaseReview:
                 with patch("spec.workflow.review.print_warning"):
                     with patch("spec.workflow.review.print_info"):
                         with patch("spec.workflow.review.print_step"):
-                            result = run_phase_review(state, MagicMock(), "final")
+                            result = run_phase_review(
+                                state, MagicMock(), "final", backend=MagicMock()
+                            )
 
         assert result is False
 
@@ -481,21 +485,22 @@ class TestRunPhaseReview:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
+        mock_backend = MagicMock()
+        mock_backend.run_print_with_output.return_value = (
+            True,
+            "**Status**: NEEDS_ATTENTION\n**Issues**: 1. Bug",
+        )
+
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
-            with patch("spec.workflow.review.AuggieClient") as mock_client_class:
-                mock_client = MagicMock()
-                mock_client.run_print_with_output.return_value = (
-                    True,
-                    "**Status**: NEEDS_ATTENTION\n**Issues**: 1. Bug",
-                )
-                mock_client_class.return_value = mock_client
-                with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
-                    # First confirm = auto-fix (No), second = continue (Yes)
-                    mock_confirm.side_effect = [False, True]
-                    with patch("spec.workflow.review.print_step"):
-                        with patch("spec.workflow.review.print_warning"):
-                            result = run_phase_review(state, MagicMock(), "fundamental")
+            with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
+                # First confirm = auto-fix (No), second = continue (Yes)
+                mock_confirm.side_effect = [False, True]
+                with patch("spec.workflow.review.print_step"):
+                    with patch("spec.workflow.review.print_warning"):
+                        result = run_phase_review(
+                            state, MagicMock(), "fundamental", backend=mock_backend
+                        )
 
         assert result is True
         # Should be called twice: auto-fix prompt and continue prompt
@@ -511,24 +516,25 @@ class TestRunPhaseReview:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
+        mock_backend = MagicMock()
+        mock_backend.run_print_with_output.return_value = (
+            True,
+            "**Status**: NEEDS_ATTENTION",
+        )
+
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
-            with patch("spec.workflow.review.AuggieClient") as mock_client_class:
-                mock_client = MagicMock()
-                mock_client.run_print_with_output.return_value = (
-                    True,
-                    "**Status**: NEEDS_ATTENTION",
-                )
-                mock_client_class.return_value = mock_client
-                with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
-                    # auto-fix (Yes), re-review (No), continue (Yes)
-                    mock_confirm.side_effect = [True, False, True]
-                    # Patch autofix in its source module since it's imported inside the function
-                    with patch("spec.workflow.autofix.run_auto_fix") as mock_autofix:
-                        mock_autofix.return_value = True
-                        with patch("spec.workflow.review.print_step"):
-                            with patch("spec.workflow.review.print_warning"):
-                                result = run_phase_review(state, MagicMock(), "fundamental")
+            with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
+                # auto-fix (Yes), re-review (No), continue (Yes)
+                mock_confirm.side_effect = [True, False, True]
+                # Patch autofix in its source module since it's imported inside the function
+                with patch("spec.workflow.autofix.run_auto_fix") as mock_autofix:
+                    mock_autofix.return_value = True
+                    with patch("spec.workflow.review.print_step"):
+                        with patch("spec.workflow.review.print_warning"):
+                            result = run_phase_review(
+                                state, MagicMock(), "fundamental", backend=mock_backend
+                            )
 
         mock_autofix.assert_called_once()
         assert result is True
@@ -543,16 +549,17 @@ class TestRunPhaseReview:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
+        mock_backend = MagicMock()
+        mock_backend.run_print_with_output.side_effect = Exception("Network error")
+
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
-            with patch("spec.workflow.review.AuggieClient") as mock_client_class:
-                mock_client = MagicMock()
-                mock_client.run_print_with_output.side_effect = Exception("Network error")
-                mock_client_class.return_value = mock_client
-                with patch("spec.workflow.review.print_step"):
-                    with patch("spec.workflow.review.print_warning"):
-                        with patch("spec.workflow.review.print_info"):
-                            result = run_phase_review(state, MagicMock(), "fundamental")
+            with patch("spec.workflow.review.print_step"):
+                with patch("spec.workflow.review.print_warning"):
+                    with patch("spec.workflow.review.print_info"):
+                        result = run_phase_review(
+                            state, MagicMock(), "fundamental", backend=mock_backend
+                        )
 
         # Should continue workflow on review crash (advisory behavior)
         assert result is True
@@ -567,18 +574,19 @@ class TestRunPhaseReview:
         state.diff_baseline_ref = None
         state.subagent_names = {"reviewer": "spec-reviewer"}
 
+        mock_backend = MagicMock()
+        mock_backend.run_print_with_output.return_value = (False, "Error output")
+
         with patch("spec.workflow.review.get_smart_diff") as mock_diff:
             mock_diff.return_value = ("diff content", False, False)
-            with patch("spec.workflow.review.AuggieClient") as mock_client_class:
-                mock_client = MagicMock()
-                mock_client.run_print_with_output.return_value = (False, "Error output")
-                mock_client_class.return_value = mock_client
-                with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
-                    mock_confirm.return_value = True
-                    with patch("spec.workflow.review.print_step"):
-                        with patch("spec.workflow.review.print_warning"):
-                            with patch("spec.workflow.review.print_info"):
-                                result = run_phase_review(state, MagicMock(), "final")
+            with patch("spec.workflow.review.prompt_confirm") as mock_confirm:
+                mock_confirm.return_value = True
+                with patch("spec.workflow.review.print_step"):
+                    with patch("spec.workflow.review.print_warning"):
+                        with patch("spec.workflow.review.print_info"):
+                            result = run_phase_review(
+                                state, MagicMock(), "final", backend=mock_backend
+                            )
 
         assert result is True
         mock_confirm.assert_called_once()
@@ -742,4 +750,3 @@ class TestRunRereviewAfterFix:
                         )
 
         assert result is None
-

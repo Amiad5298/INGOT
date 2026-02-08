@@ -403,12 +403,11 @@ class TestStep1TUIIntegration:
         return state
 
     @patch("spec.ui.tui.TaskRunnerUI")
-    @patch("spec.workflow.step1_plan.AuggieClient")
     def test_uses_tui_when_enabled(
         self,
-        mock_auggie_class,
         mock_ui_class,
         workflow_state,
+        mock_backend,
         tmp_path: Path,
         monkeypatch,
     ):
@@ -424,26 +423,23 @@ class TestStep1TUIIntegration:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Generated plan")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Generated plan")
 
-        # Act - note: new signature is (state, plan_path), prompt is built internally
+        # Act - note: new signature is (state, plan_path, backend)
         plan_path = workflow_state.get_plan_path()
-        result = _generate_plan_with_tui(workflow_state, plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         # Assert
         assert result is True
         mock_ui_class.assert_called_once()
-        mock_client.run_with_callback.assert_called_once()
+        mock_backend.run_with_callback.assert_called_once()
 
     @patch("spec.ui.tui.TaskRunnerUI")
-    @patch("spec.workflow.step1_plan.AuggieClient")
     def test_tui_quit_returns_false(
         self,
-        mock_auggie_class,
         mock_ui_class,
         workflow_state,
+        mock_backend,
         tmp_path: Path,
         monkeypatch,
     ):
@@ -459,13 +455,11 @@ class TestStep1TUIIntegration:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = True  # User pressed 'q'
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Generated plan")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Generated plan")
 
-        # Act - note: new signature is (state, plan_path), prompt is built internally
+        # Act - note: new signature is (state, plan_path, backend)
         plan_path = workflow_state.get_plan_path()
-        result = _generate_plan_with_tui(workflow_state, plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         # Assert - should return False due to quit
         assert result is False

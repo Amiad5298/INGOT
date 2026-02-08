@@ -59,11 +59,11 @@ Test implementation plan.
 
 
 @pytest.fixture
-def mock_auggie_client():
-    """Create a mock Auggie client."""
-    client = MagicMock()
-    client.model = "test-model"
-    return client
+def mock_backend():
+    """Create a mock AIBackend."""
+    backend = MagicMock()
+    backend.model = "test-model"
+    return backend
 
 
 class TestExtractTasklistFromOutput:
@@ -450,21 +450,19 @@ class TestStrictParser:
 class TestGenerateTasklist:
     """Tests for _generate_tasklist function."""
 
-    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_persists_ai_output_to_file(
         self,
-        mock_auggie_class,
         workflow_state,
         tmp_path,
+        mock_backend,
     ):
         """AI output is persisted to file even if AI doesn't write it."""
         # Setup
         tasklist_path = tmp_path / "specs" / "TEST-123-tasklist.md"
         plan_path = workflow_state.plan_file
 
-        # Mock Auggie to return success with task list in output
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (
+        # Mock backend to return success with task list in output
+        mock_backend.run_print_with_output.return_value = (
             True,
             """Here's the task list:
 - [ ] Create user module
@@ -472,13 +470,13 @@ class TestGenerateTasklist:
 - [ ] Write tests
 """,
         )
-        mock_auggie_class.return_value = mock_client
 
         # Act
         result = _generate_tasklist(
             workflow_state,
             plan_path,
             tasklist_path,
+            mock_backend,
         )
 
         # Assert
@@ -489,11 +487,10 @@ class TestGenerateTasklist:
         assert len(tasks) == 3
         assert tasks[0].name == "Create user module"
 
-    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_uses_subagent_for_tasklist_generation(
         self,
-        mock_auggie_class,
         tmp_path,
+        mock_backend,
     ):
         """Uses state.subagent_names tasklist agent for task list generation."""
         # Setup
@@ -513,25 +510,21 @@ class TestGenerateTasklist:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-456-tasklist.md"
 
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (True, "- [ ] Single task\n")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_print_with_output.return_value = (True, "- [ ] Single task\n")
 
         # Act
-        result = _generate_tasklist(state, plan_path, tasklist_path)
+        result = _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
 
-        # Assert - new client is created and subagent from state is used
-        mock_auggie_class.assert_called_once_with()
-        call_kwargs = mock_client.run_print_with_output.call_args.kwargs
-        assert "agent" in call_kwargs
-        assert call_kwargs["agent"] == state.subagent_names["tasklist"]
+        # Assert - subagent from state is used
+        call_kwargs = mock_backend.run_print_with_output.call_args.kwargs
+        assert "subagent" in call_kwargs
+        assert call_kwargs["subagent"] == state.subagent_names["tasklist"]
         assert result is True
 
-    @patch("spec.workflow.step2_tasklist.AuggieClient")
     def test_falls_back_to_default_when_no_tasks_extracted(
         self,
-        mock_auggie_class,
         tmp_path,
+        mock_backend,
     ):
         """Falls back to default template when AI output has no checkbox tasks."""
         ticket = GenericTicket(
@@ -550,14 +543,12 @@ class TestGenerateTasklist:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-789-tasklist.md"
 
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (
+        mock_backend.run_print_with_output.return_value = (
             True,
             "I couldn't understand the plan. Please clarify.",
         )
-        mock_auggie_class.return_value = mock_client
 
-        result = _generate_tasklist(state, plan_path, tasklist_path)
+        result = _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
 
         # Should fall back to default template
         assert result is True
@@ -628,7 +619,7 @@ class TestStep2CreateTasklist:
 - [ ] Edited task 3
 """
 
-        def mock_generate_side_effect(state, plan_path, tasklist_path):
+        def mock_generate_side_effect(state, plan_path, tasklist_path, backend):
             tasklist_path.write_text(initial_content)
             return True
 
@@ -693,7 +684,7 @@ class TestStep2CreateTasklist:
         plan_path.write_text("# Plan")
         state.plan_file = plan_path
 
-        def mock_generate_effect(state, plan_path, tasklist_path):
+        def mock_generate_effect(state, plan_path, tasklist_path, backend):
             tasklist_path.write_text("- [ ] Task\n")
             return True
 
@@ -739,7 +730,7 @@ class TestStep2CreateTasklist:
         plan_path.write_text("# Plan")
         state.plan_file = plan_path
 
-        mock_generate.side_effect = lambda s, pp, tp: (tp.write_text("- [ ] Task\n") or True)
+        mock_generate.side_effect = lambda s, pp, tp, b: (tp.write_text("- [ ] Task\n") or True)
         mock_menu.return_value = TaskReviewChoice.ABORT
 
         result = step_2_create_tasklist(state, MagicMock())
@@ -935,9 +926,8 @@ class TestCreateDefaultTasklist:
 class TestGenerateTasklistRetry:
     """Tests for _generate_tasklist retry behavior."""
 
-    @patch("spec.workflow.step2_tasklist.AuggieClient")
-    def test_returns_false_on_auggie_failure(self, mock_auggie_class, tmp_path):
-        """Returns False when Auggie command fails."""
+    def test_returns_false_on_auggie_failure(self, tmp_path, mock_backend):
+        """Returns False when backend command fails."""
         ticket = GenericTicket(
             id="TEST-FAIL",
             platform=Platform.JIRA,
@@ -954,11 +944,9 @@ class TestGenerateTasklistRetry:
         plan_path.write_text("# Plan\n\nDo something.")
         tasklist_path = specs_dir / "TEST-FAIL-tasklist.md"
 
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (False, "Error occurred")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_print_with_output.return_value = (False, "Error occurred")
 
-        result = _generate_tasklist(state, plan_path, tasklist_path)
+        result = _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
 
         assert result is False
 

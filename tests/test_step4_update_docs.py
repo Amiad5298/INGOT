@@ -26,11 +26,12 @@ def workflow_state(generic_ticket):
 
 
 @pytest.fixture
-def mock_auggie_client():
-    """Create a mock AuggieClient."""
-    client = MagicMock()
-    client.run_print_with_output.return_value = (True, "Updated docs")
-    return client
+def mock_backend():
+    """Create a mock AIBackend."""
+    backend = MagicMock()
+    backend.run_print_with_output.return_value = (True, "Updated docs")
+    backend.run_with_callback.return_value = (True, "Updated docs")
+    return backend
 
 
 # =============================================================================
@@ -159,7 +160,7 @@ class TestStep4NoChanges:
         state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""  # No base commit
 
-        result = step_4_update_docs(state)
+        result = step_4_update_docs(state, backend=MagicMock())
 
         assert isinstance(result, Step4Result)
         assert result.success
@@ -181,7 +182,7 @@ class TestStep4NoChanges:
         mock_has_any_changes.return_value = True
         mock_get_diff.return_value = DiffResult(diff="", has_error=False)
 
-        result = step_4_update_docs(workflow_state)
+        result = step_4_update_docs(workflow_state, backend=MagicMock())
 
         assert isinstance(result, Step4Result)
         assert result.success
@@ -203,7 +204,7 @@ class TestStep4NoChanges:
         mock_has_any_changes.return_value = True
         mock_get_diff.return_value = DiffResult(has_error=True, error_message="git diff failed")
 
-        result = step_4_update_docs(workflow_state)
+        result = step_4_update_docs(workflow_state, backend=MagicMock())
 
         assert isinstance(result, Step4Result)
         assert result.success  # Non-blocking
@@ -236,9 +237,9 @@ class TestStep4WithChanges:
         mock_snapshot_class,
         mock_ui_class,
         workflow_state,
-        mock_auggie_client,
+        mock_backend,
     ):
-        """Calls AuggieClient with diff content when changes exist."""
+        """Calls AIBackend with diff content when changes exist."""
         mock_has_any_changes.return_value = True
         mock_get_diff.return_value = DiffResult(
             diff="diff --git a/file.py b/file.py\n+new line",
@@ -255,17 +256,17 @@ class TestStep4WithChanges:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
-        result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
+        result = step_4_update_docs(workflow_state, backend=mock_backend)
 
         assert isinstance(result, Step4Result)
         assert result.success
         assert result.agent_ran
-        mock_auggie_client.run_with_callback.assert_called_once()
-        call_kwargs = mock_auggie_client.run_with_callback.call_args[1]
-        assert call_kwargs["agent"] == "spec-doc-updater"
+        mock_backend.run_with_callback.assert_called_once()
+        call_kwargs = mock_backend.run_with_callback.call_args[1]
+        assert call_kwargs["subagent"] == "spec-doc-updater"
         assert call_kwargs["dont_save_session"] is True
 
 
@@ -312,7 +313,7 @@ class TestStep4AgentFailure:
         mock_client = MagicMock()
         mock_client.run_with_callback.return_value = (False, "Error occurred")
 
-        result = step_4_update_docs(workflow_state, auggie_client=mock_client)
+        result = step_4_update_docs(workflow_state, backend=mock_client)
 
         # Step 4 is non-blocking - always returns success
         assert isinstance(result, Step4Result)
@@ -356,7 +357,7 @@ class TestStep4AgentFailure:
         mock_client = MagicMock()
         mock_client.run_with_callback.side_effect = Exception("Agent crashed")
 
-        result = step_4_update_docs(workflow_state, auggie_client=mock_client)
+        result = step_4_update_docs(workflow_state, backend=mock_client)
 
         # Should return success to not block workflow
         assert isinstance(result, Step4Result)
@@ -394,7 +395,7 @@ class TestStep4NonDocEnforcement:
         mock_snapshot_class,
         mock_ui_class,
         workflow_state,
-        mock_auggie_client,
+        mock_backend,
     ):
         """Reverts non-doc file changes made by the agent."""
         mock_has_any_changes.return_value = True
@@ -413,10 +414,10 @@ class TestStep4NonDocEnforcement:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
-        result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
+        result = step_4_update_docs(workflow_state, backend=mock_backend)
 
         assert isinstance(result, Step4Result)
         assert result.success
@@ -443,7 +444,7 @@ class TestStep4NonDocEnforcement:
         mock_snapshot_class,
         mock_ui_class,
         workflow_state,
-        mock_auggie_client,
+        mock_backend,
     ):
         """Does not revert when agent only changes doc files."""
         mock_has_any_changes.return_value = True
@@ -461,10 +462,10 @@ class TestStep4NonDocEnforcement:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
-        result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
+        result = step_4_update_docs(workflow_state, backend=mock_backend)
 
         assert isinstance(result, Step4Result)
         assert result.success
@@ -569,7 +570,7 @@ class TestStep4UntrackedOnly:
         mock_snapshot_class,
         mock_ui_class,
         generic_ticket,
-        mock_auggie_client,
+        mock_backend,
     ):
         """Step 4 runs when only untracked files exist (not staged/unstaged)."""
         mock_has_changes.return_value = True  # has_any_changes includes untracked
@@ -588,17 +589,17 @@ class TestStep4UntrackedOnly:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
         state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""  # No base commit
 
-        result = step_4_update_docs(state, auggie_client=mock_auggie_client)
+        result = step_4_update_docs(state, backend=mock_backend)
 
         assert result.success
         assert result.agent_ran  # Agent should run!
-        mock_auggie_client.run_with_callback.assert_called_once()
+        mock_backend.run_with_callback.assert_called_once()
 
     @patch("spec.workflow.step4_update_docs.print_header")
     @patch("spec.workflow.step4_update_docs.print_info")
@@ -612,7 +613,7 @@ class TestStep4UntrackedOnly:
         state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""
 
-        result = step_4_update_docs(state)
+        result = step_4_update_docs(state, backend=MagicMock())
 
         assert result.success
         assert not result.agent_ran
@@ -644,7 +645,7 @@ class TestStep4MissingBaseCommit:
         mock_snapshot_class,
         mock_ui_class,
         generic_ticket,
-        mock_auggie_client,
+        mock_backend,
     ):
         """Uses staged+unstaged+untracked when base_commit is empty."""
         mock_has_changes.return_value = True
@@ -663,13 +664,13 @@ class TestStep4MissingBaseCommit:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
         state = WorkflowState(ticket=generic_ticket)
         state.base_commit = ""
 
-        result = step_4_update_docs(state, auggie_client=mock_auggie_client)
+        result = step_4_update_docs(state, backend=mock_backend)
 
         assert result.success
         assert result.agent_ran
@@ -704,7 +705,7 @@ class TestStep4ViolationTracking:
         mock_snapshot_class,
         mock_ui_class,
         workflow_state,
-        mock_auggie_client,
+        mock_backend,
     ):
         """Result tracks had_violations flag when agent modifies non-doc files."""
         mock_has_changes.return_value = True
@@ -721,10 +722,10 @@ class TestStep4ViolationTracking:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
-        result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
+        result = step_4_update_docs(workflow_state, backend=mock_backend)
 
         assert result.success  # Still non-blocking
         assert result.had_violations is True
@@ -749,7 +750,7 @@ class TestStep4ViolationTracking:
         mock_snapshot_class,
         mock_ui_class,
         workflow_state,
-        mock_auggie_client,
+        mock_backend,
     ):
         """Result tracks files that failed to revert."""
         mock_has_changes.return_value = True
@@ -766,10 +767,10 @@ class TestStep4ViolationTracking:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
-        result = step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
+        result = step_4_update_docs(workflow_state, backend=mock_backend)
 
         assert result.had_violations is True
         assert "src/code.py" in result.non_doc_reverted
@@ -794,7 +795,7 @@ class TestStep4ViolationTracking:
         mock_snapshot_class,
         mock_ui_class,
         workflow_state,
-        mock_auggie_client,
+        mock_backend,
     ):
         """Prints prominent error banner when violations occur."""
         mock_has_changes.return_value = True
@@ -811,10 +812,10 @@ class TestStep4ViolationTracking:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        # Configure mock client to use run_with_callback (TUI mode)
-        mock_auggie_client.run_with_callback.return_value = (True, "Updated docs")
+        # Configure mock backend to use run_with_callback (TUI mode)
+        mock_backend.run_with_callback.return_value = (True, "Updated docs")
 
-        step_4_update_docs(workflow_state, auggie_client=mock_auggie_client)
+        step_4_update_docs(workflow_state, backend=mock_backend)
 
         # Verify prominent error messages were printed
         error_calls = [str(c) for c in mock_print_error.call_args_list]

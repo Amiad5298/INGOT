@@ -283,53 +283,45 @@ class TestBuildTaskPrompt:
 class TestExecuteTask:
     """Tests for _execute_task function."""
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_returns_true_on_success(self, mock_auggie_class, workflow_state, sample_task):
-        """Returns True on Auggie success."""
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (True, "Output")
-        mock_auggie_class.return_value = mock_client
+    def test_returns_true_on_success(self, mock_backend, workflow_state, sample_task):
+        """Returns True on backend success."""
+        mock_backend.run_print_with_output.return_value = (True, "Output")
 
-        result = _execute_task(workflow_state, sample_task, workflow_state.get_plan_path())
+        result = _execute_task(
+            workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend
+        )
 
         assert result is True
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_returns_false_on_failure(self, mock_auggie_class, workflow_state, sample_task):
-        """Returns False on Auggie failure."""
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (False, "Error")
-        mock_auggie_class.return_value = mock_client
+    def test_returns_false_on_failure(self, mock_backend, workflow_state, sample_task):
+        """Returns False on backend failure."""
+        mock_backend.run_print_with_output.return_value = (False, "Error")
 
-        result = _execute_task(workflow_state, sample_task, workflow_state.get_plan_path())
+        result = _execute_task(
+            workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend
+        )
 
         assert result is False
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_returns_false_on_exception(self, mock_auggie_class, workflow_state, sample_task):
+    def test_returns_false_on_exception(self, mock_backend, workflow_state, sample_task):
         """Returns False on exception."""
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.side_effect = RuntimeError("Connection failed")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_print_with_output.side_effect = RuntimeError("Connection failed")
 
-        result = _execute_task(workflow_state, sample_task, workflow_state.get_plan_path())
+        result = _execute_task(
+            workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend
+        )
 
         assert result is False
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_uses_spec_implementer_agent(self, mock_auggie_class, workflow_state, sample_task):
+    def test_uses_spec_implementer_agent(self, mock_backend, workflow_state, sample_task):
         """Uses state.subagent_names implementer agent."""
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (True, "Output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_print_with_output.return_value = (True, "Output")
 
-        _execute_task(workflow_state, sample_task, workflow_state.get_plan_path())
+        _execute_task(workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend)
 
-        # Verify AuggieClient is created without model (agent defines the model)
-        mock_auggie_class.assert_called_once_with()
-        # Verify agent from state.subagent_names is passed to run_print_with_output
-        call_kwargs = mock_client.run_print_with_output.call_args[1]
-        assert call_kwargs["agent"] == workflow_state.subagent_names["implementer"]
+        # Verify subagent from state.subagent_names is passed to run_print_with_output
+        call_kwargs = mock_backend.run_print_with_output.call_args[1]
+        assert call_kwargs["subagent"] == workflow_state.subagent_names["implementer"]
         assert call_kwargs["dont_save_session"] is True
 
 
@@ -341,69 +333,71 @@ class TestExecuteTask:
 class TestExecuteTaskWithCallback:
     """Tests for _execute_task_with_callback function."""
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_returns_true_on_success(self, mock_auggie_class, workflow_state, sample_task):
+    def test_returns_true_on_success(self, mock_backend, workflow_state, sample_task):
         """Returns True on success."""
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Output")
 
         callback = MagicMock()
         result = _execute_task_with_callback(
-            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+            workflow_state,
+            sample_task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
         )
 
         assert result is True
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_returns_false_on_failure(self, mock_auggie_class, workflow_state, sample_task):
+    def test_returns_false_on_failure(self, mock_backend, workflow_state, sample_task):
         """Returns False on failure."""
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (False, "Error")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (False, "Error")
 
         callback = MagicMock()
         result = _execute_task_with_callback(
-            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+            workflow_state,
+            sample_task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
         )
 
         assert result is False
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_callback_receives_output(self, mock_auggie_class, workflow_state, sample_task):
+    def test_callback_receives_output(self, mock_backend, workflow_state, sample_task):
         """Callback is called with output lines."""
-        mock_client = MagicMock()
 
         # Simulate callback being invoked during run_with_callback
-        def call_callback(prompt, *, agent, output_callback, dont_save_session):
+        def call_callback(prompt, *, subagent, output_callback, dont_save_session):
             output_callback("Line 1")
             output_callback("Line 2")
             return (True, "Done")
 
-        mock_client.run_with_callback.side_effect = call_callback
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.side_effect = call_callback
 
         callback = MagicMock()
         _execute_task_with_callback(
-            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+            workflow_state,
+            sample_task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
         )
 
         assert callback.call_count == 2
         callback.assert_any_call("Line 1")
         callback.assert_any_call("Line 2")
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_callback_receives_error_on_exception(
-        self, mock_auggie_class, workflow_state, sample_task
-    ):
+    def test_callback_receives_error_on_exception(self, mock_backend, workflow_state, sample_task):
         """Callback receives error message on exception."""
-        mock_client = MagicMock()
-        mock_client.run_with_callback.side_effect = RuntimeError("Connection failed")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.side_effect = RuntimeError("Connection failed")
 
         callback = MagicMock()
         result = _execute_task_with_callback(
-            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+            workflow_state,
+            sample_task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
         )
 
         assert result is False
@@ -413,23 +407,22 @@ class TestExecuteTaskWithCallback:
         assert "ERROR" in error_call
         assert "Connection failed" in error_call
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
-    def test_uses_spec_implementer_agent(self, mock_auggie_class, workflow_state, sample_task):
+    def test_uses_spec_implementer_agent(self, mock_backend, workflow_state, sample_task):
         """Uses state.subagent_names implementer agent."""
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Output")
 
         callback = MagicMock()
         _execute_task_with_callback(
-            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+            workflow_state,
+            sample_task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
         )
 
-        # Verify AuggieClient is created without model (agent defines the model)
-        mock_auggie_class.assert_called_once_with()
-        # Verify agent from state.subagent_names is passed to run_with_callback
-        call_kwargs = mock_client.run_with_callback.call_args[1]
-        assert call_kwargs["agent"] == workflow_state.subagent_names["implementer"]
+        # Verify subagent from state.subagent_names is passed to run_with_callback
+        call_kwargs = mock_backend.run_with_callback.call_args[1]
+        assert call_kwargs["subagent"] == workflow_state.subagent_names["implementer"]
         assert call_kwargs["dont_save_session"] is True
 
 
@@ -510,41 +503,34 @@ class TestShowSummary:
 class TestRunPostImplementationTests:
     """Tests for _run_post_implementation_tests function."""
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
     @patch("spec.workflow.step3_execute.prompt_confirm")
-    def test_prompts_user_to_run_tests(self, mock_confirm, mock_auggie_class, workflow_state):
+    def test_prompts_user_to_run_tests(self, mock_confirm, mock_backend, workflow_state):
         """Prompts user to run tests."""
         mock_confirm.return_value = True
-        mock_client = MagicMock()
-        mock_client.run_print_with_output.return_value = (True, "Tests passed")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_print_with_output.return_value = (True, "Tests passed")
 
-        _run_post_implementation_tests(workflow_state)
+        _run_post_implementation_tests(workflow_state, mock_backend)
 
         mock_confirm.assert_called_once()
         assert "test" in mock_confirm.call_args[0][0].lower()
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
     @patch("spec.workflow.step3_execute.prompt_confirm")
-    def test_skips_when_user_declines(self, mock_confirm, mock_auggie_class, workflow_state):
+    def test_skips_when_user_declines(self, mock_confirm, mock_backend, workflow_state):
         """Skips when user declines."""
         mock_confirm.return_value = False
 
-        _run_post_implementation_tests(workflow_state)
+        _run_post_implementation_tests(workflow_state, mock_backend)
 
-        mock_auggie_class.assert_not_called()
+        mock_backend.run_with_callback.assert_not_called()
 
     @patch("spec.ui.plan_tui.StreamingOperationUI")
-    @patch("spec.workflow.step3_execute.AuggieClient")
     @patch("spec.workflow.step3_execute.prompt_confirm")
     def test_runs_auggie_with_test_prompt(
-        self, mock_confirm, mock_auggie_class, mock_ui_class, workflow_state
+        self, mock_confirm, mock_ui_class, mock_backend, workflow_state
     ):
-        """Runs Auggie with test prompt using StreamingOperationUI."""
+        """Runs backend with test prompt using StreamingOperationUI."""
         mock_confirm.return_value = True
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Tests passed")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Tests passed")
 
         # Setup mock UI
         mock_ui = MagicMock()
@@ -553,23 +539,20 @@ class TestRunPostImplementationTests:
         mock_ui.__exit__ = MagicMock(return_value=None)
         mock_ui.check_quit_requested.return_value = False
 
-        _run_post_implementation_tests(workflow_state)
+        _run_post_implementation_tests(workflow_state, mock_backend)
 
-        mock_client.run_with_callback.assert_called_once()
-        prompt = mock_client.run_with_callback.call_args[0][0]
+        mock_backend.run_with_callback.assert_called_once()
+        prompt = mock_backend.run_with_callback.call_args[0][0]
         assert "test" in prompt.lower()
 
     @patch("spec.ui.plan_tui.StreamingOperationUI")
-    @patch("spec.workflow.step3_execute.AuggieClient")
     @patch("spec.workflow.step3_execute.prompt_confirm")
     def test_handles_auggie_exceptions(
-        self, mock_confirm, mock_auggie_class, mock_ui_class, workflow_state
+        self, mock_confirm, mock_ui_class, mock_backend, workflow_state
     ):
-        """Handles Auggie exceptions gracefully."""
+        """Handles backend exceptions gracefully."""
         mock_confirm.return_value = True
-        mock_client = MagicMock()
-        mock_client.run_with_callback.side_effect = RuntimeError("Connection error")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.side_effect = RuntimeError("Connection error")
 
         # Setup mock UI
         mock_ui = MagicMock()
@@ -579,7 +562,7 @@ class TestRunPostImplementationTests:
         mock_ui.check_quit_requested.return_value = False
 
         # Should not raise exception
-        _run_post_implementation_tests(workflow_state)
+        _run_post_implementation_tests(workflow_state, mock_backend)
 
 
 # =============================================================================
@@ -660,7 +643,7 @@ class TestExecuteFallback:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_executes_tasks_sequentially(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Executes tasks sequentially."""
         mock_execute.return_value = True
@@ -678,6 +661,7 @@ class TestExecuteFallback:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         assert mock_execute.call_count == 2
@@ -686,7 +670,7 @@ class TestExecuteFallback:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_marks_tasks_complete_on_success(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Marks tasks complete on success."""
         mock_execute.return_value = True
@@ -701,6 +685,7 @@ class TestExecuteFallback:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         mock_mark.assert_called_once()
@@ -710,7 +695,7 @@ class TestExecuteFallback:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_tracks_failed_tasks(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Tracks failed tasks."""
         mock_execute.side_effect = [True, False, True]
@@ -729,6 +714,7 @@ class TestExecuteFallback:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         assert failed == ["Task 2"]
@@ -737,7 +723,7 @@ class TestExecuteFallback:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_calls_capture_task_memory_on_success(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Calls capture_task_memory on success."""
         mock_execute.return_value = True
@@ -752,6 +738,7 @@ class TestExecuteFallback:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         mock_capture.assert_called_once()
@@ -760,7 +747,7 @@ class TestExecuteFallback:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_handles_capture_task_memory_exceptions(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Handles capture_task_memory exceptions gracefully."""
         mock_execute.return_value = True
@@ -777,6 +764,7 @@ class TestExecuteFallback:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         assert failed == []  # Task still counts as success
@@ -785,7 +773,7 @@ class TestExecuteFallback:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_respects_fail_fast_option(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Respects fail_fast option."""
         mock_execute.side_effect = [True, False, True]
@@ -805,6 +793,7 @@ class TestExecuteFallback:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Should stop after Task 2 fails
@@ -815,7 +804,7 @@ class TestExecuteFallback:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     def test_returns_list_of_failed_task_names(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Returns list of failed task names."""
         mock_execute.side_effect = [False, True, False]
@@ -834,6 +823,7 @@ class TestExecuteFallback:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         assert failed == ["Failed 1", "Failed 2"]
@@ -852,7 +842,14 @@ class TestExecuteWithTui:
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_initializes_tui_correctly(
-        self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self,
+        mock_tui_class,
+        mock_execute,
+        mock_mark,
+        mock_capture,
+        mock_backend,
+        workflow_state,
+        tmp_path,
     ):
         """Initializes TUI correctly."""
         mock_tui = MagicMock()
@@ -871,6 +868,7 @@ class TestExecuteWithTui:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         mock_tui_class.assert_called_once_with(ticket_id="TEST-123", verbose_mode=False)
@@ -881,7 +879,14 @@ class TestExecuteWithTui:
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_marks_tasks_complete_on_success(
-        self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self,
+        mock_tui_class,
+        mock_execute,
+        mock_mark,
+        mock_capture,
+        mock_backend,
+        workflow_state,
+        tmp_path,
     ):
         """Marks tasks complete on success."""
         mock_tui = MagicMock()
@@ -900,6 +905,7 @@ class TestExecuteWithTui:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         mock_mark.assert_called_once()
@@ -910,7 +916,14 @@ class TestExecuteWithTui:
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_tracks_failed_tasks(
-        self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self,
+        mock_tui_class,
+        mock_execute,
+        mock_mark,
+        mock_capture,
+        mock_backend,
+        workflow_state,
+        tmp_path,
     ):
         """Tracks failed tasks."""
         mock_tui = MagicMock()
@@ -932,6 +945,7 @@ class TestExecuteWithTui:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         assert failed == ["Task 2"]
@@ -941,7 +955,14 @@ class TestExecuteWithTui:
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_respects_fail_fast_option(
-        self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self,
+        mock_tui_class,
+        mock_execute,
+        mock_mark,
+        mock_capture,
+        mock_backend,
+        workflow_state,
+        tmp_path,
     ):
         """Respects fail_fast option."""
         mock_tui = MagicMock()
@@ -965,6 +986,7 @@ class TestExecuteWithTui:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Should stop after Task 2 fails
@@ -976,7 +998,14 @@ class TestExecuteWithTui:
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_handles_capture_task_memory_exceptions(
-        self, mock_tui_class, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self,
+        mock_tui_class,
+        mock_execute,
+        mock_mark,
+        mock_capture,
+        mock_backend,
+        workflow_state,
+        tmp_path,
     ):
         """Handles capture_task_memory exceptions gracefully."""
         mock_tui = MagicMock()
@@ -999,6 +1028,7 @@ class TestExecuteWithTui:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         assert failed == []  # Task still counts as success
@@ -1018,7 +1048,7 @@ class TestStep3Execute:
         # Don't create tasklist file
         state.tasklist_file = tmp_path / "nonexistent.md"
 
-        result = step_3_execute(state, use_tui=False)
+        result = step_3_execute(state, backend=MagicMock(), use_tui=False)
 
         assert result is False
 
@@ -1027,7 +1057,14 @@ class TestStep3Execute:
     @patch("spec.workflow.step3_execute._show_summary")
     @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_returns_true_when_all_tasks_already_complete(
-        self, mock_baseline, mock_summary, mock_tests, mock_commit, workflow_state, tmp_path
+        self,
+        mock_baseline,
+        mock_summary,
+        mock_tests,
+        mock_commit,
+        mock_backend,
+        workflow_state,
+        tmp_path,
     ):
         """Returns True when all tasks already complete."""
         mock_baseline.return_value = True
@@ -1041,7 +1078,7 @@ class TestStep3Execute:
         )
         workflow_state.tasklist_file = tasklist
 
-        result = step_3_execute(workflow_state, use_tui=False)
+        result = step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         assert result is True
 
@@ -1063,6 +1100,7 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1072,7 +1110,7 @@ class TestStep3Execute:
         mock_should_tui.return_value = True
         mock_execute_tui.return_value = []
 
-        step_3_execute(workflow_state, use_tui=True)
+        step_3_execute(workflow_state, backend=mock_backend, use_tui=True)
 
         mock_execute_tui.assert_called_once()
 
@@ -1094,6 +1132,7 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1103,7 +1142,7 @@ class TestStep3Execute:
         mock_should_tui.return_value = False
         mock_execute_fallback.return_value = []
 
-        step_3_execute(workflow_state, use_tui=False)
+        step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         mock_execute_fallback.assert_called_once()
 
@@ -1127,6 +1166,7 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1137,7 +1177,7 @@ class TestStep3Execute:
         mock_execute.return_value = ["Failed Task"]
         mock_confirm.return_value = True
 
-        step_3_execute(workflow_state, use_tui=False)
+        step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         mock_confirm.assert_called()
 
@@ -1159,6 +1199,7 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1168,7 +1209,7 @@ class TestStep3Execute:
         mock_should_tui.return_value = False
         mock_execute.return_value = []  # No failed tasks
 
-        result = step_3_execute(workflow_state, use_tui=False)
+        result = step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         assert result is True
 
@@ -1180,8 +1221,10 @@ class TestStep3Execute:
     @patch("spec.ui.tui._should_use_tui")
     @patch("spec.workflow.step3_execute._cleanup_old_runs")
     @patch("spec.workflow.step3_execute._create_run_log_dir")
+    @patch("spec.workflow.step3_execute._capture_baseline_for_diffs")
     def test_returns_false_when_user_declines_after_failures(
         self,
+        mock_baseline,
         mock_log_dir,
         mock_cleanup,
         mock_should_tui,
@@ -1190,16 +1233,18 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
         """Returns False when user declines after task failures."""
+        mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
         mock_execute.return_value = ["Failed Task"]
         mock_confirm.return_value = False  # User declines
 
-        result = step_3_execute(workflow_state, use_tui=False)
+        result = step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         assert result is False
 
@@ -1221,6 +1266,7 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1230,7 +1276,7 @@ class TestStep3Execute:
         mock_should_tui.return_value = False
         mock_execute.return_value = []
 
-        step_3_execute(workflow_state, use_tui=False)
+        step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         mock_summary.assert_called_once()
 
@@ -1252,6 +1298,7 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1261,7 +1308,7 @@ class TestStep3Execute:
         mock_should_tui.return_value = False
         mock_execute.return_value = []
 
-        step_3_execute(workflow_state, use_tui=False)
+        step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         mock_tests.assert_called_once()
 
@@ -1283,6 +1330,7 @@ class TestStep3Execute:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1292,7 +1340,7 @@ class TestStep3Execute:
         mock_should_tui.return_value = False
         mock_execute.return_value = []
 
-        step_3_execute(workflow_state, use_tui=False)
+        step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         mock_commit.assert_called_once()
 
@@ -1308,6 +1356,7 @@ class TestStep3Execute:
         mock_mark,
         mock_capture,
         mock_confirm,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1336,6 +1385,7 @@ class TestStep3Execute:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Assertions
@@ -1375,6 +1425,7 @@ class TestTwoPhaseExecution:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1398,7 +1449,7 @@ class TestTwoPhaseExecution:
 """
         )
 
-        step_3_execute(workflow_state)
+        step_3_execute(workflow_state, backend=mock_backend)
 
         # Verify fundamental fallback was called first
         assert mock_execute_fallback.called
@@ -1426,6 +1477,7 @@ class TestTwoPhaseExecution:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1448,7 +1500,7 @@ class TestTwoPhaseExecution:
 """
         )
 
-        step_3_execute(workflow_state)
+        step_3_execute(workflow_state, backend=mock_backend)
 
         # Should use _execute_fallback (sequential), not _execute_parallel_fallback
         assert mock_execute_fallback.called
@@ -1477,6 +1529,7 @@ class TestTwoPhaseExecution:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1503,7 +1556,7 @@ class TestTwoPhaseExecution:
 """
         )
 
-        step_3_execute(workflow_state)
+        step_3_execute(workflow_state, backend=mock_backend)
 
         # Should use _execute_parallel_fallback for independent tasks
         assert mock_execute_parallel.called
@@ -1528,6 +1581,7 @@ class TestTwoPhaseExecution:
         mock_summary,
         mock_tests,
         mock_commit,
+        mock_backend,
         workflow_state,
         tmp_path,
     ):
@@ -1553,7 +1607,7 @@ class TestTwoPhaseExecution:
 """
         )
 
-        step_3_execute(workflow_state)
+        step_3_execute(workflow_state, backend=mock_backend)
 
         # Should NOT use parallel execution
         assert not mock_execute_parallel.called
@@ -1573,7 +1627,7 @@ class TestParallelExecution:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_uses_thread_pool_executor(
-        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Uses ThreadPoolExecutor for concurrent execution."""
         from spec.workflow.step3_execute import _execute_parallel_fallback
@@ -1593,6 +1647,7 @@ class TestParallelExecution:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # All tasks should succeed
@@ -1604,7 +1659,7 @@ class TestParallelExecution:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_respects_max_parallel_tasks(
-        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Limits concurrent workers to max_parallel_tasks."""
         from spec.workflow.step3_execute import _execute_parallel_fallback
@@ -1622,6 +1677,7 @@ class TestParallelExecution:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # All tasks should complete
@@ -1632,7 +1688,7 @@ class TestParallelExecution:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_collects_failed_tasks(
-        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Collects names of failed tasks."""
         from spec.workflow.step3_execute import _execute_parallel_fallback
@@ -1653,6 +1709,7 @@ class TestParallelExecution:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Should have one failed task
@@ -1663,7 +1720,7 @@ class TestParallelExecution:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_marks_successful_tasks_complete(
-        self, mock_execute_retry, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Marks completed tasks in tasklist."""
         from spec.workflow.step3_execute import _execute_parallel_fallback
@@ -1682,6 +1739,7 @@ class TestParallelExecution:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Should mark task complete
@@ -1697,7 +1755,7 @@ class TestTaskRetry:
     """Tests for task retry with rate limit handling."""
 
     @patch("spec.workflow.step3_execute._execute_task")
-    def test_skips_retry_when_disabled(self, mock_execute, workflow_state, tmp_path):
+    def test_skips_retry_when_disabled(self, mock_execute, mock_backend, workflow_state, tmp_path):
         """Skips retry wrapper when max_retries=0."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1706,13 +1764,17 @@ class TestTaskRetry:
         workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
 
         task = Task(name="Test Task")
-        result = _execute_task_with_retry(workflow_state, task, workflow_state.get_plan_path())
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path(), backend=mock_backend
+        )
 
         assert result is True
         mock_execute.assert_called_once()
 
     @patch("spec.workflow.step3_execute._execute_task_with_callback")
-    def test_uses_callback_when_provided(self, mock_execute_callback, workflow_state, tmp_path):
+    def test_uses_callback_when_provided(
+        self, mock_execute_callback, mock_backend, workflow_state, tmp_path
+    ):
         """Uses callback version when callback provided."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1723,14 +1785,18 @@ class TestTaskRetry:
         task = Task(name="Test Task")
         callback = MagicMock()
         result = _execute_task_with_retry(
-            workflow_state, task, workflow_state.get_plan_path(), callback=callback
+            workflow_state,
+            task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
         )
 
         assert result is True
         mock_execute_callback.assert_called_once()
 
     @patch("spec.workflow.step3_execute._execute_task")
-    def test_returns_false_on_failure(self, mock_execute, workflow_state, tmp_path):
+    def test_returns_false_on_failure(self, mock_execute, mock_backend, workflow_state, tmp_path):
         """Returns False when task execution fails."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1739,12 +1805,16 @@ class TestTaskRetry:
         workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
 
         task = Task(name="Failing Task")
-        result = _execute_task_with_retry(workflow_state, task, workflow_state.get_plan_path())
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path(), backend=mock_backend
+        )
 
         assert result is False
 
     @patch("spec.workflow.step3_execute._execute_task")
-    def test_retries_on_rate_limit_error(self, mock_execute, workflow_state, tmp_path):
+    def test_retries_on_rate_limit_error(
+        self, mock_execute, mock_backend, workflow_state, tmp_path
+    ):
         """Retries execution on rate limit errors."""
         from spec.workflow.state import RateLimitConfig
         from spec.workflow.step3_execute import _execute_task_with_retry
@@ -1756,7 +1826,9 @@ class TestTaskRetry:
         )
 
         task = Task(name="Retry Task")
-        result = _execute_task_with_retry(workflow_state, task, workflow_state.get_plan_path())
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path(), backend=mock_backend
+        )
 
         assert result is True
         assert mock_execute.call_count == 2
@@ -1774,7 +1846,7 @@ class TestParallelTaskMemorySkipped:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_parallel_fallback_skips_memory_capture(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Parallel fallback does not call capture_task_memory."""
         from spec.workflow.step3_execute import _execute_parallel_fallback
@@ -1791,6 +1863,7 @@ class TestParallelTaskMemorySkipped:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Memory capture should NOT be called for parallel tasks
@@ -1800,7 +1873,7 @@ class TestParallelTaskMemorySkipped:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_sequential_fallback_calls_memory_capture(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Sequential fallback calls capture_task_memory."""
         mock_execute.return_value = True
@@ -1815,6 +1888,7 @@ class TestParallelTaskMemorySkipped:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Memory capture SHOULD be called for sequential tasks
@@ -1828,7 +1902,7 @@ class TestParallelFailFast:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_fail_fast_stops_pending_tasks(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Fail-fast stops pending tasks when one fails."""
         from spec.workflow.step3_execute import _execute_parallel_fallback
@@ -1852,6 +1926,7 @@ class TestParallelFailFast:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Task 1 should fail, others should be skipped
@@ -1861,7 +1936,7 @@ class TestParallelFailFast:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_no_fail_fast_continues_after_failure(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Without fail-fast, execution continues after failure."""
         from spec.workflow.step3_execute import _execute_parallel_fallback
@@ -1884,6 +1959,7 @@ class TestParallelFailFast:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # All tasks should execute
@@ -1894,7 +1970,7 @@ class TestParallelFailFast:
     @patch("spec.workflow.step3_execute.mark_task_complete")
     @patch("spec.workflow.step3_execute._execute_task_with_retry")
     def test_stop_flag_prevents_new_task_execution(
-        self, mock_execute, mock_mark, mock_capture, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
         """Stop flag prevents tasks that haven't started from executing.
 
@@ -1910,7 +1986,7 @@ class TestParallelFailFast:
         stop_event = threading.Event()
         executed_tasks = []
 
-        def mock_execute_side_effect(state, task, plan_path, callback=None, is_parallel=False):
+        def mock_execute_side_effect(state, task, plan_path, **kwargs):
             """Side effect that simulates stop_flag check behavior."""
             # Check if we should skip (simulating stop_flag check)
             if stop_event.is_set():
@@ -1946,6 +2022,7 @@ class TestParallelFailFast:
             workflow_state.get_plan_path(),
             workflow_state.get_tasklist_path(),
             log_dir,
+            backend=mock_backend,
         )
 
         # Verify that only the first task was actually "executed" (added to our list)
@@ -1958,37 +2035,41 @@ class TestParallelFailFast:
 class TestExecuteTaskWithCallbackRateLimit:
     """Tests for rate limit detection in _execute_task_with_callback."""
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_raises_rate_limit_error_on_rate_limit_output(
-        self, mock_auggie_class, workflow_state, sample_task
+        self, mock_backend, workflow_state, sample_task
     ):
-        """Raises AuggieRateLimitError when output indicates rate limit."""
-        from spec.integrations.auggie import AuggieRateLimitError
+        """Raises BackendRateLimitError when output indicates rate limit."""
+        from spec.integrations.backends.errors import BackendRateLimitError
 
-        mock_client = MagicMock()
         # Simulate rate limit in output
-        mock_client.run_with_callback.return_value = (False, "Error: HTTP 429 Too Many Requests")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (False, "Error: HTTP 429 Too Many Requests")
+        mock_backend.detect_rate_limit.return_value = True
 
         callback = MagicMock()
 
-        with pytest.raises(AuggieRateLimitError):
+        with pytest.raises(BackendRateLimitError):
             _execute_task_with_callback(
-                workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+                workflow_state,
+                sample_task,
+                workflow_state.get_plan_path(),
+                backend=mock_backend,
+                callback=callback,
             )
 
-    @patch("spec.workflow.step3_execute.AuggieClient")
     def test_returns_false_on_non_rate_limit_failure(
-        self, mock_auggie_class, workflow_state, sample_task
+        self, mock_backend, workflow_state, sample_task
     ):
         """Returns False on non-rate-limit failure."""
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (False, "Some other error")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (False, "Some other error")
+        mock_backend.detect_rate_limit.return_value = False
 
         callback = MagicMock()
         result = _execute_task_with_callback(
-            workflow_state, sample_task, workflow_state.get_plan_path(), callback=callback
+            workflow_state,
+            sample_task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
         )
 
         assert result is False
