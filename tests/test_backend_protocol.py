@@ -97,6 +97,10 @@ class TestAIBackendCompliance:
                 return AgentPlatform.AUGGIE
 
             @property
+            def model(self) -> str:
+                return "test-model"
+
+            @property
             def supports_parallel(self) -> bool:
                 return True
 
