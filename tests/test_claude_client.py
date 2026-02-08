@@ -1,6 +1,9 @@
 """Tests for spec.integrations.claude module - ClaudeClient class."""
 
+import subprocess
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from spec.integrations.claude import (
     CLAUDE_CLI_NAME,
@@ -54,39 +57,39 @@ class TestClaudeClientBuildCommand:
 
         assert "--no-session-persistence" not in cmd
 
-    def test_system_prompt_flag(self):
-        """--append-system-prompt when system_prompt provided."""
+    def test_system_prompt_file_flag(self):
+        """--append-system-prompt-file when system_prompt_file provided."""
         client = ClaudeClient()
         cmd = client.build_command(
             "test prompt",
-            system_prompt="You are a planning agent.",
+            system_prompt_file="/tmp/prompt.md",
             print_mode=True,
         )
 
-        assert "--append-system-prompt" in cmd
-        idx = cmd.index("--append-system-prompt")
-        assert cmd[idx + 1] == "You are a planning agent."
+        assert "--append-system-prompt-file" in cmd
+        idx = cmd.index("--append-system-prompt-file")
+        assert cmd[idx + 1] == "/tmp/prompt.md"
 
-    def test_no_system_prompt_when_none(self):
-        """No --append-system-prompt when system_prompt is None."""
+    def test_no_system_prompt_file_when_none(self):
+        """No --append-system-prompt-file when system_prompt_file is None."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", print_mode=True)
 
-        assert "--append-system-prompt" not in cmd
+        assert "--append-system-prompt-file" not in cmd
 
-    def test_no_system_prompt_when_empty(self):
-        """No --append-system-prompt when system_prompt is empty string."""
+    def test_no_system_prompt_file_when_empty(self):
+        """No --append-system-prompt-file when system_prompt_file is empty string."""
         client = ClaudeClient()
-        cmd = client.build_command("test prompt", system_prompt="", print_mode=True)
+        cmd = client.build_command("test prompt", system_prompt_file="", print_mode=True)
 
-        assert "--append-system-prompt" not in cmd
+        assert "--append-system-prompt-file" not in cmd
 
     def test_all_flags_combined(self):
         """All flags work together correctly."""
         client = ClaudeClient()
         cmd = client.build_command(
             "do the work",
-            system_prompt="You are a planner.",
+            system_prompt_file="/tmp/prompt.md",
             model="claude-3-opus",
             print_mode=True,
             dont_save_session=True,
@@ -96,7 +99,7 @@ class TestClaudeClientBuildCommand:
         assert "-p" in cmd
         assert "--model" in cmd
         assert "--no-session-persistence" in cmd
-        assert "--append-system-prompt" in cmd
+        assert "--append-system-prompt-file" in cmd
         assert cmd[-1] == "do the work"
 
     def test_no_print_mode(self):
@@ -289,6 +292,108 @@ class TestClaudeClientExecution:
 
         captured = capsys.readouterr()
         assert captured.out == ""
+
+    def test_run_print_quiet_passes_timeout_to_subprocess(self):
+        """timeout_seconds is forwarded to subprocess.run(timeout=)."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result) as mock_run:
+            client.run_print_quiet("test", timeout_seconds=30.0)
+
+        assert mock_run.call_args.kwargs.get("timeout") == 30.0
+
+    def test_run_print_quiet_timeout_raises_timeout_expired(self):
+        """subprocess.TimeoutExpired propagates from run_print_quiet."""
+        client = ClaudeClient()
+
+        with (
+            patch(
+                "spec.integrations.claude.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd=["claude"], timeout=5),
+            ),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            client.run_print_quiet("test", timeout_seconds=5.0)
+
+    def test_run_print_with_output_passes_timeout_to_subprocess(self):
+        """timeout_seconds is forwarded to subprocess.run(timeout=)."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result) as mock_run:
+            client.run_print_with_output("test", timeout_seconds=45.0)
+
+        assert mock_run.call_args.kwargs.get("timeout") == 45.0
+
+    def test_run_print_with_output_timeout_raises_timeout_expired(self):
+        """subprocess.TimeoutExpired propagates from run_print_with_output."""
+        client = ClaudeClient()
+
+        with (
+            patch(
+                "spec.integrations.claude.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd=["claude"], timeout=10),
+            ),
+            pytest.raises(subprocess.TimeoutExpired),
+        ):
+            client.run_print_with_output("test", timeout_seconds=10.0)
+
+    def test_run_print_quiet_uses_system_prompt_file(self):
+        """system_prompt is written to a temp file and passed via --append-system-prompt-file."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result) as mock_run:
+            client.run_print_quiet("test", system_prompt="You are a planner.")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--append-system-prompt-file" in cmd
+        # Inline --append-system-prompt should NOT be used
+        assert "--append-system-prompt" not in [
+            c for i, c in enumerate(cmd) if c == "--append-system-prompt"
+        ]
+
+    def test_run_print_with_output_uses_system_prompt_file(self):
+        """system_prompt is written to a temp file and passed via --append-system-prompt-file."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result) as mock_run:
+            client.run_print_with_output("test", system_prompt="You are a planner.")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--append-system-prompt-file" in cmd
+
+    def test_run_print_quiet_no_timeout_by_default(self):
+        """No timeout passed to subprocess.run when timeout_seconds is None."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result) as mock_run:
+            client.run_print_quiet("test")
+
+        assert mock_run.call_args.kwargs.get("timeout") is None
 
 
 class TestCheckClaudeInstalled:

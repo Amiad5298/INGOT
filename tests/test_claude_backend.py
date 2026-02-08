@@ -1,6 +1,7 @@
 """Tests for spec.integrations.backends.claude module - ClaudeBackend class."""
 
 import os
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -133,6 +134,17 @@ class TestClaudeBackendDelegation:
         assert success is True
         assert output == "output"
 
+    def test_run_print_with_output_passes_timeout(self):
+        """timeout_seconds is forwarded to client."""
+        backend = ClaudeBackend()
+
+        with patch.object(
+            backend._client, "run_print_with_output", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_print_with_output("test prompt", timeout_seconds=30.0)
+
+        assert mock_run.call_args.kwargs.get("timeout_seconds") == 30.0
+
     def test_run_print_quiet_delegates(self):
         """run_print_quiet delegates to ClaudeClient."""
         backend = ClaudeBackend()
@@ -144,6 +156,17 @@ class TestClaudeBackendDelegation:
 
         mock_run.assert_called_once()
         assert output == "quiet output"
+
+    def test_run_print_quiet_passes_timeout(self):
+        """timeout_seconds is forwarded to client."""
+        backend = ClaudeBackend()
+
+        with patch.object(
+            backend._client, "run_print_quiet", return_value="quiet output"
+        ) as mock_run:
+            backend.run_print_quiet("test prompt", timeout_seconds=45.0)
+
+        assert mock_run.call_args.kwargs.get("timeout_seconds") == 45.0
 
     def test_run_print_quiet_passes_system_prompt(self, tmp_path, monkeypatch):
         """subagent is resolved to system_prompt in run_print_quiet."""
@@ -493,6 +516,34 @@ class TestClaudeBackendTimeout:
         )
 
         mock_build.assert_called_once()
+
+    def test_run_print_quiet_timeout_raises_backend_timeout_error(self):
+        """subprocess.TimeoutExpired from client becomes BackendTimeoutError."""
+        backend = ClaudeBackend()
+
+        with patch.object(
+            backend._client,
+            "run_print_quiet",
+            side_effect=subprocess.TimeoutExpired(cmd=["claude"], timeout=30),
+        ):
+            with pytest.raises(BackendTimeoutError) as exc_info:
+                backend.run_print_quiet("test", timeout_seconds=30.0)
+
+        assert exc_info.value.timeout_seconds == 30.0
+
+    def test_run_print_with_output_timeout_raises_backend_timeout_error(self):
+        """subprocess.TimeoutExpired from client becomes BackendTimeoutError."""
+        backend = ClaudeBackend()
+
+        with patch.object(
+            backend._client,
+            "run_print_with_output",
+            side_effect=subprocess.TimeoutExpired(cmd=["claude"], timeout=15),
+        ):
+            with pytest.raises(BackendTimeoutError) as exc_info:
+                backend.run_print_with_output("test", timeout_seconds=15.0)
+
+        assert exc_info.value.timeout_seconds == 15.0
 
 
 class TestClaudeBackendClose:

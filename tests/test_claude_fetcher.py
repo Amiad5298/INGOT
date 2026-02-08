@@ -13,13 +13,13 @@ Tests cover:
 
 from __future__ import annotations
 
-import time
 from unittest.mock import MagicMock
 
 import pytest
 
 from spec.config.fetch_config import AgentConfig, AgentPlatform
 from spec.integrations.backends.base import AIBackend
+from spec.integrations.backends.errors import BackendTimeoutError
 from spec.integrations.fetchers import (
     AgentFetchError,
     AgentIntegrationError,
@@ -395,20 +395,50 @@ class TestClaudeMediatedFetcherTimeout:
 
     @pytest.mark.asyncio
     async def test_timeout_raises_agent_fetch_error(self, mock_backend):
-        """Raises AgentFetchError when timeout expires."""
-
-        def blocking_call(*args, **kwargs):
-            time.sleep(1)
-            return '{"key": "PROJ-123"}'
-
-        mock_backend.run_print_quiet.side_effect = blocking_call
-        fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=0.01)
+        """BackendTimeoutError from backend becomes AgentFetchError."""
+        mock_backend.run_print_quiet.side_effect = BackendTimeoutError(
+            "Operation timed out after 30.0s", timeout_seconds=30.0
+        )
+        fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=30.0)
 
         with pytest.raises(AgentFetchError) as exc_info:
             await fetcher._execute_fetch_prompt("test prompt", Platform.JIRA)
 
         assert "timed out" in str(exc_info.value)
-        assert "0.01s" in str(exc_info.value)
+        assert "30.0s" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_timeout_passed_to_backend(self, mock_backend):
+        """Effective timeout is forwarded to backend.run_print_quiet()."""
+        mock_backend.run_print_quiet.return_value = '{"key": "X-1", "summary": "T"}'
+        fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=42.0)
+
+        await fetcher._execute_fetch_prompt("test prompt", Platform.JIRA)
+
+        call_kwargs = mock_backend.run_print_quiet.call_args.kwargs
+        assert call_kwargs.get("timeout_seconds") == 42.0
+
+    @pytest.mark.asyncio
+    async def test_fetch_passes_timeout_through_without_resolving(self, mock_backend):
+        """fetch() passes timeout_seconds directly without resolving to instance default."""
+        mock_backend.run_print_quiet.return_value = '{"key": "X-1", "summary": "T"}'
+        fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=60.0)
+
+        await fetcher.fetch("X-1", "jira", timeout_seconds=15.0)
+
+        call_kwargs = mock_backend.run_print_quiet.call_args.kwargs
+        assert call_kwargs.get("timeout_seconds") == 15.0
+
+    @pytest.mark.asyncio
+    async def test_fetch_none_timeout_uses_instance_default(self, mock_backend):
+        """fetch() with no timeout_seconds uses instance default via _execute_fetch_prompt."""
+        mock_backend.run_print_quiet.return_value = '{"key": "X-1", "summary": "T"}'
+        fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=99.0)
+
+        await fetcher.fetch("X-1", "jira")
+
+        call_kwargs = mock_backend.run_print_quiet.call_args.kwargs
+        assert call_kwargs.get("timeout_seconds") == 99.0
 
 
 class TestClaudeMediatedFetcherValidation:
