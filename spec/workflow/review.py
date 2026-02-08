@@ -15,7 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from spec.integrations.auggie import AuggieClient
+from spec.integrations.backends.base import AIBackend
 from spec.ui.prompts import prompt_confirm
 from spec.utils.console import (
     print_info,
@@ -76,11 +76,11 @@ def parse_review_status(output: str) -> ReviewStatus:
     # Each pattern captures the status keyword (PASS or NEEDS_ATTENTION)
     patterns = [
         # 1. Canonical format: **Status**: PASS or Status: PASS
-        r'(?:\*\*)?Status(?:\*\*)?\s*:\s*(PASS|NEEDS_ATTENTION)',
+        r"(?:\*\*)?Status(?:\*\*)?\s*:\s*(PASS|NEEDS_ATTENTION)",
         # 2. Bullet format: - **PASS** - ... or - **NEEDS_ATTENTION** - ...
-        r'^-\s*\*\*(PASS|NEEDS_ATTENTION)\*\*\s*-',
+        r"^-\s*\*\*(PASS|NEEDS_ATTENTION)\*\*\s*-",
         # 3. Bullet format without trailing dash: - **PASS** or - **NEEDS_ATTENTION**
-        r'^-\s*\*\*(PASS|NEEDS_ATTENTION)\*\*\s*$',
+        r"^-\s*\*\*(PASS|NEEDS_ATTENTION)\*\*\s*$",
     ]
 
     # Collect all matches with their positions
@@ -103,12 +103,12 @@ def parse_review_status(output: str) -> ReviewStatus:
     # Fallback patterns for standalone markers (near end only)
     fallback_patterns = [
         # NEEDS_ATTENTION on its own line (more specific, check first)
-        (r'(?:^|\n)\s*\*?\*?NEEDS_ATTENTION\*?\*?\s*(?:\n|$)', ReviewStatus.NEEDS_ATTENTION),
+        (r"(?:^|\n)\s*\*?\*?NEEDS_ATTENTION\*?\*?\s*(?:\n|$)", ReviewStatus.NEEDS_ATTENTION),
         # **PASS** on its own line
-        (r'(?:^|\n)\s*\*\*PASS\*\*\s*(?:\n|$)', ReviewStatus.PASS),
+        (r"(?:^|\n)\s*\*\*PASS\*\*\s*(?:\n|$)", ReviewStatus.PASS),
         # PASS on its own line (but NOT "will PASS" or "PASS all tests")
         # Must be at line start or after sentence-ending punctuation
-        (r'(?:^|\n)\s*PASS\s*(?:\n|$)', ReviewStatus.PASS),
+        (r"(?:^|\n)\s*PASS\s*(?:\n|$)", ReviewStatus.PASS),
     ]
 
     for pattern, status in fallback_patterns:
@@ -208,7 +208,7 @@ def _run_rereview_after_fix(
     state: WorkflowState,
     log_dir: Path,
     phase: str,
-    auggie_client: AuggieClient,
+    backend: AIBackend,
 ) -> bool | None:
     """Re-run review after auto-fix attempt.
 
@@ -220,7 +220,7 @@ def _run_rereview_after_fix(
         state: Current workflow state
         log_dir: Directory for log files
         phase: Phase identifier ("fundamental" or "final")
-        auggie_client: AuggieClient instance to reuse
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if re-review passed (workflow should continue),
@@ -247,9 +247,9 @@ def _run_rereview_after_fix(
     prompt = build_review_prompt(state, phase, diff_output, is_truncated)
 
     try:
-        success, output = auggie_client.run_print_with_output(
+        success, output = backend.run_print_with_output(
             prompt,
-            agent=state.subagent_names["reviewer"],
+            subagent=state.subagent_names["reviewer"],
             dont_save_session=True,
         )
 
@@ -276,6 +276,8 @@ def run_phase_review(
     state: WorkflowState,
     log_dir: Path,
     phase: str,
+    *,
+    backend: AIBackend,
 ) -> bool:
     """Run review checkpoint and optionally auto-fix.
 
@@ -292,6 +294,7 @@ def run_phase_review(
         state: Current workflow state
         log_dir: Directory for log files
         phase: Phase identifier ("fundamental" or "final")
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if review passed or user chose to continue,
@@ -323,11 +326,10 @@ def run_phase_review(
     prompt = build_review_prompt(state, phase, diff_output, is_truncated)
 
     # Run review
-    auggie_client = AuggieClient()
     try:
-        success, output = auggie_client.run_print_with_output(
+        success, output = backend.run_print_with_output(
             prompt,
-            agent=state.subagent_names["reviewer"],
+            subagent=state.subagent_names["reviewer"],
             dont_save_session=True,
         )
     except Exception as e:
@@ -358,13 +360,11 @@ def run_phase_review(
 
     # Offer auto-fix
     if prompt_confirm("Would you like to attempt auto-fix?", default=False):
-        fix_success = run_auto_fix(state, output, log_dir)
+        fix_success = run_auto_fix(state, output, log_dir, backend)
 
         if fix_success:
             # Offer to re-run review after auto-fix
-            re_review_result = _run_rereview_after_fix(
-                state, log_dir, phase, auggie_client
-            )
+            re_review_result = _run_rereview_after_fix(state, log_dir, phase, backend)
             if re_review_result is not None:
                 return re_review_result
             # re_review_result is None means fall through to continue prompt
@@ -395,4 +395,3 @@ __all__ = [
     "_build_review_prompt",
     "_run_phase_review",
 ]
-

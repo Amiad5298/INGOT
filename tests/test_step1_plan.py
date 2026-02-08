@@ -32,13 +32,12 @@ def workflow_state(generic_ticket, tmp_path):
 
 
 @pytest.fixture
-def mock_auggie_client():
-    """Create a mock AuggieClient."""
-    client = MagicMock()
-    client.run_print.return_value = True
-    client.run_print_with_output.return_value = (True, "Plan generated successfully")
-    client.run_with_callback.return_value = (True, "Plan generated successfully")
-    return client
+def mock_backend():
+    """Create a mock AIBackend."""
+    backend = MagicMock()
+    backend.run_streaming.return_value = (True, "Plan generated successfully")
+    backend.run_with_callback.return_value = (True, "Plan generated successfully")
+    return backend
 
 
 # =============================================================================
@@ -110,10 +109,9 @@ class TestCreatePlanLogDir:
 class TestGeneratePlanWithTui:
     """Tests for _generate_plan_with_tui function."""
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_returns_true_on_successful_generation(
-        self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
+        self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
         """Returns True on successful generation."""
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
@@ -122,20 +120,17 @@ class TestGeneratePlanWithTui:
         mock_tui.check_quit_requested.return_value = False
         mock_tui_class.return_value = mock_tui
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Plan output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Plan output")
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         assert result is True
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_returns_false_when_user_requests_quit(
-        self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
+        self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
         """Returns False when user requests quit (via ui.check_quit_requested())."""
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
@@ -144,20 +139,17 @@ class TestGeneratePlanWithTui:
         mock_tui.check_quit_requested.return_value = True  # User requested quit
         mock_tui_class.return_value = mock_tui
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Plan output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Plan output")
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         assert result is False
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_log_path_is_set_on_ui(
-        self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
+        self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
         """Log path is set on UI."""
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
@@ -166,91 +158,78 @@ class TestGeneratePlanWithTui:
         mock_tui.check_quit_requested.return_value = False
         mock_tui_class.return_value = mock_tui
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Plan output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Plan output")
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        _generate_plan_with_tui(workflow_state, plan_path)
+        _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         mock_tui.set_log_path.assert_called_once()
         log_path_arg = mock_tui.set_log_path.call_args[0][0]
         assert isinstance(log_path_arg, Path)
         assert ".log" in str(log_path_arg)
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_auggie_client_uses_subagent(
-        self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
+        self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Auggie client is called with spec-planner subagent."""
+        """Backend is called with spec-planner subagent."""
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_tui_class.return_value = mock_tui
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Plan output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Plan output")
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        _generate_plan_with_tui(workflow_state, plan_path)
+        _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
-        # Client is created without model (agent provides it)
-        mock_auggie_class.assert_called_once_with()
-        # Verify agent from state.subagent_names is passed
-        call_kwargs = mock_client.run_with_callback.call_args.kwargs
-        assert "agent" in call_kwargs
-        assert call_kwargs["agent"] == workflow_state.subagent_names["planner"]
+        # Verify subagent from state.subagent_names is passed
+        call_kwargs = mock_backend.run_with_callback.call_args.kwargs
+        assert "subagent" in call_kwargs
+        assert call_kwargs["subagent"] == workflow_state.subagent_names["planner"]
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_returns_false_on_auggie_failure(
-        self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
+        self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Returns False on Auggie failure."""
+        """Returns False on backend failure."""
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_tui_class.return_value = mock_tui
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (False, "Error")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (False, "Error")
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, plan_path)
+        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         assert result is False
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.ui.tui.TaskRunnerUI")
     def test_dont_save_session_flag_is_passed(
-        self, mock_tui_class, mock_auggie_class, workflow_state, tmp_path, monkeypatch
+        self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Verifies dont_save_session=True is passed to Auggie client."""
+        """Verifies dont_save_session=True is passed to backend."""
         monkeypatch.setenv("SPECFLOW_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_tui_class.return_value = mock_tui
 
-        mock_client = MagicMock()
-        mock_client.run_with_callback.return_value = (True, "Plan output")
-        mock_auggie_class.return_value = mock_client
+        mock_backend.run_with_callback.return_value = (True, "Plan output")
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        _generate_plan_with_tui(workflow_state, plan_path)
+        _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         # Verify dont_save_session=True is passed in the call
-        mock_client.run_with_callback.assert_called_once()
-        call_kwargs = mock_client.run_with_callback.call_args.kwargs
+        mock_backend.run_with_callback.assert_called_once()
+        call_kwargs = mock_backend.run_with_callback.call_args.kwargs
         assert "dont_save_session" in call_kwargs
         assert call_kwargs["dont_save_session"] is True
 
@@ -439,10 +418,9 @@ class TestDisplayPlanSummary:
 class TestRunClarification:
     """Tests for _run_clarification function."""
 
-    @patch("spec.workflow.step1_plan.AuggieClient")
     @patch("spec.workflow.step1_plan.prompt_confirm")
     def test_returns_true_when_user_declines_clarification(
-        self, mock_confirm, mock_auggie_class, workflow_state, tmp_path
+        self, mock_confirm, workflow_state, tmp_path
     ):
         """Returns True when user declines clarification prompt."""
         mock_confirm.return_value = False  # User declines
@@ -454,22 +432,21 @@ class TestRunClarification:
         result = _run_clarification(workflow_state, mock_auggie, plan_path)
 
         assert result is True
-        mock_auggie_class.assert_not_called()
 
     @patch("spec.workflow.step1_plan.prompt_confirm")
     def test_runs_auggie_with_clarification_prompt(self, mock_confirm, workflow_state, tmp_path):
-        """Runs Auggie with correct clarification prompt."""
+        """Runs backend with correct clarification prompt."""
         mock_confirm.return_value = True  # User accepts
         mock_auggie = MagicMock()
-        mock_auggie.run_print.return_value = True
+        mock_auggie.run_streaming.return_value = (True, "output")
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        mock_auggie.run_print.assert_called_once()
-        prompt = mock_auggie.run_print.call_args[0][0]
+        mock_auggie.run_streaming.assert_called_once()
+        prompt = mock_auggie.run_streaming.call_args[0][0]
         assert str(plan_path) in prompt
         assert "clarif" in prompt.lower()
 
@@ -477,10 +454,10 @@ class TestRunClarification:
     def test_always_returns_true_even_on_auggie_failure(
         self, mock_confirm, workflow_state, tmp_path
     ):
-        """Always returns True (even on Auggie failure)."""
+        """Always returns True (even on backend failure)."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
-        mock_auggie.run_print.return_value = False  # Auggie fails
+        mock_auggie.run_streaming.return_value = (False, "Error")
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
@@ -494,18 +471,18 @@ class TestRunClarification:
         """Uses spec-planner subagent for clarification."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
-        mock_auggie.run_print.return_value = True
+        mock_auggie.run_streaming.return_value = (True, "output")
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        # Verify run_print is called with the planner subagent
-        mock_auggie.run_print.assert_called_once()
-        call_kwargs = mock_auggie.run_print.call_args.kwargs
-        assert "agent" in call_kwargs
-        assert call_kwargs["agent"] == workflow_state.subagent_names["planner"]
+        # Verify run_streaming is called with the planner subagent
+        mock_auggie.run_streaming.assert_called_once()
+        call_kwargs = mock_auggie.run_streaming.call_args.kwargs
+        assert "subagent" in call_kwargs
+        assert call_kwargs["subagent"] == workflow_state.subagent_names["planner"]
 
 
 # =============================================================================
@@ -930,7 +907,7 @@ class TestRunClarificationWithConflict:
         """Prompt includes conflict summary when state.conflict_detected is True."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
-        mock_auggie.run_print.return_value = True
+        mock_auggie.run_streaming.return_value = (True, "output")
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
@@ -941,8 +918,8 @@ class TestRunClarificationWithConflict:
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        mock_auggie.run_print.assert_called_once()
-        prompt = mock_auggie.run_print.call_args[0][0]
+        mock_auggie.run_streaming.assert_called_once()
+        prompt = mock_auggie.run_streaming.call_args[0][0]
 
         # Verify conflict context is in prompt
         assert "conflict" in prompt.lower()
@@ -956,7 +933,7 @@ class TestRunClarificationWithConflict:
         """Prompt does not include conflict context when state.conflict_detected is False."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
-        mock_auggie.run_print.return_value = True
+        mock_auggie.run_streaming.return_value = (True, "output")
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
@@ -967,8 +944,8 @@ class TestRunClarificationWithConflict:
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        mock_auggie.run_print.assert_called_once()
-        prompt = mock_auggie.run_print.call_args[0][0]
+        mock_auggie.run_streaming.assert_called_once()
+        prompt = mock_auggie.run_streaming.call_args[0][0]
 
         # Verify conflict-specific context is NOT in prompt
         assert "FIRST priority" not in prompt
@@ -981,7 +958,7 @@ class TestRunClarificationWithConflict:
         """Prompt does not include conflict context when conflict_detected but summary is empty."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
-        mock_auggie.run_print.return_value = True
+        mock_auggie.run_streaming.return_value = (True, "output")
 
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
@@ -992,8 +969,8 @@ class TestRunClarificationWithConflict:
 
         _run_clarification(workflow_state, mock_auggie, plan_path)
 
-        mock_auggie.run_print.assert_called_once()
-        prompt = mock_auggie.run_print.call_args[0][0]
+        mock_auggie.run_streaming.assert_called_once()
+        prompt = mock_auggie.run_streaming.call_args[0][0]
 
         # Verify conflict-specific context is NOT in prompt (empty summary)
         assert "FIRST priority" not in prompt

@@ -7,7 +7,7 @@ a task list from the implementation plan with user approval.
 import re
 from pathlib import Path
 
-from spec.integrations.auggie import AuggieClient
+from spec.integrations.backends.base import AIBackend
 from spec.ui.menus import TaskReviewChoice, show_task_review_menu
 from spec.ui.prompts import prompt_confirm, prompt_enter
 from spec.utils.console import (
@@ -24,7 +24,7 @@ from spec.workflow.state import WorkflowState
 from spec.workflow.tasks import parse_task_list
 
 
-def step_2_create_tasklist(state: WorkflowState, auggie: AuggieClient) -> bool:
+def step_2_create_tasklist(state: WorkflowState, backend: AIBackend) -> bool:
     """Execute Step 2: Create task list.
 
     This step:
@@ -35,7 +35,7 @@ def step_2_create_tasklist(state: WorkflowState, auggie: AuggieClient) -> bool:
 
     Args:
         state: Current workflow state
-        auggie: Auggie CLI client
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if task list was created and approved
@@ -61,7 +61,7 @@ def step_2_create_tasklist(state: WorkflowState, auggie: AuggieClient) -> bool:
             # Generate task list
             print_step("Generating task list from plan...")
 
-            if not _generate_tasklist(state, plan_path, tasklist_path):
+            if not _generate_tasklist(state, plan_path, tasklist_path, backend):
                 print_error("Failed to generate task list")
                 if not prompt_confirm("Retry?", default=True):
                     return False
@@ -277,6 +277,7 @@ def _generate_tasklist(
     state: WorkflowState,
     plan_path: Path,
     tasklist_path: Path,
+    backend: AIBackend,
 ) -> bool:
     """Generate task list from implementation plan using subagent.
 
@@ -287,6 +288,7 @@ def _generate_tasklist(
         state: Current workflow state
         plan_path: Path to implementation plan
         tasklist_path: Path to save task list
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if task list was generated and contains valid tasks
@@ -301,13 +303,10 @@ Implementation Plan:
 
 Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
 
-    # Use subagent - model comes from agent definition
-    auggie_client = AuggieClient()
-
     # Use run_print_with_output to capture AI output
-    success, output = auggie_client.run_print_with_output(
+    success, output = backend.run_print_with_output(
         prompt,
-        agent=state.subagent_names["tasklist"],
+        subagent=state.subagent_names["tasklist"],
         dont_save_session=True,
     )
 
@@ -348,7 +347,7 @@ Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
 
     # Post-process: extract test-related work from FUNDAMENTAL to INDEPENDENT
     print_step("Post-processing task list (extracting tests to independent)...")
-    if not _post_process_tasklist(state, tasklist_path):
+    if not _post_process_tasklist(state, tasklist_path, backend):
         print_warning("Post-processing failed, using original task list")
         # Continue with original - post-processing is best-effort
 
@@ -407,7 +406,7 @@ def _fundamental_section_has_test_keywords(content: str) -> bool:
     return False
 
 
-def _post_process_tasklist(state: WorkflowState, tasklist_path: Path) -> bool:
+def _post_process_tasklist(state: WorkflowState, tasklist_path: Path, backend: AIBackend) -> bool:
     """Post-process task list to extract test-related work from FUNDAMENTAL tasks.
 
     Uses the spec-tasklist-refiner agent to:
@@ -420,6 +419,7 @@ def _post_process_tasklist(state: WorkflowState, tasklist_path: Path) -> bool:
     Args:
         state: Current workflow state
         tasklist_path: Path to the task list file
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if post-processing succeeded, False otherwise
@@ -444,11 +444,9 @@ def _post_process_tasklist(state: WorkflowState, tasklist_path: Path) -> bool:
 
 Output ONLY the refined task list markdown."""
 
-    auggie_client = AuggieClient()
-
-    success, output = auggie_client.run_print_with_output(
+    success, output = backend.run_print_with_output(
         prompt,
-        agent=state.subagent_names["tasklist_refiner"],
+        subagent=state.subagent_names["tasklist_refiner"],
         dont_save_session=True,
     )
 

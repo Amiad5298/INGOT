@@ -7,7 +7,7 @@ an implementation plan based on the Jira ticket.
 import os
 from pathlib import Path
 
-from spec.integrations.auggie import AuggieClient
+from spec.integrations.backends.base import AIBackend
 from spec.ui.prompts import prompt_confirm
 from spec.utils.console import (
     console,
@@ -63,12 +63,14 @@ def _create_plan_log_dir(safe_ticket_id: str) -> Path:
 def _generate_plan_with_tui(
     state: WorkflowState,
     plan_path: Path,
+    backend: AIBackend,
 ) -> bool:
     """Generate plan with TUI progress display using subagent.
 
     Args:
         state: Current workflow state.
         plan_path: Path where the plan will be saved.
+        backend: AI backend instance for agent interactions.
 
     Returns:
         True if plan generation succeeded.
@@ -89,12 +91,10 @@ def _generate_plan_with_tui(
     # Build minimal prompt - agent has the instructions
     prompt = _build_minimal_prompt(state, plan_path)
 
-    auggie_client = AuggieClient()
-
     with ui:
-        success, _output = auggie_client.run_with_callback(
+        success, _output = backend.run_with_callback(
             prompt,
-            agent=state.subagent_names["planner"],
+            subagent=state.subagent_names["planner"],
             output_callback=ui.handle_output_line,
             dont_save_session=True,
         )
@@ -141,7 +141,7 @@ Codebase context will be retrieved automatically."""
     return prompt
 
 
-def step_1_create_plan(state: WorkflowState, auggie: AuggieClient) -> bool:
+def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     """Execute Step 1: Create implementation plan.
 
     This step:
@@ -154,7 +154,7 @@ def step_1_create_plan(state: WorkflowState, auggie: AuggieClient) -> bool:
 
     Args:
         state: Current workflow state
-        auggie: Auggie CLI client
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if plan was created successfully
@@ -174,7 +174,7 @@ def step_1_create_plan(state: WorkflowState, auggie: AuggieClient) -> bool:
     print_step("Generating implementation plan...")
     plan_path = state.get_plan_path()
 
-    success = _generate_plan_with_tui(state, plan_path)
+    success = _generate_plan_with_tui(state, plan_path, backend)
 
     if not success:
         print_error("Failed to generate implementation plan")
@@ -195,7 +195,7 @@ def step_1_create_plan(state: WorkflowState, auggie: AuggieClient) -> bool:
 
         # Clarification step (optional) - happens AFTER plan creation
         if not state.skip_clarification:
-            if not _run_clarification(state, auggie, plan_path):
+            if not _run_clarification(state, backend, plan_path):
                 return False
             # Display updated plan after clarification
             _display_plan_summary(plan_path)
@@ -212,7 +212,7 @@ def step_1_create_plan(state: WorkflowState, auggie: AuggieClient) -> bool:
         return False
 
 
-def _run_clarification(state: WorkflowState, auggie: AuggieClient, plan_path: Path) -> bool:
+def _run_clarification(state: WorkflowState, backend: AIBackend, plan_path: Path) -> bool:
     """Run clarification step with user.
 
     This happens AFTER the plan is created. The AI reviews the plan and asks
@@ -220,7 +220,7 @@ def _run_clarification(state: WorkflowState, auggie: AuggieClient, plan_path: Pa
 
     Args:
         state: Current workflow state
-        auggie: Auggie CLI client for running clarification
+        backend: AI backend instance for running clarification
         plan_path: Path to the created plan file
 
     Returns:
@@ -288,12 +288,12 @@ A2: [My answer]
 
 If the plan is complete and clear, simply respond with 'No clarifications needed - plan is comprehensive.' and do not modify the file."""
 
-    print_step("Running: auggie (interactive mode)")
+    print_step("Running clarification via AI backend")
     print_info(f"Using agent: {state.subagent_names['planner']}")
     console.print()
 
-    # Use the passed auggie client for clarification (same agent that created the plan)
-    success = auggie.run_print(prompt, agent=state.subagent_names["planner"])
+    # Use streaming mode - backend operates non-interactively, prompt contains all context
+    success, _output = backend.run_streaming(prompt, subagent=state.subagent_names["planner"])
 
     console.print()
     if success:

@@ -36,11 +36,9 @@ from concurrent.futures import (
 from pathlib import Path
 from typing import Literal
 
-from spec.integrations.auggie import (
-    AuggieClient,
-    AuggieRateLimitError,
-    _looks_like_rate_limit,
-)
+from spec.integrations.backends.base import AIBackend
+from spec.integrations.backends.errors import BackendRateLimitError
+from spec.integrations.backends.factory import BackendFactory
 from spec.integrations.git import get_current_branch, is_dirty
 from spec.ui.log_buffer import TaskLogBuffer
 from spec.ui.prompts import prompt_confirm
@@ -149,6 +147,7 @@ def _capture_baseline_for_diffs(state: WorkflowState) -> bool:
 def step_3_execute(
     state: WorkflowState,
     *,
+    backend: AIBackend,
     use_tui: bool | None = None,
     verbose: bool = False,
 ) -> bool:
@@ -167,6 +166,7 @@ def step_3_execute(
 
     Args:
         state: Current workflow state
+        backend: AI backend instance for agent interactions
         use_tui: Override for TUI mode. None = auto-detect.
         verbose: Enable verbose mode in TUI (expanded log panel).
 
@@ -190,6 +190,10 @@ def step_3_execute(
 
     # Parse all tasks
     tasks = parse_task_list(tasklist_path.read_text())
+
+    # Disable parallel execution if backend doesn't support it
+    if not backend.supports_parallel:
+        state.parallel_execution_enabled = False
 
     # Separate into phases
     pending_fundamental = get_pending_fundamental_tasks(tasks)
@@ -234,12 +238,13 @@ def step_3_execute(
                 plan_path,
                 tasklist_path,
                 log_dir,
+                backend=backend,
                 verbose=verbose,
                 phase="fundamental",
             )
         else:
             phase1_failed = _execute_fallback(
-                state, pending_fundamental, plan_path, tasklist_path, log_dir
+                state, pending_fundamental, plan_path, tasklist_path, log_dir, backend=backend
             )
 
         failed_tasks.extend(phase1_failed)
@@ -252,7 +257,7 @@ def step_3_execute(
     # PHASE 1 REVIEW CHECKPOINT
     # Run after TUI context manager has exited to avoid display corruption
     if pending_fundamental and state.enable_phase_review and not failed_tasks:
-        review_passed = _run_phase_review(state, log_dir, phase="fundamental")
+        review_passed = _run_phase_review(state, log_dir, phase="fundamental", backend=backend)
         if not review_passed:
             # User explicitly chose to stop
             print_info("Stopping after Phase 1 review.")
@@ -269,11 +274,12 @@ def step_3_execute(
                 plan_path,
                 tasklist_path,
                 log_dir,
+                backend=backend,
                 verbose=verbose,
             )
         else:
             phase2_failed = _execute_parallel_fallback(
-                state, pending_independent, plan_path, tasklist_path, log_dir
+                state, pending_independent, plan_path, tasklist_path, log_dir, backend=backend
             )
 
         failed_tasks.extend(phase2_failed)
@@ -287,12 +293,13 @@ def step_3_execute(
                 plan_path,
                 tasklist_path,
                 log_dir,
+                backend=backend,
                 verbose=verbose,
                 phase="independent",
             )
         else:
             phase2_failed = _execute_fallback(
-                state, pending_independent, plan_path, tasklist_path, log_dir
+                state, pending_independent, plan_path, tasklist_path, log_dir, backend=backend
             )
         failed_tasks.extend(phase2_failed)
 
@@ -307,12 +314,12 @@ def step_3_execute(
 
     # Post-execution steps
     _show_summary(state, failed_tasks)
-    _run_post_implementation_tests(state)
+    _run_post_implementation_tests(state, backend)
 
     # FINAL REVIEW CHECKPOINT
     # Run after tests but before commit instructions
     if state.enable_phase_review:
-        review_passed = _run_phase_review(state, log_dir, phase="final")
+        review_passed = _run_phase_review(state, log_dir, phase="final", backend=backend)
         if not review_passed:
             # User explicitly chose to stop
             print_warning(
@@ -333,6 +340,7 @@ def _execute_with_tui(
     tasklist_path: Path,
     log_dir: Path,
     *,
+    backend: AIBackend,
     verbose: bool = False,
     phase: str = "sequential",
 ) -> list[str]:
@@ -344,6 +352,7 @@ def _execute_with_tui(
         plan_path: Path to plan file
         tasklist_path: Path to task list file
         log_dir: Directory for log files
+        backend: AI backend instance for agent interactions
         verbose: Enable verbose mode (expanded log panel).
         phase: Phase identifier for logging ("fundamental", "independent", "sequential").
 
@@ -403,6 +412,7 @@ def _execute_with_tui(
                 state,
                 task,
                 plan_path,
+                backend=backend,
                 callback=make_callback(i, task.name),
                 is_parallel=False,
             )
@@ -474,6 +484,8 @@ def _execute_fallback(
     plan_path: Path,
     tasklist_path: Path,
     log_dir: Path,
+    *,
+    backend: AIBackend,
 ) -> list[str]:
     """Execute tasks with fallback (non-TUI) display.
 
@@ -483,6 +495,7 @@ def _execute_fallback(
         plan_path: Path to plan file
         tasklist_path: Path to task list file
         log_dir: Directory for log files
+        backend: AI backend instance for agent interactions
 
     Returns:
         List of failed task names
@@ -507,6 +520,7 @@ def _execute_fallback(
                 state,
                 task,
                 plan_path,
+                backend=backend,
                 callback=output_callback,
                 is_parallel=False,
             )
@@ -535,11 +549,14 @@ def _execute_parallel_fallback(
     plan_path: Path,
     tasklist_path: Path,
     log_dir: Path,
+    *,
+    backend: AIBackend,
 ) -> list[str]:
     """Execute independent tasks in parallel (non-TUI mode) with rate limit handling.
 
     Uses ThreadPoolExecutor for concurrent AI agent execution.
     Each task runs in complete isolation with dont_save_session=True.
+    Each worker creates a fresh backend instance via BackendFactory.
     Rate limit errors trigger exponential backoff retry.
     Implements fail_fast semantics with stop_flag for early termination.
 
@@ -549,6 +566,7 @@ def _execute_parallel_fallback(
         plan_path: Path to plan file
         tasklist_path: Path to task list file
         log_dir: Directory for log files
+        backend: AI backend instance (platform used to create per-worker backends)
 
     Returns:
         List of failed task names
@@ -564,6 +582,8 @@ def _execute_parallel_fallback(
     def execute_single_task(task_info: tuple[int, Task]) -> tuple[Task, bool | None]:
         """Execute a single task with retry handling (runs in thread).
 
+        Each worker creates its own fresh backend instance for thread safety.
+
         Returns:
             Tuple of (task, success) where success is:
             - True if task succeeded
@@ -576,24 +596,31 @@ def _execute_parallel_fallback(
         if stop_flag.is_set():
             return task, None  # Skipped
 
+        # Create a fresh backend for this worker thread, forwarding the model
+        worker_backend = BackendFactory.create(backend.platform, model=backend.model)
+
         log_filename = format_log_filename(idx, task.name)
         log_path = log_dir / log_filename
 
-        with TaskLogBuffer(log_path) as log_buffer:
+        try:
+            with TaskLogBuffer(log_path) as log_buffer:
 
-            def output_callback(line: str) -> None:
-                log_buffer.write(line)
+                def output_callback(line: str) -> None:
+                    log_buffer.write(line)
 
-            # Use retry-enabled execution with is_parallel=True
-            success = _execute_task_with_retry(
-                state,
-                task,
-                plan_path,
-                callback=output_callback,
-                is_parallel=True,
-            )
+                # Use retry-enabled execution with is_parallel=True
+                success = _execute_task_with_retry(
+                    state,
+                    task,
+                    plan_path,
+                    backend=worker_backend,
+                    callback=output_callback,
+                    is_parallel=True,
+                )
 
-        return task, success
+            return task, success
+        finally:
+            worker_backend.close()
 
     # Execute in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -639,6 +666,7 @@ def _execute_parallel_with_tui(
     tasklist_path: Path,
     log_dir: Path,
     *,
+    backend: AIBackend,
     verbose: bool = False,
 ) -> list[str]:
     """Execute independent tasks in parallel with TUI display and rate limit handling.
@@ -647,6 +675,7 @@ def _execute_parallel_with_tui(
     - Worker threads ONLY call tui.post_event() for TASK_STARTED and TASK_OUTPUT
     - Main thread pumps with wait(timeout=0.1) and calls tui.refresh() each loop
     - TASK_FINISHED events are emitted from main thread after future completes
+    - Each worker creates a fresh backend instance via BackendFactory
 
     Args:
         state: Current workflow state
@@ -654,6 +683,7 @@ def _execute_parallel_with_tui(
         plan_path: Path to plan file
         tasklist_path: Path to task list file
         log_dir: Directory for log files
+        backend: AI backend instance (platform used to create per-worker backends)
         verbose: Enable verbose mode
 
     Returns:
@@ -683,6 +713,8 @@ def _execute_parallel_with_tui(
     def execute_single_task_worker(task_info: tuple[int, Task]) -> tuple[int, Task, bool]:
         """Worker thread: execute task, post TASK_STARTED/TASK_OUTPUT via post_event.
 
+        Each worker creates its own fresh backend instance for thread safety.
+
         Returns:
             Tuple of (idx, task, success) - TASK_FINISHED is emitted by main thread.
         """
@@ -690,10 +722,10 @@ def _execute_parallel_with_tui(
 
         # Early exit if stop flag set (fail-fast triggered by another task)
         if stop_flag.is_set():
-            # Return special marker for skipped (success=None would be ideal but
-            # we use a sentinel: raise a specific exception or return a tuple)
-            # We'll handle this case in the main loop
             return idx, task, None  # type: ignore[return-value]
+
+        # Create a fresh backend for this worker thread, forwarding the model
+        worker_backend = BackendFactory.create(backend.platform, model=backend.model)
 
         # Post TASK_STARTED event to queue (thread-safe)
         start_event = create_task_started_event(idx, task.name)
@@ -711,6 +743,7 @@ def _execute_parallel_with_tui(
                 state,
                 task,
                 plan_path,
+                backend=worker_backend,
                 callback=make_parallel_callback(idx, task.name),
                 is_parallel=True,
             )
@@ -719,6 +752,8 @@ def _execute_parallel_with_tui(
             # Unexpected crash - post error output and return failure
             tui.post_event(create_task_output_event(idx, task.name, f"[ERROR] {e}"))
             return idx, task, False
+        finally:
+            worker_backend.close()
 
     with tui:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -796,6 +831,7 @@ def _execute_task(
     state: WorkflowState,
     task: Task,
     plan_path: Path,
+    backend: AIBackend,
 ) -> bool:
     """Execute a single task using the spec-implementer agent.
 
@@ -809,20 +845,19 @@ def _execute_task(
         state: Current workflow state
         task: Task to execute
         plan_path: Path to the plan file
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if AI reported success
     """
-    auggie_client = AuggieClient()  # Model comes from agent definition file
-
     # Build minimal prompt - pass plan path reference, not full content
     # The agent uses codebase-retrieval to read relevant sections
     prompt = _build_task_prompt(task, plan_path, is_parallel=False)
 
     try:
-        success, _ = auggie_client.run_print_with_output(
+        success, _ = backend.run_print_with_output(
             prompt,
-            agent=state.subagent_names["implementer"],
+            subagent=state.subagent_names["implementer"],
             dont_save_session=True,
         )
         if success:
@@ -840,18 +875,20 @@ def _execute_task_with_callback(
     task: Task,
     plan_path: Path,
     *,
+    backend: AIBackend,
     callback: Callable[[str], None],
     is_parallel: bool = False,
 ) -> bool:
     """Execute a single task with streaming output callback using spec-implementer agent.
 
-    Uses AuggieClient.run_with_callback() for streaming output.
+    Uses backend.run_with_callback() for streaming output.
     Each output line is passed to the callback function.
 
     Args:
         state: Current workflow state
         task: Task to execute
         plan_path: Path to the plan file
+        backend: AI backend instance for agent interactions
         callback: Function called for each output line
         is_parallel: Whether this task runs in parallel with others
 
@@ -859,25 +896,25 @@ def _execute_task_with_callback(
         True if AI reported success
 
     Raises:
-        AuggieRateLimitError: If the output indicates a rate limit error
+        BackendRateLimitError: If the output indicates a rate limit error
     """
-    auggie_client = AuggieClient()  # Model comes from agent definition file
-
     # Build minimal prompt - pass plan path reference, not full content
     # The agent uses codebase-retrieval to read relevant sections
     prompt = _build_task_prompt(task, plan_path, is_parallel=is_parallel)
 
     try:
-        success, output = auggie_client.run_with_callback(
+        success, output = backend.run_with_callback(
             prompt,
-            agent=state.subagent_names["implementer"],
+            subagent=state.subagent_names["implementer"],
             output_callback=callback,
             dont_save_session=True,
         )
-        if not success and _looks_like_rate_limit(output):
-            raise AuggieRateLimitError("Rate limit detected", output=output)
+        if not success and backend.detect_rate_limit(output):
+            raise BackendRateLimitError(
+                "Rate limit detected", output=output, backend_name=backend.name
+            )
         return success
-    except AuggieRateLimitError:
+    except BackendRateLimitError:
         raise  # Let retry decorator handle
     except Exception as e:
         callback(f"[ERROR] Task execution crashed: {e}")
@@ -888,6 +925,8 @@ def _execute_task_with_retry(
     state: WorkflowState,
     task: Task,
     plan_path: Path,
+    *,
+    backend: AIBackend,
     callback: Callable[[str], None] | None = None,
     is_parallel: bool = False,
 ) -> bool:
@@ -900,6 +939,7 @@ def _execute_task_with_retry(
         state: Current workflow state
         task: Task to execute
         plan_path: Path to plan file
+        backend: AI backend instance for agent interactions
         callback: Output callback for streaming
         is_parallel: Whether this task runs in parallel with others
 
@@ -912,10 +952,10 @@ def _execute_task_with_retry(
     if config.max_retries <= 0:
         if callback:
             return _execute_task_with_callback(
-                state, task, plan_path, callback=callback, is_parallel=is_parallel
+                state, task, plan_path, backend=backend, callback=callback, is_parallel=is_parallel
             )
         else:
-            return _execute_task(state, task, plan_path)
+            return _execute_task(state, task, plan_path, backend)
 
     def log_retry(attempt: int, delay: float, error: Exception) -> None:
         """Log retry attempts."""
@@ -928,10 +968,10 @@ def _execute_task_with_retry(
     def execute_with_retry() -> bool:
         if callback:
             return _execute_task_with_callback(
-                state, task, plan_path, callback=callback, is_parallel=is_parallel
+                state, task, plan_path, backend=backend, callback=callback, is_parallel=is_parallel
             )
         else:
-            return _execute_task(state, task, plan_path)
+            return _execute_task(state, task, plan_path, backend)
 
     try:
         return execute_with_retry()
@@ -987,7 +1027,7 @@ def _show_summary(state: WorkflowState, failed_tasks: list[str] | None = None) -
     console.print()
 
 
-def _run_post_implementation_tests(state: WorkflowState) -> None:
+def _run_post_implementation_tests(state: WorkflowState, backend: AIBackend) -> None:
     """Run post-implementation verification tests using AI.
 
     Finds and runs tests that cover the code changed in this Step 3 run.
@@ -996,6 +1036,10 @@ def _run_post_implementation_tests(state: WorkflowState) -> None:
 
     Uses TaskRunnerUI in single-operation mode to provide a consistent
     collapsible UI with verbose toggle, matching the UX of Steps 1 and 3.
+
+    Args:
+        state: Current workflow state
+        backend: AI backend instance for agent interactions
     """
     from spec.ui.tui import TaskRunnerUI
     from spec.workflow.events import format_run_directory
@@ -1020,14 +1064,11 @@ def _run_post_implementation_tests(state: WorkflowState) -> None:
     )
     ui.set_log_path(log_path)
 
-    # Use spec-implementer subagent for running tests
-    auggie_client = AuggieClient()
-
     try:
         with ui:
-            success, _ = auggie_client.run_with_callback(
+            success, _ = backend.run_with_callback(
                 POST_IMPLEMENTATION_TEST_PROMPT,
-                agent=state.subagent_names["implementer"],
+                subagent=state.subagent_names["implementer"],
                 output_callback=ui.handle_output_line,
                 dont_save_session=True,
             )

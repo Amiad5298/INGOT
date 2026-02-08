@@ -65,6 +65,11 @@ class AIBackend(Protocol):
     Note: This protocol does NOT include run_print() (interactive mode).
     SPEC owns interactive UX; backends operate in streaming/print mode only.
 
+    Note on timeout_seconds: Timeout enforcement is optional per backend.
+    run_with_callback() enforces timeouts via BaseBackend._run_streaming_with_timeout().
+    Other methods (run_print_with_output, run_print_quiet) may accept timeout_seconds
+    per the protocol but not enforce it. Check backend-specific docs for details.
+
     Example:
         >>> def run_workflow(backend: AIBackend) -> None:
         ...     success, output = backend.run_with_callback(
@@ -91,6 +96,16 @@ class AIBackend(Protocol):
 
         Returns the AgentPlatform enum member for this backend.
         Used for configuration and logging.
+        """
+        ...
+
+    @property
+    def model(self) -> str:
+        """Default model for this backend instance.
+
+        Returns the model string configured at creation time.
+        Used by BackendFactory to forward the model when creating
+        fresh backend instances (e.g., for parallel execution workers).
         """
         ...
 
@@ -318,6 +333,11 @@ class BaseBackend(ABC):
         self._model = model
 
     @property
+    def model(self) -> str:
+        """Default model for this backend instance."""
+        return self._model
+
+    @property
     @abstractmethod
     def name(self) -> str:
         """Human-readable backend name.
@@ -529,7 +549,7 @@ class BaseBackend(ABC):
                     process.wait()
 
         watchdog_thread: threading.Thread | None = None
-        if timeout_seconds:
+        if timeout_seconds is not None:
             watchdog_thread = threading.Thread(target=watchdog, daemon=True)
             watchdog_thread.start()
 

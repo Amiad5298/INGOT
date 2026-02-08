@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 from spec.config.manager import ConfigManager
 from spec.integrations.agents import ensure_agents_installed
-from spec.integrations.auggie import AuggieClient
+from spec.integrations.backends.base import AIBackend
 from spec.integrations.git import (
     create_branch,
     get_current_branch,
@@ -40,12 +40,13 @@ from spec.workflow.state import RateLimitConfig, WorkflowState
 from spec.workflow.step1_plan import step_1_create_plan
 from spec.workflow.step2_tasklist import step_2_create_tasklist
 from spec.workflow.step3_execute import step_3_execute
-from spec.workflow.step4_update_docs import step_4_update_docs
+from spec.workflow.step4_update_docs import Step4Result, step_4_update_docs
 
 
 def run_spec_driven_workflow(
     ticket: GenericTicket,
     config: ConfigManager,
+    backend: AIBackend,
     planning_model: str = "",
     implementation_model: str = "",
     skip_clarification: bool = False,
@@ -71,6 +72,7 @@ def run_spec_driven_workflow(
     Args:
         ticket: Ticket information (platform-agnostic GenericTicket)
         config: Configuration manager
+        backend: AI backend instance for all agent interactions
         planning_model: Model for planning phases
         implementation_model: Model for implementation phase
         skip_clarification: Skip clarification step
@@ -112,6 +114,7 @@ def run_spec_driven_workflow(
         rate_limit_config=rate_limit_config or RateLimitConfig(),
         enable_phase_review=enable_phase_review,
         dirty_tree_policy=dirty_tree_policy,
+        backend_platform=backend.platform,
         subagent_names={
             "planner": config.settings.subagent_planner,
             "tasklist": config.settings.subagent_tasklist,
@@ -122,10 +125,7 @@ def run_spec_driven_workflow(
         },
     )
 
-    # Initialize Auggie client
-    auggie = AuggieClient()
-
-    with workflow_cleanup(state):
+    with workflow_cleanup(state, backend):
         # Handle dirty state before starting
         # This must happen BEFORE ensure_agents_installed() to avoid discarding
         # the .gitignore updates that ensure_agents_installed() makes
@@ -160,7 +160,7 @@ def run_spec_driven_workflow(
                 # Fail-Fast Semantic Check: Detect conflicts between ticket and user context
                 print_step("Checking for conflicts between ticket and your context...")
                 conflict_detected, conflict_summary = _detect_context_conflict(
-                    state.ticket, state.user_context, auggie, state
+                    state.ticket, state.user_context, backend, state
                 )
                 state.conflict_detected = conflict_detected
                 state.conflict_summary = conflict_summary
@@ -191,26 +191,26 @@ def run_spec_driven_workflow(
         # Step 1: Create implementation plan
         if state.current_step <= 1:
             print_info("Starting Step 1: Create Implementation Plan")
-            if not step_1_create_plan(state, auggie):
+            if not step_1_create_plan(state, backend):
                 return False
 
         # Step 2: Create task list
         if state.current_step <= 2:
             print_info("Starting Step 2: Create Task List")
-            if not step_2_create_tasklist(state, auggie):
+            if not step_2_create_tasklist(state, backend):
                 return False
 
         # Step 3: Execute implementation
         if state.current_step <= 3:
             print_info("Starting Step 3: Execute Implementation")
-            if not step_3_execute(state, use_tui=use_tui, verbose=verbose):
+            if not step_3_execute(state, backend=backend, use_tui=use_tui, verbose=verbose):
                 return False
 
         # Step 4: Update documentation (optional, non-blocking)
         if auto_update_docs:
             print_info("Starting Step 4: Update Documentation")
             # Note: This step is non-blocking - failures don't stop the workflow
-            step4_result = step_4_update_docs(state)
+            step4_result: Step4Result = step_4_update_docs(state, backend=backend)
             if step4_result.non_doc_reverted:
                 log_message(
                     f"Step 4 enforcement: reverted {len(step4_result.non_doc_reverted)} non-doc file(s)"
@@ -291,13 +291,17 @@ def _show_completion(state: WorkflowState) -> None:
 
 
 @contextmanager
-def workflow_cleanup(state: WorkflowState) -> Generator[None, None, None]:
+def workflow_cleanup(
+    state: WorkflowState, backend: AIBackend | None = None
+) -> Generator[None, None, None]:
     """Context manager for workflow cleanup on error.
 
     Handles cleanup when workflow is interrupted or fails.
+    Ensures backend resources are released.
 
     Args:
         state: Workflow state
+        backend: Optional AI backend to close on cleanup
 
     Yields:
         None
@@ -318,6 +322,9 @@ def workflow_cleanup(state: WorkflowState) -> Generator[None, None, None]:
         print_error(f"\nUnexpected error: {e}")
         _offer_cleanup(state, original_branch)
         raise
+    finally:
+        if backend is not None:
+            backend.close()
 
 
 def _offer_cleanup(state: WorkflowState, original_branch: str) -> None:

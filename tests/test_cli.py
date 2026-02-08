@@ -461,7 +461,7 @@ class TestDirtyTreePolicy:
         from spec.cli import _run_workflow
         from spec.workflow.state import DirtyTreePolicy
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 3
         mock_config.settings.parallel_execution_enabled = True
@@ -490,7 +490,7 @@ class TestDirtyTreePolicy:
         from spec.cli import _run_workflow
         from spec.workflow.state import DirtyTreePolicy
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 3
         mock_config.settings.parallel_execution_enabled = True
@@ -519,7 +519,7 @@ class TestDirtyTreePolicy:
 
         from spec.cli import _run_workflow
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 3
         mock_config.settings.parallel_execution_enabled = True
@@ -578,7 +578,7 @@ class TestEffectiveValueOverrides:
         """CLI --max-parallel 3 overrides config max_parallel_tasks=5."""
         from spec.cli import _run_workflow
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 5
         mock_config.settings.parallel_execution_enabled = True
@@ -608,7 +608,7 @@ class TestEffectiveValueOverrides:
         """When CLI max_parallel is None, uses config.settings.max_parallel_tasks."""
         from spec.cli import _run_workflow
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 5
         mock_config.settings.parallel_execution_enabled = True
@@ -638,7 +638,7 @@ class TestEffectiveValueOverrides:
         """CLI --no-fail-fast (False) overrides config fail_fast=True."""
         from spec.cli import _run_workflow
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 3
         mock_config.settings.parallel_execution_enabled = True
@@ -666,7 +666,7 @@ class TestEffectiveValueOverrides:
         """When CLI fail_fast is None, uses config.settings.fail_fast."""
         from spec.cli import _run_workflow
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 3
         mock_config.settings.parallel_execution_enabled = True
@@ -696,7 +696,7 @@ class TestEffectiveValueOverrides:
         from spec.cli import _run_workflow
         from spec.utils.errors import ExitCode
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 10  # Invalid config value
         mock_config.settings.parallel_execution_enabled = True
@@ -725,7 +725,7 @@ class TestEffectiveValueOverrides:
         """CLI --no-auto-update-docs overrides config auto_update_docs=True."""
         from spec.cli import _run_workflow
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 3
         mock_config.settings.parallel_execution_enabled = True
@@ -755,7 +755,7 @@ class TestEffectiveValueOverrides:
         """When CLI auto_update_docs is None, uses config.settings.auto_update_docs."""
         from spec.cli import _run_workflow
 
-        mock_run_async.return_value = MagicMock()
+        mock_run_async.return_value = (MagicMock(), MagicMock())
         mock_config = MagicMock()
         mock_config.settings.max_parallel_tasks = 3
         mock_config.settings.parallel_execution_enabled = True
@@ -1062,8 +1062,10 @@ class TestFetchTicketAsyncIntegration:
         mock_config = MagicMock()
 
         # Patch create_ticket_service_from_config to return (service, backend) tuple
+        mock_backend = MagicMock()
+
         async def mock_create_service_from_config(*args, **kwargs):
-            return mock_service, MagicMock()
+            return mock_service, mock_backend
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -1075,7 +1077,9 @@ class TestFetchTicketAsyncIntegration:
                 platform_hint=None,
             )
 
-        assert result == mock_ticket
+        ticket_result, backend_result = result
+        assert ticket_result == mock_ticket
+        assert backend_result == mock_backend
         mock_service.get_ticket.assert_called_once_with("PROJ-123")
 
     @pytest.mark.asyncio
@@ -1099,9 +1103,10 @@ class TestFetchTicketAsyncIntegration:
         mock_service.__aexit__ = AsyncMock(return_value=None)
 
         mock_config = MagicMock()
+        mock_backend = MagicMock()
 
         async def mock_create_service_from_config(*args, **kwargs):
-            return mock_service, MagicMock()
+            return mock_service, mock_backend
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -1113,7 +1118,9 @@ class TestFetchTicketAsyncIntegration:
                 platform_hint=Platform.LINEAR,
             )
 
-        assert result == mock_ticket
+        ticket_result, backend_result = result
+        assert ticket_result == mock_ticket
+        assert backend_result == mock_backend
         # Should have converted to Linear URL format
         mock_service.get_ticket.assert_called_once_with("https://linear.app/team/issue/ENG-456")
 
@@ -1139,9 +1146,10 @@ class TestFetchTicketAsyncIntegration:
 
         mock_config = MagicMock()
         original_url = "https://jira.example.com/browse/PROJ-123"
+        mock_backend = MagicMock()
 
         async def mock_create_service_from_config(*args, **kwargs):
-            return mock_service, MagicMock()
+            return mock_service, mock_backend
 
         with patch(
             "spec.cli.create_ticket_service_from_config",
@@ -1153,7 +1161,9 @@ class TestFetchTicketAsyncIntegration:
                 platform_hint=Platform.LINEAR,  # Hint should be ignored for URLs
             )
 
-        assert result == mock_ticket
+        ticket_result, backend_result = result
+        assert ticket_result == mock_ticket
+        assert backend_result == mock_backend
         # URL should pass through unchanged
         mock_service.get_ticket.assert_called_once_with(original_url)
 

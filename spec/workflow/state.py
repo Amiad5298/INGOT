@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from spec.config.fetch_config import AgentPlatform
 from spec.integrations.providers import GenericTicket
 
 # Import subagent constants as single source of truth
@@ -139,6 +140,9 @@ class WorkflowState:
 
     # Dirty tree policy for baseline diff operations
     dirty_tree_policy: DirtyTreePolicy = DirtyTreePolicy.FAIL_FAST
+
+    # AI Backend platform (set by runner from injected backend)
+    backend_platform: AgentPlatform | None = None
 
     # Subagent configuration (names loaded from settings)
     # Defaults from auggie.py constants - the single source of truth

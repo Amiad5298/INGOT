@@ -465,7 +465,6 @@ class TestOfferCleanupBranchInfo:
 class TestRunSpecDrivenWorkflowInit:
     """Tests for run_spec_driven_workflow initialization."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -486,7 +485,7 @@ class TestRunSpecDrivenWorkflowInit:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -503,6 +502,7 @@ class TestRunSpecDrivenWorkflowInit:
         result = run_spec_driven_workflow(
             ticket=ticket,
             config=mock_config,
+            backend=mock_backend,
             planning_model="custom-planning",
             implementation_model="custom-impl",
             skip_clarification=True,
@@ -527,7 +527,6 @@ class TestRunSpecDrivenWorkflowInit:
 class TestRunSpecDrivenWorkflowDirtyState:
     """Tests for run_spec_driven_workflow dirty state handling."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner.handle_dirty_state")
     @patch("spec.workflow.runner.show_git_dirty_menu")
     @patch("spec.workflow.runner.is_dirty")
@@ -538,7 +537,7 @@ class TestRunSpecDrivenWorkflowDirtyState:
         mock_is_dirty,
         mock_menu,
         mock_handle,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -548,7 +547,7 @@ class TestRunSpecDrivenWorkflowDirtyState:
         mock_menu.return_value = "stash"
         mock_handle.return_value = False  # Handling fails
 
-        result = run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        result = run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         assert result is False
         mock_menu.assert_called_once()
@@ -563,7 +562,6 @@ class TestRunSpecDrivenWorkflowDirtyState:
 class TestRunSpecDrivenWorkflowUserContext:
     """Tests for run_spec_driven_workflow user context prompt."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -586,7 +584,7 @@ class TestRunSpecDrivenWorkflowUserContext:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -601,7 +599,7 @@ class TestRunSpecDrivenWorkflowUserContext:
         mock_step2.return_value = True
         mock_step3.return_value = True
 
-        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         mock_input.assert_called_once()
         # Verify state received the context
@@ -618,7 +616,6 @@ class TestRunSpecDrivenWorkflowUserContext:
 class TestRunSpecDrivenWorkflowBranchSetup:
     """Tests for run_spec_driven_workflow branch setup and base commit."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -639,7 +636,7 @@ class TestRunSpecDrivenWorkflowBranchSetup:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -653,14 +650,13 @@ class TestRunSpecDrivenWorkflowBranchSetup:
         mock_step2.return_value = True
         mock_step3.return_value = True
 
-        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         mock_commit.assert_called_once()
         call_args = mock_step1.call_args[0]
         state = call_args[0]
         assert state.base_commit == "abc123def456"
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._setup_branch")
     @patch("spec.workflow.runner.prompt_confirm")
     @patch("spec.workflow.runner.is_dirty")
@@ -671,7 +667,7 @@ class TestRunSpecDrivenWorkflowBranchSetup:
         mock_is_dirty,
         mock_confirm,
         mock_setup_branch,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -681,7 +677,7 @@ class TestRunSpecDrivenWorkflowBranchSetup:
         mock_confirm.return_value = False
         mock_setup_branch.return_value = False  # Branch setup fails
 
-        result = run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        result = run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         assert result is False
 
@@ -694,7 +690,6 @@ class TestRunSpecDrivenWorkflowBranchSetup:
 class TestRunSpecDrivenWorkflowStepOrchestration:
     """Tests for run_spec_driven_workflow step orchestration."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -715,7 +710,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -729,13 +724,12 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step2.return_value = True
         mock_step3.return_value = True
 
-        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         mock_step1.assert_called_once()
         mock_step2.assert_called_once()
         mock_step3.assert_called_once()
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner.step_2_create_tasklist")
     @patch("spec.workflow.runner.step_1_create_plan")
     @patch("spec.workflow.runner.get_current_commit")
@@ -752,7 +746,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_commit,
         mock_step1,
         mock_step2,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -764,12 +758,11 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_commit.return_value = "abc123"
         mock_step1.return_value = False  # Step 1 fails
 
-        result = run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        result = run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         assert result is False
         mock_step2.assert_not_called()
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
     @patch("spec.workflow.runner.step_1_create_plan")
@@ -788,7 +781,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step1,
         mock_step2,
         mock_step3,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -801,12 +794,11 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step1.return_value = True
         mock_step2.return_value = False  # Step 2 fails
 
-        result = run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        result = run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         assert result is False
         mock_step3.assert_not_called()
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -827,7 +819,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -841,7 +833,7 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
         mock_step2.return_value = True
         mock_step3.return_value = True
 
-        result = run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        result = run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         assert result is True
 
@@ -854,7 +846,6 @@ class TestRunSpecDrivenWorkflowStepOrchestration:
 class TestRunSpecDrivenWorkflowCompletion:
     """Tests for run_spec_driven_workflow completion."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -875,7 +866,7 @@ class TestRunSpecDrivenWorkflowCompletion:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -889,7 +880,7 @@ class TestRunSpecDrivenWorkflowCompletion:
         mock_step2.return_value = True
         mock_step3.return_value = True
 
-        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         mock_completion.assert_called_once()
 
@@ -902,7 +893,6 @@ class TestRunSpecDrivenWorkflowCompletion:
 class TestRunSpecDrivenWorkflowStep3Arguments:
     """Tests for run_spec_driven_workflow passing correct arguments to step_3_execute."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -923,7 +913,7 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -940,6 +930,7 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         run_spec_driven_workflow(
             ticket=ticket,
             config=mock_config,
+            backend=mock_backend,
             use_tui=True,
             verbose=True,
         )
@@ -950,7 +941,6 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         assert call_kwargs["use_tui"] is True
         assert call_kwargs["verbose"] is True
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -971,7 +961,7 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -988,6 +978,7 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         run_spec_driven_workflow(
             ticket=ticket,
             config=mock_config,
+            backend=mock_backend,
             use_tui=False,
             verbose=False,
         )
@@ -998,7 +989,6 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         assert call_kwargs["use_tui"] is False
         assert call_kwargs["verbose"] is False
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -1019,7 +1009,7 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -1037,6 +1027,7 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
         run_spec_driven_workflow(
             ticket=ticket,
             config=mock_config,
+            backend=mock_backend,
         )
 
         # Verify step_3_execute was called with use_tui=None
@@ -1054,7 +1045,6 @@ class TestRunSpecDrivenWorkflowStep3Arguments:
 class TestRunSpecDrivenWorkflowResumeLogic:
     """Tests for run_spec_driven_workflow resume logic based on current_step."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -1077,7 +1067,7 @@ class TestRunSpecDrivenWorkflowResumeLogic:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -1097,7 +1087,7 @@ class TestRunSpecDrivenWorkflowResumeLogic:
         mock_state.ticket = ticket
         mock_state_class.return_value = mock_state
 
-        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         # Step 1 should NOT be called because current_step > 1
         mock_step1.assert_not_called()
@@ -1105,7 +1095,6 @@ class TestRunSpecDrivenWorkflowResumeLogic:
         mock_step2.assert_called_once()
         mock_step3.assert_called_once()
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_3_execute")
     @patch("spec.workflow.runner.step_2_create_tasklist")
@@ -1128,7 +1117,7 @@ class TestRunSpecDrivenWorkflowResumeLogic:
         mock_step2,
         mock_step3,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -1148,7 +1137,7 @@ class TestRunSpecDrivenWorkflowResumeLogic:
         mock_state.ticket = ticket
         mock_state_class.return_value = mock_state
 
-        run_spec_driven_workflow(ticket=ticket, config=mock_config)
+        run_spec_driven_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
         # Step 1 and 2 should NOT be called because current_step > 2
         mock_step1.assert_not_called()
@@ -1233,7 +1222,6 @@ class TestSetupBranchSpecialCharacters:
 class TestRunSpecDrivenWorkflowStep4:
     """Tests for run_spec_driven_workflow Step 4 documentation updates."""
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_4_update_docs")
     @patch("spec.workflow.runner.step_3_execute")
@@ -1256,7 +1244,7 @@ class TestRunSpecDrivenWorkflowStep4:
         mock_step3,
         mock_step4,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -1274,12 +1262,12 @@ class TestRunSpecDrivenWorkflowStep4:
         run_spec_driven_workflow(
             ticket=ticket,
             config=mock_config,
+            backend=mock_backend,
             auto_update_docs=True,
         )
 
         mock_step4.assert_called_once()
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_4_update_docs")
     @patch("spec.workflow.runner.step_3_execute")
@@ -1302,7 +1290,7 @@ class TestRunSpecDrivenWorkflowStep4:
         mock_step3,
         mock_step4,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -1319,12 +1307,12 @@ class TestRunSpecDrivenWorkflowStep4:
         run_spec_driven_workflow(
             ticket=ticket,
             config=mock_config,
+            backend=mock_backend,
             auto_update_docs=False,
         )
 
         mock_step4.assert_not_called()
 
-    @patch("spec.workflow.runner.AuggieClient")
     @patch("spec.workflow.runner._show_completion")
     @patch("spec.workflow.runner.step_4_update_docs")
     @patch("spec.workflow.runner.step_3_execute")
@@ -1347,7 +1335,7 @@ class TestRunSpecDrivenWorkflowStep4:
         mock_step3,
         mock_step4,
         mock_completion,
-        mock_auggie_client,
+        mock_backend,
         ticket,
         mock_config,
     ):
@@ -1366,6 +1354,7 @@ class TestRunSpecDrivenWorkflowStep4:
         result = run_spec_driven_workflow(
             ticket=ticket,
             config=mock_config,
+            backend=mock_backend,
             auto_update_docs=True,
         )
 
@@ -1447,7 +1436,7 @@ class TestDetectContextConflict:
         _detect_context_conflict(ticket, "Additional context here", mock_auggie, workflow_state)
 
         call_kwargs = mock_auggie.run_with_callback.call_args[1]
-        assert call_kwargs["agent"] == workflow_state.subagent_names["planner"]
+        assert call_kwargs["subagent"] == workflow_state.subagent_names["planner"]
 
     def test_detects_conflict_when_llm_returns_yes(self, ticket, workflow_state):
         """Returns (True, summary) when LLM detects conflict."""

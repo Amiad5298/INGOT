@@ -272,7 +272,7 @@ async def _fetch_ticket_async(
     config: ConfigManager,
     platform_hint: Platform | None = None,
     cli_backend_override: str | None = None,
-) -> GenericTicket:
+) -> tuple[GenericTicket, AIBackend]:
     """Fetch ticket using TicketService.
 
     This async function bridges the sync CLI with the async TicketService.
@@ -284,7 +284,7 @@ async def _fetch_ticket_async(
         cli_backend_override: CLI --backend flag value for runtime override
 
     Returns:
-        GenericTicket from TicketService
+        Tuple of (GenericTicket, AIBackend) for downstream workflow use
 
     Raises:
         TicketNotFoundError: If ticket cannot be found
@@ -298,16 +298,13 @@ async def _fetch_ticket_async(
     if platform_hint is not None and _is_ambiguous_ticket_id(ticket_input):
         effective_input = _resolve_with_platform_hint(ticket_input, platform_hint)
 
-    # Use the dependency injection helper for cleaner code
-    # TODO: Forward _backend to _run_workflow once run_spec_driven_workflow
-    # accepts an AIBackend parameter (see Pluggable Multi-Agent Support spec).
-    service, _backend = await create_ticket_service_from_config(
+    service, backend = await create_ticket_service_from_config(
         config_manager=config,
         cli_backend_override=cli_backend_override,
     )
     async with service:
         ticket: GenericTicket = await service.get_ticket(effective_input)
-        return ticket
+        return ticket, backend
 
 
 # Linear URL template placeholder for platform hint workaround
@@ -829,7 +826,7 @@ def _run_workflow(
     # Fetch ticket using TicketService (async)
     # Use run_async helper to safely handle existing event loops
     try:
-        generic_ticket = run_async(
+        generic_ticket, ai_backend = run_async(
             lambda: _fetch_ticket_async(
                 ticket,
                 config,
@@ -924,6 +921,7 @@ def _run_workflow(
     run_spec_driven_workflow(
         ticket=generic_ticket,
         config=config,
+        backend=ai_backend,
         planning_model=effective_planning_model,
         implementation_model=effective_impl_model,
         skip_clarification=skip_clarification or config.settings.skip_clarification,

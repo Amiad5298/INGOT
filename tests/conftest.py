@@ -102,6 +102,24 @@ def mock_auggie_client():
 
 
 @pytest.fixture
+def mock_backend():
+    """Mock AIBackend for testing workflow code."""
+    from spec.config.fetch_config import AgentPlatform
+
+    backend = MagicMock()
+    backend.name = "MockBackend"
+    backend.platform = AgentPlatform.AUGGIE
+    backend.model = ""
+    backend.supports_parallel = True
+    backend.run_with_callback.return_value = (True, "output")
+    backend.run_print_with_output.return_value = (True, "output")
+    backend.run_print_quiet.return_value = "output"
+    backend.run_streaming.return_value = (True, "output")
+    backend.detect_rate_limit.return_value = False
+    return backend
+
+
+@pytest.fixture
 def mock_console(monkeypatch):
     """Mock console output for testing."""
     mock = MagicMock()
