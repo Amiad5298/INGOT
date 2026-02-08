@@ -12,12 +12,10 @@ changes introduced by the agent.
 """
 
 import subprocess
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
 
-from spec.integrations.auggie import AuggieClient
+from spec.integrations.backends.base import AIBackend
 from spec.integrations.git import (
     DiffResult,
     get_diff_from_baseline,
@@ -514,34 +512,10 @@ class Step4Result:
     error_message: str = ""
 
 
-class AuggieClientProtocol(Protocol):
-    """Protocol for AuggieClient to allow dependency injection."""
-
-    def run_print_with_output(
-        self,
-        prompt: str,
-        *,
-        agent: str,
-        dont_save_session: bool = False,
-    ) -> tuple[bool, str]:
-        ...
-
-    def run_with_callback(
-        self,
-        prompt: str,
-        *,
-        output_callback: "Callable[[str], None]",
-        agent: str | None = None,
-        model: str | None = None,
-        dont_save_session: bool = False,
-    ) -> tuple[bool, str]:
-        ...
-
-
 def step_4_update_docs(
     state: WorkflowState,
     *,
-    auggie_client: AuggieClientProtocol | None = None,
+    backend: AIBackend,
 ) -> Step4Result:
     """Execute Step 4: Update documentation based on code changes.
 
@@ -560,7 +534,7 @@ def step_4_update_docs(
 
     Args:
         state: Current workflow state
-        auggie_client: Optional client for dependency injection in tests
+        backend: AI backend instance for agent interactions
 
     Returns:
         Step4Result with details of what happened (always succeeds for workflow)
@@ -600,9 +574,6 @@ def step_4_update_docs(
     # Build prompt for doc-updater agent
     prompt = _build_doc_update_prompt(state, diff_result)
 
-    # Use provided client or create default
-    client = auggie_client or AuggieClient()
-
     # Create log directory for documentation update (use safe_filename_stem for paths)
     log_dir = get_log_base_dir() / state.ticket.safe_filename_stem / LOG_DIR_DOC_UPDATE
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -620,9 +591,9 @@ def step_4_update_docs(
         result.agent_ran = True
 
         with ui:
-            success, output = client.run_with_callback(
+            success, output = backend.run_with_callback(
                 prompt,
-                agent=state.subagent_names.get("doc_updater", "spec-doc-updater"),
+                subagent=state.subagent_names.get("doc_updater", "spec-doc-updater"),
                 output_callback=ui.handle_output_line,
                 dont_save_session=True,
             )

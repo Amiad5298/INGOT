@@ -7,7 +7,7 @@ to identify contradictions early in the workflow.
 
 import re
 
-from spec.integrations.auggie import AuggieClient
+from spec.integrations.backends.base import AIBackend
 from spec.integrations.providers import GenericTicket
 from spec.utils.logging import log_message
 from spec.workflow.state import WorkflowState
@@ -46,7 +46,7 @@ def _noop_callback(_: str) -> None:
 def detect_context_conflict(
     ticket: GenericTicket,
     user_context: str,
-    auggie: AuggieClient,
+    backend: AIBackend,
     state: WorkflowState,
 ) -> tuple[bool, str]:
     """Detect semantic conflicts between ticket description and user context.
@@ -62,7 +62,7 @@ def detect_context_conflict(
     Args:
         ticket: GenericTicket with title and description (platform-agnostic)
         user_context: User-provided additional context
-        auggie: Auggie CLI client
+        backend: AI backend instance for agent interactions
         state: Workflow state for accessing subagent configuration
 
     Returns:
@@ -88,9 +88,9 @@ def detect_context_conflict(
 
     try:
         # Use run_with_callback with a no-op callback to capture output silently
-        success, output = auggie.run_with_callback(
+        success, output = backend.run_with_callback(
             prompt,
-            agent=state.subagent_names["planner"],
+            subagent=state.subagent_names["planner"],
             output_callback=_noop_callback,
             dont_save_session=True,
         )

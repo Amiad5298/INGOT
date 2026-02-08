@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from spec.integrations.auggie import AuggieClient
+from spec.integrations.backends.base import AIBackend
 from spec.utils.console import (
     print_error,
     print_step,
@@ -26,6 +26,7 @@ def run_auto_fix(
     state: WorkflowState,
     review_feedback: str,
     log_dir: Path,
+    backend: AIBackend,
 ) -> bool:
     """Attempt to fix issues identified in review.
 
@@ -37,6 +38,7 @@ def run_auto_fix(
         state: Current workflow state
         review_feedback: The review output containing identified issues
         log_dir: Directory for log files
+        backend: AI backend instance for agent interactions
 
     Returns:
         True if fix was attempted successfully (agent completed),
@@ -59,12 +61,10 @@ Instructions:
 
 Do NOT commit any changes."""
 
-    auggie_client = AuggieClient()
-
     try:
-        success, _ = auggie_client.run_print_with_output(
+        success, _ = backend.run_print_with_output(
             prompt,
-            agent=state.subagent_names["implementer"],
+            subagent=state.subagent_names["implementer"],
             dont_save_session=True,
         )
         if success:
@@ -86,4 +86,3 @@ __all__ = [
     # Backwards-compatible alias
     "_run_auto_fix",
 ]
-
