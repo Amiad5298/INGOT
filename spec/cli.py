@@ -26,6 +26,7 @@ from spec.integrations.providers.exceptions import (
 )
 from spec.integrations.providers.registry import ProviderRegistry
 from spec.integrations.ticket_service import TicketService, create_ticket_service
+from spec.onboarding import is_first_run, run_onboarding
 from spec.ui.menus import MainMenuChoice, show_main_menu
 from spec.utils.console import (
     print_error,
@@ -646,8 +647,6 @@ def _check_prerequisites(config: ConfigManager, force_integration_check: bool) -
         return False
 
     # Run onboarding if no backend is configured
-    from spec.onboarding import is_first_run, run_onboarding
-
     if is_first_run(config):
         result = run_onboarding(config)
         if not result.success:
@@ -800,7 +799,12 @@ def _fetch_ticket_with_onboarding(
             )
         )
     except BackendNotConfiguredError as e:
-        from spec.onboarding import run_onboarding
+        # Reload config in case _check_prerequisites already ran onboarding
+        config.load()
+        if not is_first_run(config):
+            # Backend was saved but resolver failed for another reason
+            print_error(str(e))
+            raise typer.Exit(ExitCode.GENERAL_ERROR) from e
 
         result = run_onboarding(config)
         if not result.success:

@@ -3,6 +3,9 @@
 Maps each AI backend to the set of ticket platforms it supports
 via MCP (Model Context Protocol) integrations, and defines which
 platforms support direct API access.
+
+TODO: Consumed by Phase 6 (fetch-strategy selection). Not yet wired
+into production code paths.
 """
 
 from spec.config.fetch_config import AgentPlatform

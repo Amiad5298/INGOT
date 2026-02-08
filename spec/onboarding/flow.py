@@ -30,7 +30,7 @@ BACKEND_CHOICES: dict[str, AgentPlatform] = {
 INSTALLATION_URLS: dict[AgentPlatform, str] = {
     AgentPlatform.AUGGIE: "https://docs.augmentcode.com/cli",
     AgentPlatform.CLAUDE: "https://docs.anthropic.com/claude-code",
-    AgentPlatform.CURSOR: "https://www.cursor.com/cli",
+    AgentPlatform.CURSOR: "https://www.cursor.com/downloads",
 }
 
 
@@ -63,14 +63,15 @@ class OnboardingFlow:
                     error_message="No backend selected.",
                 )
 
-            if not self._verify_installation(backend):
+            verified_backend = self._verify_installation(backend)
+            if verified_backend is None:
                 return OnboardingResult(
                     success=False,
                     error_message="Backend verification failed.",
                 )
 
-            self._save_configuration(backend)
-            return OnboardingResult(success=True, backend=backend)
+            self._save_configuration(verified_backend)
+            return OnboardingResult(success=True, backend=verified_backend)
 
         except UserCancelledError:
             return OnboardingResult(
@@ -90,7 +91,7 @@ class OnboardingFlow:
         )
         return BACKEND_CHOICES.get(choice)
 
-    def _verify_installation(self, backend: AgentPlatform) -> bool:
+    def _verify_installation(self, backend: AgentPlatform) -> AgentPlatform | None:
         """Verify that the selected backend CLI is installed.
 
         Loops to allow retry or switching backends.
@@ -99,20 +100,21 @@ class OnboardingFlow:
             backend: The backend to verify
 
         Returns:
-            True if verification passed (possibly after retries)
+            The verified AgentPlatform (may differ from input if user switched),
+            or None on failure.
         """
         while True:
             try:
                 backend_instance = BackendFactory.create(backend)
             except (ValueError, NotImplementedError) as exc:
                 print_error(f"Cannot create backend: {exc}")
-                return False
+                return None
 
             installed, message = backend_instance.check_installed()
 
             if installed:
                 print_success(message)
-                return True
+                return backend
 
             print_error(message)
             self._show_installation_instructions(backend)
@@ -123,11 +125,11 @@ class OnboardingFlow:
             if prompt_confirm("Choose a different backend?", default=True):
                 new_backend = self._select_backend()
                 if new_backend is None:
-                    return False
+                    return None
                 backend = new_backend
                 continue
 
-            return False
+            return None
 
     @staticmethod
     def _show_installation_instructions(backend: AgentPlatform) -> None:

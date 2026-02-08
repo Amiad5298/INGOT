@@ -63,8 +63,8 @@ class TestCLIPrerequisites:
     @patch("spec.cli.show_banner")
     @patch("spec.cli.ConfigManager")
     @patch("spec.cli.is_git_repo")
-    @patch("spec.onboarding.is_first_run")
-    @patch("spec.onboarding.run_onboarding")
+    @patch("spec.cli.is_first_run")
+    @patch("spec.cli.run_onboarding")
     def test_onboarding_failure_exits(
         self, mock_onboard, mock_first_run, mock_git, mock_config_class, mock_banner
     ):
@@ -546,8 +546,8 @@ class TestOnboardingFlow:
     @patch("spec.cli.show_banner")
     @patch("spec.cli.ConfigManager")
     @patch("spec.cli.is_git_repo")
-    @patch("spec.onboarding.is_first_run")
-    @patch("spec.onboarding.run_onboarding")
+    @patch("spec.cli.is_first_run")
+    @patch("spec.cli.run_onboarding")
     def test_onboarding_triggered_on_first_run(
         self, mock_onboard, mock_first_run, mock_git, mock_config_class, mock_banner
     ):
@@ -1299,7 +1299,7 @@ class TestForceIntegrationCheckWarning:
     """Tests for force_integration_check flag warning."""
 
     @patch("spec.cli.is_git_repo")
-    @patch("spec.onboarding.is_first_run")
+    @patch("spec.cli.is_first_run")
     @patch("spec.cli.print_warning")
     def test_force_integration_check_prints_warning(
         self, mock_print_warning, mock_is_first_run, mock_is_git_repo
@@ -1319,7 +1319,7 @@ class TestForceIntegrationCheckWarning:
         assert "no effect" in warning_msg.lower() or "currently has no effect" in warning_msg
 
     @patch("spec.cli.is_git_repo")
-    @patch("spec.onboarding.is_first_run")
+    @patch("spec.cli.is_first_run")
     @patch("spec.cli.print_warning")
     def test_force_integration_check_false_no_warning(
         self, mock_print_warning, mock_is_first_run, mock_is_git_repo
