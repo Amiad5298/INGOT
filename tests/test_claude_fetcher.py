@@ -28,10 +28,12 @@ from spec.integrations.fetchers import (
 )
 from spec.integrations.fetchers.claude_fetcher import (
     DEFAULT_TIMEOUT_SECONDS,
+    ClaudeMediatedFetcher,
+)
+from spec.integrations.fetchers.templates import (
     PLATFORM_PROMPT_TEMPLATES,
     REQUIRED_FIELDS,
     SUPPORTED_PLATFORMS,
-    ClaudeMediatedFetcher,
 )
 from spec.integrations.providers.base import Platform
 
@@ -490,3 +492,54 @@ class TestClaudeMediatedFetcherValidation:
         for platform in SUPPORTED_PLATFORMS:
             assert platform in REQUIRED_FIELDS, f"Missing REQUIRED_FIELDS for {platform}"
             assert len(REQUIRED_FIELDS[platform]) > 0, f"Empty REQUIRED_FIELDS for {platform}"
+
+
+class TestClaudeMediatedFetcherExceptionTaxonomy:
+    """Tests for correct exception types in fetch_raw."""
+
+    @pytest.mark.asyncio
+    async def test_agent_fetch_error_not_rewrapped(self, mock_backend):
+        """AgentFetchError from _execute_fetch_prompt is NOT wrapped into AgentIntegrationError."""
+        mock_backend.run_print_quiet.side_effect = RuntimeError("connection refused")
+        fetcher = ClaudeMediatedFetcher(mock_backend)
+
+        with pytest.raises(AgentFetchError) as exc_info:
+            await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
+
+        # Should be AgentFetchError, NOT AgentIntegrationError
+        assert type(exc_info.value) is AgentFetchError
+        assert "connection refused" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_agent_response_parse_error_not_rewrapped(self, mock_backend):
+        """AgentResponseParseError is NOT wrapped into another exception type."""
+        mock_backend.run_print_quiet.return_value = "not valid json at all"
+        fetcher = ClaudeMediatedFetcher(mock_backend)
+
+        with pytest.raises(AgentResponseParseError):
+            await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
+
+    @pytest.mark.asyncio
+    async def test_agent_integration_error_passes_through(self, mock_backend):
+        """AgentIntegrationError from _execute_fetch_prompt passes through unchanged."""
+        mock_backend.run_print_quiet.side_effect = AgentIntegrationError(
+            message="MCP tool not available", agent_name="test"
+        )
+        fetcher = ClaudeMediatedFetcher(mock_backend)
+
+        with pytest.raises(AgentIntegrationError) as exc_info:
+            await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
+
+        assert "MCP tool not available" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_becomes_agent_fetch_error(self, mock_backend):
+        """Unexpected exceptions become AgentFetchError (not AgentIntegrationError)."""
+        mock_backend.run_print_quiet.side_effect = ValueError("unexpected error")
+        fetcher = ClaudeMediatedFetcher(mock_backend)
+
+        with pytest.raises(AgentFetchError) as exc_info:
+            await fetcher.fetch_raw("PROJ-123", Platform.JIRA)
+
+        assert type(exc_info.value) is AgentFetchError
+        assert "unexpected error" in str(exc_info.value)

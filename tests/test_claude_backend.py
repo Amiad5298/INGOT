@@ -96,8 +96,15 @@ class TestClaudeBackendDelegation:
         assert success is True
         assert output == "output"
 
-    def test_run_with_callback_passes_subagent_natively(self):
-        """subagent parameter is passed directly (no mapping needed)."""
+    def test_run_with_callback_passes_resolved_system_prompt(self, tmp_path, monkeypatch):
+        """subagent is resolved to system_prompt before passing to client."""
+        agents_dir = tmp_path / ".augment" / "agents"
+        agents_dir.mkdir(parents=True)
+        agent_file = agents_dir / "spec-planner.md"
+        agent_file.write_text("You are a planner.")
+
+        monkeypatch.chdir(tmp_path)
+
         backend = ClaudeBackend()
         mock_callback = MagicMock()
 
@@ -111,7 +118,7 @@ class TestClaudeBackendDelegation:
             )
 
         call_kwargs = mock_run.call_args.kwargs
-        assert call_kwargs.get("subagent") == "spec-planner"
+        assert call_kwargs.get("system_prompt") == "You are a planner."
 
     def test_run_print_with_output_delegates(self):
         """run_print_with_output delegates to ClaudeClient."""
@@ -138,8 +145,15 @@ class TestClaudeBackendDelegation:
         mock_run.assert_called_once()
         assert output == "quiet output"
 
-    def test_run_print_quiet_passes_subagent(self):
-        """subagent parameter passed directly in run_print_quiet."""
+    def test_run_print_quiet_passes_system_prompt(self, tmp_path, monkeypatch):
+        """subagent is resolved to system_prompt in run_print_quiet."""
+        agents_dir = tmp_path / ".augment" / "agents"
+        agents_dir.mkdir(parents=True)
+        agent_file = agents_dir / "spec-planner.md"
+        agent_file.write_text("You are a planner.")
+
+        monkeypatch.chdir(tmp_path)
+
         backend = ClaudeBackend()
 
         with patch.object(
@@ -148,10 +162,17 @@ class TestClaudeBackendDelegation:
             backend.run_print_quiet("test prompt", subagent="spec-planner")
 
         call_kwargs = mock_run.call_args.kwargs
-        assert call_kwargs.get("subagent") == "spec-planner"
+        assert call_kwargs.get("system_prompt") == "You are a planner."
 
-    def test_run_print_with_output_passes_subagent(self):
-        """subagent parameter passed directly in run_print_with_output."""
+    def test_run_print_with_output_passes_system_prompt(self, tmp_path, monkeypatch):
+        """subagent is resolved to system_prompt in run_print_with_output."""
+        agents_dir = tmp_path / ".augment" / "agents"
+        agents_dir.mkdir(parents=True)
+        agent_file = agents_dir / "spec-executor.md"
+        agent_file.write_text("You are an executor.")
+
+        monkeypatch.chdir(tmp_path)
+
         backend = ClaudeBackend()
 
         with patch.object(
@@ -160,7 +181,7 @@ class TestClaudeBackendDelegation:
             backend.run_print_with_output("test prompt", subagent="spec-executor")
 
         call_kwargs = mock_run.call_args.kwargs
-        assert call_kwargs.get("subagent") == "spec-executor"
+        assert call_kwargs.get("system_prompt") == "You are an executor."
 
     def test_dont_save_session_passed_to_client(self):
         """dont_save_session is correctly passed to ClaudeClient methods."""
@@ -239,10 +260,13 @@ class TestClaudeBackendModelResolution:
     1. Explicit per-call model override (highest priority)
     2. Subagent frontmatter model field
     3. Instance default model (lowest priority)
+
+    Model is resolved once in ClaudeBackend._resolve_subagent() and passed
+    as a pre-resolved value to ClaudeClient (no double resolution).
     """
 
     def test_run_with_callback_resolves_model(self):
-        """Model is resolved using _resolve_model()."""
+        """Explicit model is passed through to client."""
         backend = ClaudeBackend(model="default-model")
 
         with patch.object(
@@ -258,7 +282,7 @@ class TestClaudeBackendModelResolution:
         assert call_kwargs.get("model") == "explicit-model"
 
     def test_run_print_with_output_resolves_model(self):
-        """run_print_with_output resolves model correctly."""
+        """run_print_with_output passes instance default model."""
         backend = ClaudeBackend(model="default-model")
 
         with patch.object(
@@ -351,6 +375,41 @@ You are a test agent.
         call_kwargs = mock_run.call_args.kwargs
         assert call_kwargs.get("model") == "default-model"
 
+    def test_no_double_model_resolution(self, tmp_path, monkeypatch):
+        """Model resolution happens once in backend, not again in client.
+
+        The client receives pre-resolved model via keyword argument.
+        No subagent file I/O happens in the client.
+        """
+        agents_dir = tmp_path / ".augment" / "agents"
+        agents_dir.mkdir(parents=True)
+        agent_file = agents_dir / "test-agent.md"
+        agent_file.write_text(
+            """---
+model: frontmatter-model
+---
+Agent instructions."""
+        )
+
+        monkeypatch.chdir(tmp_path)
+
+        backend = ClaudeBackend()
+
+        with patch.object(
+            backend._client, "run_with_callback", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                subagent="test-agent",
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        # Client receives model + system_prompt (not subagent name)
+        assert call_kwargs.get("model") == "frontmatter-model"
+        assert call_kwargs.get("system_prompt") == "Agent instructions."
+        assert "subagent" not in call_kwargs
+
 
 class TestClaudeBackendTimeout:
     """Tests for timeout handling in ClaudeBackend."""
@@ -363,7 +422,7 @@ class TestClaudeBackendTimeout:
         mock_timeout_wrapper = mocker.patch.object(
             backend, "_run_streaming_with_timeout", return_value=(0, "timeout output")
         )
-        mocker.patch.object(backend._client, "_build_command", return_value=["claude", "test"])
+        mocker.patch.object(backend._client, "build_command", return_value=["claude", "test"])
 
         success, output = backend.run_with_callback(
             "test prompt",
@@ -406,7 +465,7 @@ class TestClaudeBackendTimeout:
             "_run_streaming_with_timeout",
             side_effect=BackendTimeoutError("Timed out", timeout_seconds=30.0),
         )
-        mocker.patch.object(backend._client, "_build_command", return_value=["claude", "test"])
+        mocker.patch.object(backend._client, "build_command", return_value=["claude", "test"])
 
         with pytest.raises(BackendTimeoutError) as exc_info:
             backend.run_with_callback(
@@ -416,6 +475,24 @@ class TestClaudeBackendTimeout:
             )
 
         assert exc_info.value.timeout_seconds == 30.0
+
+    def test_timeout_uses_public_build_command(self, mocker):
+        """Timeout path uses public build_command (not _build_command)."""
+        backend = ClaudeBackend()
+        mock_callback = MagicMock()
+
+        mocker.patch.object(backend, "_run_streaming_with_timeout", return_value=(0, "output"))
+        mock_build = mocker.patch.object(
+            backend._client, "build_command", return_value=["claude", "test"]
+        )
+
+        backend.run_with_callback(
+            "test prompt",
+            output_callback=mock_callback,
+            timeout_seconds=30.0,
+        )
+
+        mock_build.assert_called_once()
 
 
 class TestClaudeBackendClose:

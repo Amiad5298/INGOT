@@ -5,19 +5,18 @@ from unittest.mock import MagicMock, patch
 from spec.integrations.claude import (
     CLAUDE_CLI_NAME,
     ClaudeClient,
-    _load_subagent_prompt,
     _looks_like_rate_limit,
     check_claude_installed,
 )
 
 
 class TestClaudeClientBuildCommand:
-    """Tests for ClaudeClient._build_command() method."""
+    """Tests for ClaudeClient.build_command() method."""
 
     def test_basic_structure(self):
         """Basic command: claude -p <prompt>."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", print_mode=True)
+        cmd = client.build_command("test prompt", print_mode=True)
 
         assert cmd[0] == CLAUDE_CLI_NAME
         assert "-p" in cmd
@@ -26,7 +25,7 @@ class TestClaudeClientBuildCommand:
     def test_model_flag_when_model_set(self):
         """--model flag included when model is set on client."""
         client = ClaudeClient(model="claude-3-opus")
-        cmd = client._build_command("test prompt", print_mode=True)
+        cmd = client.build_command("test prompt", print_mode=True)
 
         assert "--model" in cmd
         model_idx = cmd.index("--model")
@@ -35,7 +34,7 @@ class TestClaudeClientBuildCommand:
     def test_model_flag_when_model_passed(self):
         """--model flag uses per-call model override."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", model="claude-3-sonnet", print_mode=True)
+        cmd = client.build_command("test prompt", model="claude-3-sonnet", print_mode=True)
 
         assert "--model" in cmd
         model_idx = cmd.index("--model")
@@ -44,99 +43,50 @@ class TestClaudeClientBuildCommand:
     def test_no_session_persistence_flag(self):
         """--no-session-persistence when dont_save_session=True."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", dont_save_session=True, print_mode=True)
+        cmd = client.build_command("test prompt", dont_save_session=True, print_mode=True)
 
         assert "--no-session-persistence" in cmd
 
     def test_no_session_persistence_flag_absent(self):
         """No --no-session-persistence when dont_save_session=False."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", dont_save_session=False, print_mode=True)
+        cmd = client.build_command("test prompt", dont_save_session=False, print_mode=True)
 
         assert "--no-session-persistence" not in cmd
 
-    def test_append_system_prompt_when_subagent_provided(self, tmp_path, monkeypatch):
-        """--append-system-prompt when subagent found."""
-        agents_dir = tmp_path / ".augment" / "agents"
-        agents_dir.mkdir(parents=True)
-        agent_file = agents_dir / "spec-planner.md"
-        agent_file.write_text("You are a planning agent.")
-
-        monkeypatch.chdir(tmp_path)
-
+    def test_system_prompt_flag(self):
+        """--append-system-prompt when system_prompt provided."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", subagent="spec-planner", print_mode=True)
+        cmd = client.build_command(
+            "test prompt",
+            system_prompt="You are a planning agent.",
+            print_mode=True,
+        )
 
         assert "--append-system-prompt" in cmd
         idx = cmd.index("--append-system-prompt")
         assert cmd[idx + 1] == "You are a planning agent."
 
-    def test_subagent_not_found_no_append(self, tmp_path, monkeypatch):
-        """No --append-system-prompt when subagent file not found."""
-        monkeypatch.chdir(tmp_path)
-
+    def test_no_system_prompt_when_none(self):
+        """No --append-system-prompt when system_prompt is None."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", subagent="nonexistent", print_mode=True)
+        cmd = client.build_command("test prompt", print_mode=True)
 
         assert "--append-system-prompt" not in cmd
 
-    def test_subagent_strips_frontmatter(self, tmp_path, monkeypatch):
-        """Subagent frontmatter is stripped, only body used in --append-system-prompt."""
-        agents_dir = tmp_path / ".augment" / "agents"
-        agents_dir.mkdir(parents=True)
-        agent_file = agents_dir / "test-agent.md"
-        agent_file.write_text(
-            """---
-model: claude-3-opus
-description: A test agent
----
-You are a test agent with instructions."""
-        )
-
-        monkeypatch.chdir(tmp_path)
-
+    def test_no_system_prompt_when_empty(self):
+        """No --append-system-prompt when system_prompt is empty string."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", subagent="test-agent", print_mode=True)
+        cmd = client.build_command("test prompt", system_prompt="", print_mode=True)
 
-        assert "--append-system-prompt" in cmd
-        idx = cmd.index("--append-system-prompt")
-        assert cmd[idx + 1] == "You are a test agent with instructions."
-        assert "---" not in cmd[idx + 1]
+        assert "--append-system-prompt" not in cmd
 
-    def test_subagent_frontmatter_model_used(self, tmp_path, monkeypatch):
-        """Model from subagent frontmatter used when no explicit model."""
-        agents_dir = tmp_path / ".augment" / "agents"
-        agents_dir.mkdir(parents=True)
-        agent_file = agents_dir / "test-agent.md"
-        agent_file.write_text(
-            """---
-model: frontmatter-model
----
-Agent body."""
-        )
-
-        monkeypatch.chdir(tmp_path)
-
-        client = ClaudeClient()
-        cmd = client._build_command("test prompt", subagent="test-agent", print_mode=True)
-
-        assert "--model" in cmd
-        model_idx = cmd.index("--model")
-        assert cmd[model_idx + 1] == "frontmatter-model"
-
-    def test_all_flags_combined(self, tmp_path, monkeypatch):
+    def test_all_flags_combined(self):
         """All flags work together correctly."""
-        agents_dir = tmp_path / ".augment" / "agents"
-        agents_dir.mkdir(parents=True)
-        agent_file = agents_dir / "spec-planner.md"
-        agent_file.write_text("You are a planner.")
-
-        monkeypatch.chdir(tmp_path)
-
         client = ClaudeClient()
-        cmd = client._build_command(
+        cmd = client.build_command(
             "do the work",
-            subagent="spec-planner",
+            system_prompt="You are a planner.",
             model="claude-3-opus",
             print_mode=True,
             dont_save_session=True,
@@ -152,7 +102,7 @@ Agent body."""
     def test_no_print_mode(self):
         """Command without -p flag when print_mode=False."""
         client = ClaudeClient()
-        cmd = client._build_command("test prompt", print_mode=False)
+        cmd = client.build_command("test prompt", print_mode=False)
 
         assert "-p" not in cmd
         assert cmd[-1] == "test prompt"
@@ -160,7 +110,7 @@ Agent body."""
     def test_prompt_is_last_argument(self):
         """Prompt is always the last positional argument."""
         client = ClaudeClient(model="claude-3-opus")
-        cmd = client._build_command(
+        cmd = client.build_command(
             "my prompt here",
             print_mode=True,
             dont_save_session=True,
@@ -168,52 +118,14 @@ Agent body."""
 
         assert cmd[-1] == "my prompt here"
 
+    def test_explicit_model_overrides_instance_default(self):
+        """Per-call model takes precedence over instance default."""
+        client = ClaudeClient(model="default-model")
+        cmd = client.build_command("test", model="override-model", print_mode=True)
 
-class TestClaudeClientSubagentLoading:
-    """Tests for _load_subagent_prompt() function."""
-
-    def test_with_yaml_frontmatter(self, tmp_path, monkeypatch):
-        """Strips YAML frontmatter, returns body only."""
-        agents_dir = tmp_path / ".augment" / "agents"
-        agents_dir.mkdir(parents=True)
-        agent_file = agents_dir / "test-agent.md"
-        agent_file.write_text(
-            """---
-model: claude-3-opus
-description: Testing
----
-You are a test agent.
-Follow these rules."""
-        )
-
-        monkeypatch.chdir(tmp_path)
-
-        result = _load_subagent_prompt("test-agent")
-
-        assert result == "You are a test agent.\nFollow these rules."
-        assert "---" not in result
-        assert "model:" not in result
-
-    def test_without_frontmatter(self, tmp_path, monkeypatch):
-        """Returns full content when no frontmatter."""
-        agents_dir = tmp_path / ".augment" / "agents"
-        agents_dir.mkdir(parents=True)
-        agent_file = agents_dir / "simple-agent.md"
-        agent_file.write_text("You are a simple agent with no frontmatter.")
-
-        monkeypatch.chdir(tmp_path)
-
-        result = _load_subagent_prompt("simple-agent")
-
-        assert result == "You are a simple agent with no frontmatter."
-
-    def test_file_not_found(self, tmp_path, monkeypatch):
-        """Returns None when agent file doesn't exist."""
-        monkeypatch.chdir(tmp_path)
-
-        result = _load_subagent_prompt("nonexistent-agent")
-
-        assert result is None
+        assert "--model" in cmd
+        model_idx = cmd.index("--model")
+        assert cmd[model_idx + 1] == "override-model"
 
 
 class TestClaudeClientExecution:
@@ -265,16 +177,61 @@ class TestClaudeClientExecution:
         """run_print_with_output returns (success, output) tuple."""
         client = ClaudeClient()
 
-        mock_process = MagicMock()
-        mock_process.stdout = iter(["response line\n"])
-        mock_process.returncode = 0
-        mock_process.wait.return_value = None
+        mock_result = MagicMock()
+        mock_result.stdout = "response line\n"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
 
-        with patch("spec.integrations.claude.subprocess.Popen", return_value=mock_process):
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
             success, output = client.run_print_with_output("test prompt")
 
         assert success is True
         assert "response line" in output
+
+    def test_run_print_with_output_does_not_print_to_stdout(self, capsys):
+        """run_print_with_output does NOT print to stdout."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "some output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
+            client.run_print_with_output("test prompt")
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_run_print_with_output_includes_stderr_on_failure(self):
+        """run_print_with_output includes stderr when CLI fails with empty stdout."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = ""
+        mock_result.stderr = "Error: invalid model"
+        mock_result.returncode = 1
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
+            success, output = client.run_print_with_output("test prompt")
+
+        assert success is False
+        assert "Error: invalid model" in output
+
+    def test_run_print_with_output_prefers_stdout_even_on_failure(self):
+        """run_print_with_output returns stdout when present even on failure."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "partial output"
+        mock_result.stderr = "some error"
+        mock_result.returncode = 1
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
+            success, output = client.run_print_with_output("test prompt")
+
+        assert success is False
+        assert output == "partial output"
 
     def test_run_print_quiet_returns_output_string(self):
         """run_print_quiet returns output string only."""
@@ -282,6 +239,7 @@ class TestClaudeClientExecution:
 
         mock_result = MagicMock()
         mock_result.stdout = "quiet output content"
+        mock_result.stderr = ""
         mock_result.returncode = 0
 
         with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
@@ -295,12 +253,42 @@ class TestClaudeClientExecution:
 
         mock_result = MagicMock()
         mock_result.stdout = None
+        mock_result.stderr = ""
         mock_result.returncode = 0
 
         with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
             output = client.run_print_quiet("test prompt")
 
         assert output == ""
+
+    def test_run_print_quiet_includes_stderr_on_failure(self):
+        """run_print_quiet includes stderr when CLI fails with no stdout."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = ""
+        mock_result.stderr = "Error: rate limit exceeded"
+        mock_result.returncode = 1
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
+            output = client.run_print_quiet("test prompt")
+
+        assert "Error: rate limit exceeded" in output
+
+    def test_run_print_quiet_does_not_print_to_stdout(self, capsys):
+        """run_print_quiet does NOT print to stdout."""
+        client = ClaudeClient()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "some output"
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+
+        with patch("spec.integrations.claude.subprocess.run", return_value=mock_result):
+            client.run_print_quiet("test prompt")
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
 
 
 class TestCheckClaudeInstalled:
@@ -383,3 +371,20 @@ class TestLooksLikeRateLimit:
     def test_empty_string_returns_false(self):
         """Empty string returns False."""
         assert _looks_like_rate_limit("") is False
+
+
+class TestClaudeClientModuleExports:
+    """Tests for __all__ exports."""
+
+    def test_no_private_functions_exported(self):
+        """No underscore-prefixed names in __all__."""
+        from spec.integrations.claude import __all__
+
+        for name in __all__:
+            assert not name.startswith("_"), f"Private name '{name}' should not be in __all__"
+
+    def test_expected_exports(self):
+        """Only expected public names are exported."""
+        from spec.integrations.claude import __all__
+
+        assert set(__all__) == {"CLAUDE_CLI_NAME", "ClaudeClient", "check_claude_installed"}
