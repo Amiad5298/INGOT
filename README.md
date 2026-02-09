@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="#features">Features</a> •
+  <a href="#ai-backends">AI Backends</a> •
   <a href="#supported-platforms">Supported Platforms</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#how-it-works">How It Works</a> •
@@ -29,9 +30,34 @@ SPEC is a command-line tool that orchestrates AI agents to implement software fe
 2. **Tasks** - Generates an optimized task list, identifying which tasks can run in parallel
 3. **Executes** - Runs specialized AI agents to complete each task, with checkpoint commits and progress tracking
 
-SPEC leverages the [Auggie CLI](https://github.com/AugmentCode/auggie) and multiple specialized AI agents to deliver a structured, reproducible development workflow.
+SPEC orchestrates AI coding assistants—[Auggie](https://docs.augmentcode.com/cli), [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview), or [Cursor](https://www.cursor.com/cli)—with specialized AI agents to deliver a structured, reproducible development workflow.
 
 [Screenshot placeholder: SPEC main workflow showing the three steps with progress indicators]
+
+## AI Backends
+
+SPEC supports multiple AI coding assistants as backends. You choose one during first-run setup, and can switch at any time.
+
+| Backend | CLI Requirement | Installation |
+|---------|----------------|--------------|
+| **Auggie** | Auggie CLI (Node.js 22+) | [docs.augmentcode.com/cli](https://docs.augmentcode.com/cli) |
+| **Claude Code** | Claude Code CLI | [docs.anthropic.com/en/docs/claude-code](https://docs.anthropic.com/en/docs/claude-code/overview) |
+| **Cursor** | Cursor CLI | [cursor.com/cli](https://www.cursor.com/cli) |
+
+### Selecting Your Backend
+
+1. **First run**: The onboarding wizard prompts you to choose a backend and verifies installation
+2. **Configuration**: Your choice is saved as `AI_BACKEND` in `~/.spec-config`
+3. **CLI override**: Use `--backend` (`-b`) to override for a single run
+
+```bash
+# Override backend for a single run
+spec --backend claude PROJECT-123
+spec -b cursor PROJECT-123
+
+# Or change the default in ~/.spec-config
+# AI_BACKEND="claude"
+```
 
 ## Features
 
@@ -52,7 +78,7 @@ Dramatically reduce implementation time:
 - **6 Ticket Platforms**: Jira, Linear, GitHub, Azure DevOps, Monday, and Trello
 - **Automatic Platform Detection**: URLs and ticket IDs are automatically routed to the correct platform
 - **Git**: Feature branch creation, checkpoint commits after each task, optional commit squashing
-- **Auggie CLI**: Leverages Auggie's AI capabilities with specialized subagents
+- **Multi-Backend Support**: Works with Auggie, Claude Code, or Cursor—choose your preferred AI coding assistant
 
 ### 🔧 Git Integration Details
 SPEC integrates with Git while giving you full control over your commits:
@@ -112,20 +138,20 @@ Example task list with file annotations:
 
 ## Supported Platforms
 
-SPEC supports 6 ticket platforms—3 with out-of-the-box Auggie integration, 3 requiring fallback credentials:
+SPEC supports 6 ticket platforms. Three integrate with Auggie's MCP tools for zero-config ticket fetching; the others require fallback API credentials:
 
-| Platform | URL Support | Ticket ID Support | Auth Mode | Notes |
-|----------|-------------|-------------------|-----------|-------|
-| **Jira** | ✅ | ✅ `PROJECT-123` | Auggie | Works out of the box |
-| **Linear** | ✅ | ⚠️ URL preferred | Auggie | IDs like `ENG-123` may be ambiguous with Jira |
-| **GitHub Issues** | ✅ | ✅ `owner/repo#42` | Auggie | Works out of the box |
-| **Azure DevOps** | ✅ | ✅ `AB#123` | Fallback | Requires credentials in `~/.spec-config` |
-| **Monday** | ✅ | ❌ URL only | Fallback | Requires credentials in `~/.spec-config` |
-| **Trello** | ✅ | ✅ 8-char short ID | Fallback | Requires credentials in `~/.spec-config` |
+| Platform | URL Support | Ticket ID Support | Auggie MCP | Notes |
+|----------|-------------|-------------------|------------|-------|
+| **Jira** | ✅ | ✅ `PROJECT-123` | ✅ | Works out of the box with Auggie backend |
+| **Linear** | ✅ | ⚠️ URL preferred | ✅ | IDs like `ENG-123` may be ambiguous with Jira |
+| **GitHub Issues** | ✅ | ✅ `owner/repo#42` | ✅ | Works out of the box with Auggie backend |
+| **Azure DevOps** | ✅ | ✅ `AB#123` | ❌ | Requires credentials in `~/.spec-config` |
+| **Monday** | ✅ | ❌ URL only | ❌ | Requires credentials in `~/.spec-config` |
+| **Trello** | ✅ | ✅ 8-char short ID | ❌ | Requires credentials in `~/.spec-config` |
 
-> **Auggie platforms** (Jira, Linear, GitHub): No additional configuration needed—works via Auggie's built-in integrations.
+> **MCP-integrated platforms (when using Auggie backend)** (Jira, Linear, GitHub): No additional configuration needed—works via Auggie's built-in MCP integrations.
 >
-> **Fallback platforms** (Azure DevOps, Monday, Trello): Requires API credentials. See the [Platform Configuration Guide](docs/platform-configuration.md).
+> **Fallback platforms** (Azure DevOps, Monday, Trello): Requires API credentials regardless of backend. See the [Platform Configuration Guide](docs/platform-configuration.md).
 
 ### Platform Detection
 
@@ -266,9 +292,13 @@ Run logs are stored in `.spec/runs/{ticket}/` for debugging and audit purposes.
 ### Requirements
 
 - **Python 3.11+**
-- **Node.js 22+** (for Auggie CLI)
 - **Git** (must be run from a git repository)
-- **Auggie CLI 0.13.0+** (installed automatically if missing)
+- **AI Backend CLI** (one of the following):
+  - [Auggie CLI](https://docs.augmentcode.com/cli) (requires Node.js 22+)
+  - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/overview)
+  - [Cursor](https://www.cursor.com/cli)
+
+> Backend requirements are verified during first-run setup.
 
 ### Install from PyPI
 
@@ -303,13 +333,28 @@ spec --help
 
 ### First Run
 
-On first run, SPEC will:
-1. Check for Auggie CLI installation (offer to install if missing)
-2. Prompt for Auggie login if needed
-3. Check platform integration status (Jira, Linear, GitHub via Auggie)
-4. Create agent definition files in `.augment/agents/`
+On first run, SPEC launches an onboarding wizard that walks you through backend setup:
 
-**Note:** Azure DevOps, Monday, and Trello require fallback credentials to be configured. See [Platform Configuration Guide](docs/platform-configuration.md) for setup instructions.
+1. **Select AI Backend** — choose Auggie, Claude Code, or Cursor
+2. **Verify Installation** — SPEC checks that the CLI is installed and provides installation links if not
+3. **Save Configuration** — your choice is saved to `~/.spec-config` as `AI_BACKEND`
+
+```
+$ spec PROJECT-123
+
+  Welcome to SPEC!
+  Let's set up your AI backend. You can change this later with 'spec config'.
+
+  ? Which AI backend would you like to use?
+  > Auggie (Augment Code CLI)
+    Claude Code CLI
+    Cursor
+
+  ✓ Auggie CLI detected (v0.15.2).
+  ✓ Configuration saved to ~/.spec-config
+```
+
+**Note:** Azure DevOps, Monday, and Trello require fallback credentials regardless of your backend choice. See [Platform Configuration Guide](docs/platform-configuration.md) for setup instructions.
 
 ## Usage
 
@@ -349,6 +394,9 @@ Arguments:
 Platform Options:
   --platform, -p PLATFORM     Override platform detection (jira, linear, github,
                               azure_devops, monday, trello)
+
+Backend Options:
+  --backend, -b BACKEND       Override AI backend for this run (auggie, claude, cursor)
 
 Model Options:
   --model, -m MODEL           Override AI model for all phases
@@ -437,6 +485,9 @@ spec PROJ-202 --fail-fast
 SPEC stores configuration in `~/.spec-config`:
 
 ```bash
+# AI Backend
+AI_BACKEND="auggie"
+
 # AI Model Configuration
 PLANNING_MODEL="claude-sonnet-4-5"
 IMPLEMENTATION_MODEL="claude-sonnet-4-5"
@@ -465,6 +516,7 @@ SUBAGENT_REVIEWER="spec-reviewer"
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `AI_BACKEND` | string | "" | AI backend (auggie, claude, cursor) — set during first run |
 | `PLANNING_MODEL` | string | "" | AI model for Steps 1-2 |
 | `IMPLEMENTATION_MODEL` | string | "" | AI model for Step 3 |
 | `DEFAULT_PLATFORM` | string | "" | Default platform for ambiguous ticket IDs (empty = auto-detect) |
@@ -478,6 +530,26 @@ SUBAGENT_REVIEWER="spec-reviewer"
 | `SUBAGENT_TASKLIST` | string | "spec-tasklist" | Custom tasklist subagent name |
 | `SUBAGENT_IMPLEMENTER` | string | "spec-implementer" | Custom implementer subagent name |
 | `SUBAGENT_REVIEWER` | string | "spec-reviewer" | Custom reviewer subagent name |
+
+### Changing AI Backend
+
+To switch your default backend, edit `AI_BACKEND` in `~/.spec-config`:
+
+```bash
+AI_BACKEND="claude"   # Options: auggie, claude, cursor
+```
+
+Or override for a single run without changing the default:
+
+```bash
+spec --backend cursor PROJECT-123
+spec -b auggie PROJECT-123
+```
+
+Installation links:
+- Auggie: https://docs.augmentcode.com/cli
+- Claude Code: https://docs.anthropic.com/en/docs/claude-code/overview
+- Cursor: https://www.cursor.com/cli
 
 ### Platform Credentials
 
@@ -508,6 +580,8 @@ spec --config
 ## Agent Customization
 
 SPEC uses specialized AI agents defined in `.augment/agents/`. These are created automatically on first run and updated when SPEC detects newer internal templates.
+
+> **Note:** The `.augment/agents/` directory and agent file format are specific to the **Auggie backend**. Claude Code and Cursor use their own agent/configuration systems.
 
 ### Agent Files
 
@@ -689,14 +763,15 @@ We welcome contributions! Here's how to get started:
 
 ### Common Issues
 
-#### "Auggie CLI is not installed"
+#### "AI Backend CLI is not installed"
 
-SPEC requires Auggie CLI. When prompted, allow SPEC to install it, or install manually:
+SPEC requires a supported AI backend CLI. Install the one matching your `AI_BACKEND` setting:
 
-```bash
-npm install -g @augmentcode/auggie
-auggie login
-```
+- **Auggie**: `npm install -g @augmentcode/auggie && auggie login` — [docs](https://docs.augmentcode.com/cli)
+- **Claude Code**: See [docs.anthropic.com/en/docs/claude-code](https://docs.anthropic.com/en/docs/claude-code/overview)
+- **Cursor**: Download from [cursor.com/cli](https://www.cursor.com/cli)
+
+Run `spec` again after installing — the onboarding wizard will re-verify.
 
 #### "Not in a git repository"
 
@@ -790,6 +865,12 @@ echo 'DEFAULT_PLATFORM=jira' >> ~/.spec-config
 
 > **Tip:** Use full URLs when possible—they're always unambiguous.
 
+#### Backend-Specific Issues
+
+- **Auggie**: If MCP integrations (Jira, Linear, GitHub) aren't working, verify `auggie login` was completed and your Auggie agent has the relevant integrations enabled.
+- **Claude Code**: Ensure the Claude Code CLI is on your `PATH` and authenticated. Consult the [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code/overview) for setup.
+- **Cursor**: Ensure Cursor is installed and accessible from the terminal. See [cursor.com/cli](https://www.cursor.com/cli).
+
 ### Debug Logging
 
 SPEC writes detailed logs to `.spec/runs/{ticket}/`. Check these for debugging:
@@ -805,7 +886,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Acknowledgments
 
-- Built on [Auggie CLI](https://github.com/AugmentCode/auggie) by Augment Code
+- Supports multiple AI backends: [Auggie CLI](https://docs.augmentcode.com/cli), [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview), and [Cursor](https://www.cursor.com/cli)
 - Uses [Typer](https://typer.tiangolo.com/) for CLI
 - Uses [Rich](https://rich.readthedocs.io/) for terminal UI
 - Uses [Questionary](https://questionary.readthedocs.io/) for prompts
