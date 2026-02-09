@@ -612,9 +612,6 @@ class TestCursorDetectRateLimit:
             "quota exceeded for model",
             "request throttled by API",
             "API is overloaded, try later",
-            "HTTP 502 Bad Gateway",
-            "Service Unavailable 503",
-            "Gateway Timeout: 504",
         ],
         ids=[
             "429",
@@ -624,9 +621,6 @@ class TestCursorDetectRateLimit:
             "quota_exceeded",
             "throttle",
             "overloaded",
-            "502",
-            "503",
-            "504",
         ],
     )
     def test_positive_detection(self, backend, output):
@@ -641,6 +635,9 @@ class TestCursorDetectRateLimit:
             "Created file utils.py",
             "Error: file not found",
             "",
+            "HTTP 502 Bad Gateway",
+            "Service Unavailable 503",
+            "Gateway Timeout: 504",
         ],
         ids=[
             "normal",
@@ -648,6 +645,9 @@ class TestCursorDetectRateLimit:
             "file_created",
             "file_not_found",
             "empty",
+            "502_server_error",
+            "503_server_error",
+            "504_server_error",
         ],
     )
     def test_negative_detection(self, backend, output):

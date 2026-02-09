@@ -14,10 +14,14 @@ from spec.integrations.backends.base import matches_common_rate_limit
 
 
 class FakeBackend:
-    """Fake AIBackend that cycles through pre-configured responses.
+    """Fake AIBackend that returns pre-configured responses in order.
 
     Uses the same ``matches_common_rate_limit`` helper as real backends
     so that rate-limit detection behaviour is consistent in tests.
+
+    By default, raises ``IndexError`` when all responses have been consumed.
+    This catches tests that make more calls than expected, preventing silent
+    bugs.
 
     Attributes:
         call_count: Total number of run_with_callback calls made.
@@ -32,11 +36,22 @@ class FakeBackend:
 
         Args:
             responses: Ordered list of (success, output) tuples to return.
-                       Cycles back to start if more calls than responses.
+                       Raises IndexError if more calls than responses.
         """
         self._responses = responses
         self.call_count: int = 0
         self.calls: list[tuple[str, dict]] = []
+
+    def _next_response(self) -> tuple[bool, str]:
+        """Return the next response, raising IndexError if exhausted."""
+        if self.call_count >= len(self._responses):
+            raise IndexError(
+                f"FakeBackend exhausted: {self.call_count} calls made "
+                f"but only {len(self._responses)} responses configured"
+            )
+        idx = self.call_count
+        self.call_count += 1
+        return self._responses[idx]
 
     @property
     def name(self) -> str:
@@ -71,9 +86,7 @@ class FakeBackend:
             "timeout_seconds": timeout_seconds,
         }
         self.calls.append((prompt, kwargs))
-        idx = self.call_count % len(self._responses)
-        self.call_count += 1
-        success, output = self._responses[idx]
+        success, output = self._next_response()
         # Stream output to callback line-by-line
         for line in output.splitlines():
             output_callback(line)
@@ -88,9 +101,7 @@ class FakeBackend:
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> tuple[bool, str]:
-        idx = self.call_count % len(self._responses)
-        self.call_count += 1
-        return self._responses[idx]
+        return self._next_response()
 
     def run_print_quiet(
         self,
@@ -101,9 +112,7 @@ class FakeBackend:
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> str:
-        idx = self.call_count % len(self._responses)
-        self.call_count += 1
-        return self._responses[idx][1]
+        return self._next_response()[1]
 
     def run_streaming(
         self,
@@ -113,9 +122,7 @@ class FakeBackend:
         model: str | None = None,
         timeout_seconds: float | None = None,
     ) -> tuple[bool, str]:
-        idx = self.call_count % len(self._responses)
-        self.call_count += 1
-        return self._responses[idx]
+        return self._next_response()
 
     def check_installed(self) -> tuple[bool, str]:
         return True, "FakeBackend 1.0.0"

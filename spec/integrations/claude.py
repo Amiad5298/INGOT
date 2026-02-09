@@ -10,6 +10,7 @@ and OS ARG_MAX limits).
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -19,6 +20,9 @@ from contextlib import contextmanager
 from spec.utils.logging import log_command, log_message
 
 CLAUDE_CLI_NAME = "claude"
+
+# Anthropic-specific overloaded status code (word-boundary to avoid false positives).
+_CLAUDE_EXTRA_STATUS_RE = re.compile(r"\b529\b")
 
 
 def check_claude_installed() -> tuple[bool, str]:
@@ -68,14 +72,15 @@ def looks_like_rate_limit(output: str) -> bool:
     Returns:
         True if the output looks like a rate limit error
     """
-    import re
-
+    # Lazy import to break circular dependency:
+    # claude.py -> backends/__init__.py -> base.py (at import time the chain
+    # can pull in modules that import utils which re-import backends).
     from spec.integrations.backends.base import matches_common_rate_limit
 
     return matches_common_rate_limit(
         output,
         extra_keywords=("overloaded", "capacity"),
-        extra_status_re=re.compile(r"\b529\b"),
+        extra_status_re=_CLAUDE_EXTRA_STATUS_RE,
     )
 
 

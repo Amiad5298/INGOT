@@ -25,8 +25,11 @@ from spec.config.fetch_config import AgentPlatform
 from spec.integrations.backends.errors import BackendTimeoutError
 
 # ── Shared rate-limit detection ──────────────────────────────────────────────
-# Word-boundary regex prevents matching ticket IDs (e.g., "PROJ-4290").
-_HTTP_RATE_LIMIT_STATUS_RE = re.compile(r"\b(429|502|503|504)\b")
+# Only match actual rate-limit status codes with word boundaries to prevent
+# false positives on ticket IDs (e.g., "PROJ-4290").
+# Server errors (502/503/504) are NOT rate limits — they are retried
+# separately via _is_retryable_error() using config.retryable_status_codes.
+_HTTP_RATE_LIMIT_STATUS_RE = re.compile(r"\b429\b")
 
 _COMMON_RATE_LIMIT_KEYWORDS: tuple[str, ...] = (
     "rate limit",

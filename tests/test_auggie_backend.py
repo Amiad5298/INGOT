@@ -542,9 +542,6 @@ class TestAuggieDetectRateLimit:
             "quota exceeded for model",
             "insufficient capacity, try again",
             "request throttled by API",
-            "HTTP 502 Bad Gateway",
-            "Service Unavailable 503",
-            "Gateway Timeout: 504",
         ],
         ids=[
             "429",
@@ -554,9 +551,6 @@ class TestAuggieDetectRateLimit:
             "quota_exceeded",
             "capacity",
             "throttle",
-            "502",
-            "503",
-            "504",
         ],
     )
     def test_positive_detection(self, backend, output):
@@ -571,6 +565,9 @@ class TestAuggieDetectRateLimit:
             "Created file utils.py",
             "Error: file not found",
             "",
+            "HTTP 502 Bad Gateway",
+            "Service Unavailable 503",
+            "Gateway Timeout: 504",
         ],
         ids=[
             "normal",
@@ -578,6 +575,9 @@ class TestAuggieDetectRateLimit:
             "file_created",
             "file_not_found",
             "empty",
+            "502_server_error",
+            "503_server_error",
+            "504_server_error",
         ],
     )
     def test_negative_detection(self, backend, output):

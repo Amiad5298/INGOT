@@ -180,6 +180,16 @@ class TestIsRetryableError:
         error_500 = Exception("Internal Server Error 500")
         assert _is_retryable_error(error_500, config) is True
 
+    def test_status_code_word_boundary_no_false_positive(self, default_config):
+        """Status codes embedded in identifiers should not match."""
+        error = Exception("Working on ticket PROJ-4290")
+        assert _is_retryable_error(error, default_config) is False
+
+    def test_status_code_word_boundary_true_positive(self, default_config):
+        """Standalone status codes should still match."""
+        error = Exception("HTTP 429 Too Many Requests")
+        assert _is_retryable_error(error, default_config) is True
+
     def test_detects_backend_rate_limit_error_by_type(self, default_config):
         """BackendRateLimitError is retryable even without keywords in message."""
         error = BackendRateLimitError(

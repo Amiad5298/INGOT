@@ -77,6 +77,8 @@ def looks_like_rate_limit(output: str) -> bool:
     Returns:
         True if the output looks like a rate limit error
     """
+    # Lazy import to break circular dependency:
+    # cursor.py -> backends/__init__.py -> base.py (circular at import time).
     from spec.integrations.backends.base import matches_common_rate_limit
 
     return matches_common_rate_limit(output, extra_keywords=("overloaded",))

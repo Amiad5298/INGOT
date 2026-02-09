@@ -150,6 +150,8 @@ def looks_like_rate_limit(output: str) -> bool:
     Returns:
         True if the output looks like a rate limit error
     """
+    # Lazy import to break circular dependency:
+    # auggie.py -> utils/console -> utils/__init__ -> utils/retry -> auggie.py
     from spec.integrations.backends.base import matches_common_rate_limit
 
     return matches_common_rate_limit(output, extra_keywords=("capacity",))
@@ -308,7 +310,7 @@ def install_auggie() -> bool:
         major_version = int(node_version.split(".")[0])
         if major_version < REQUIRED_NODE_VERSION:
             print_error(
-                f"Node.js version {node_version} is too old. " f"Required: {REQUIRED_NODE_VERSION}+"
+                f"Node.js version {node_version} is too old. Required: {REQUIRED_NODE_VERSION}+"
             )
             print_info("Please upgrade Node.js: https://nodejs.org/")
             return False
@@ -415,7 +417,7 @@ class AuggieClient:
                 # Prepend agent's system prompt to user's prompt
                 if agent_def.prompt:
                     effective_prompt = (
-                        f"## Agent Instructions\n\n{agent_def.prompt}\n\n" f"## Task\n\n{prompt}"
+                        f"## Agent Instructions\n\n{agent_def.prompt}\n\n## Task\n\n{prompt}"
                     )
             else:
                 # Agent not found, fall back to default model

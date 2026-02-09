@@ -8,6 +8,7 @@ handling during concurrent task execution. It includes:
 """
 
 import random
+import re
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -166,9 +167,10 @@ def _is_retryable_error(error: Exception, config: "RateLimitConfig") -> bool:
 
     error_str = str(error).lower()
 
-    # Check for HTTP status codes in error message
+    # Check for HTTP status codes in error message using word boundaries
+    # to avoid false positives (e.g., "PROJ-4290" should not match 429).
     for status_code in config.retryable_status_codes:
-        if str(status_code) in error_str:
+        if re.search(rf"\b{status_code}\b", error_str):
             return True
 
     # Check for common rate limit keywords
