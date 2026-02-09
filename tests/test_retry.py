@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from spec.integrations.auggie import AuggieRateLimitError
+from spec.integrations.backends.errors import BackendRateLimitError
 from spec.utils.retry import (
     RateLimitExceededError,
     _is_retryable_error,
@@ -50,23 +51,17 @@ class TestRateLimitExceededError:
 
     def test_creates_exception_with_message(self):
         """Exception stores message correctly."""
-        error = RateLimitExceededError(
-            "Rate limit exceeded", attempts=3, total_wait_time=5.0
-        )
+        error = RateLimitExceededError("Rate limit exceeded", attempts=3, total_wait_time=5.0)
         assert "Rate limit exceeded" in str(error)
 
     def test_creates_exception_with_attempts(self):
         """Exception stores attempts value."""
-        error = RateLimitExceededError(
-            "Test error", attempts=5, total_wait_time=10.0
-        )
+        error = RateLimitExceededError("Test error", attempts=5, total_wait_time=10.0)
         assert error.attempts == 5
 
     def test_creates_exception_with_total_wait_time(self):
         """Exception stores total_wait_time value."""
-        error = RateLimitExceededError(
-            "Test error", attempts=3, total_wait_time=7.5
-        )
+        error = RateLimitExceededError("Test error", attempts=3, total_wait_time=7.5)
         assert error.total_wait_time == 7.5
 
 
@@ -185,6 +180,33 @@ class TestIsRetryableError:
         error_500 = Exception("Internal Server Error 500")
         assert _is_retryable_error(error_500, config) is True
 
+    def test_status_code_word_boundary_no_false_positive(self, default_config):
+        """Status codes embedded in identifiers should not match."""
+        error = Exception("Working on ticket PROJ-4290")
+        assert _is_retryable_error(error, default_config) is False
+
+    def test_status_code_word_boundary_true_positive(self, default_config):
+        """Standalone status codes should still match."""
+        error = Exception("HTTP 429 Too Many Requests")
+        assert _is_retryable_error(error, default_config) is True
+
+    def test_detects_backend_rate_limit_error_by_type(self, default_config):
+        """BackendRateLimitError is retryable even without keywords in message."""
+        error = BackendRateLimitError(
+            "something went wrong",
+            output="generic output",
+            backend_name="TestBackend",
+        )
+        assert _is_retryable_error(error, default_config) is True
+
+    def test_detects_auggie_rate_limit_error_by_type(self, default_config):
+        """AuggieRateLimitError is retryable even without keywords in message."""
+        error = AuggieRateLimitError(
+            "something went wrong",
+            output="generic output",
+        )
+        assert _is_retryable_error(error, default_config) is True
+
 
 # =============================================================================
 # Tests for with_rate_limit_retry decorator
@@ -196,6 +218,7 @@ class TestWithRateLimitRetry:
 
     def test_returns_result_on_success(self, rate_limit_config):
         """Decorated function returns normally on success."""
+
         @with_rate_limit_retry(rate_limit_config)
         def successful_func():
             return "success"
@@ -224,6 +247,7 @@ class TestWithRateLimitRetry:
     @patch("spec.utils.retry.time.sleep")
     def test_raises_after_max_retries(self, mock_sleep, rate_limit_config):
         """Raises RateLimitExceededError after max retries."""
+
         @with_rate_limit_retry(rate_limit_config)
         def always_fails():
             raise Exception("HTTP Error 429: Too Many Requests")
@@ -351,9 +375,7 @@ class TestAuggieRateLimitErrorRetry:
 
         @with_rate_limit_retry(config)
         def always_rate_limited():
-            raise AuggieRateLimitError(
-                "Rate limit", output="Error 429: rate limit exceeded"
-            )
+            raise AuggieRateLimitError("Rate limit", output="Error 429: rate limit exceeded")
 
         with pytest.raises(RateLimitExceededError) as exc_info:
             always_rate_limited()
@@ -398,3 +420,84 @@ class TestAuggieRateLimitErrorRetry:
         assert calls[0] == pytest.approx(2.5)  # 2.0 + 0.5 jitter
         assert calls[1] == pytest.approx(4.5)  # 4.0 + 0.5 jitter
 
+
+class TestBackendRateLimitErrorRetry:
+    """Tests for retry behavior with BackendRateLimitError."""
+
+    @patch("spec.utils.retry.time.sleep")
+    def test_retry_triggers_on_backend_rate_limit_error(self, mock_sleep):
+        """BackendRateLimitError triggers retry and succeeds after failures."""
+        config = RateLimitConfig(
+            max_retries=3,
+            base_delay_seconds=0.1,
+            max_delay_seconds=1.0,
+            jitter_factor=0.0,
+        )
+        call_count = 0
+
+        @with_rate_limit_retry(config)
+        def flaky_backend_call():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise BackendRateLimitError(
+                    "Rate limit detected",
+                    output="Error 429: Too Many Requests",
+                    backend_name="Claude",
+                )
+            return "eventual success"
+
+        result = flaky_backend_call()
+
+        assert result == "eventual success"
+        assert call_count == 3
+        assert mock_sleep.call_count == 2
+
+    @patch("spec.utils.retry.time.sleep")
+    def test_retry_exhaustion_on_persistent_backend_rate_limit(self, mock_sleep):
+        """Persistent BackendRateLimitError exhausts retries."""
+        config = RateLimitConfig(
+            max_retries=2,
+            base_delay_seconds=0.1,
+            max_delay_seconds=1.0,
+            jitter_factor=0.0,
+        )
+
+        @with_rate_limit_retry(config)
+        def always_rate_limited():
+            raise BackendRateLimitError("Rate limit", output="429 error", backend_name="Auggie")
+
+        with pytest.raises(RateLimitExceededError) as exc_info:
+            always_rate_limited()
+
+        assert exc_info.value.attempts == 2
+        assert mock_sleep.call_count == 2
+
+    @patch("spec.utils.retry.time.sleep")
+    def test_retries_backend_error_without_rate_limit_keywords(self, mock_sleep):
+        """BackendRateLimitError is retried even without rate limit keywords."""
+        config = RateLimitConfig(
+            max_retries=3,
+            base_delay_seconds=0.1,
+            max_delay_seconds=1.0,
+            jitter_factor=0.0,
+        )
+        call_count = 0
+
+        @with_rate_limit_retry(config)
+        def backend_call_no_keywords():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise BackendRateLimitError(
+                    "something went wrong",
+                    output="generic output with no keywords",
+                    backend_name="Cursor",
+                )
+            return "success"
+
+        result = backend_call_no_keywords()
+
+        assert result == "success"
+        assert call_count == 2
+        assert mock_sleep.call_count == 1

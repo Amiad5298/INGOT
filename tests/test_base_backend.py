@@ -467,6 +467,60 @@ class TestBaseBackendImports:
         assert BackendTimeoutError.__name__ == "BackendTimeoutError"
 
 
+class TestMatchesCommonRateLimit:
+    """Tests for the shared matches_common_rate_limit function."""
+
+    def test_none_output_returns_false(self):
+        """None output returns False without raising AttributeError."""
+        from spec.integrations.backends.base import matches_common_rate_limit
+
+        assert matches_common_rate_limit(None) is False
+
+    def test_empty_string_returns_false(self):
+        """Empty string returns False."""
+        from spec.integrations.backends.base import matches_common_rate_limit
+
+        assert matches_common_rate_limit("") is False
+
+    def test_detects_429(self):
+        """Detects HTTP 429 status code."""
+        from spec.integrations.backends.base import matches_common_rate_limit
+
+        assert matches_common_rate_limit("Error 429: Too Many Requests") is True
+
+    def test_detects_rate_limit_keyword(self):
+        """Detects rate limit keywords."""
+        from spec.integrations.backends.base import matches_common_rate_limit
+
+        assert matches_common_rate_limit("rate limit exceeded") is True
+
+    def test_does_not_detect_502(self):
+        """502 is not a rate limit."""
+        from spec.integrations.backends.base import matches_common_rate_limit
+
+        assert matches_common_rate_limit("502 Bad Gateway") is False
+
+    def test_extra_keywords(self):
+        """Extra keywords are checked."""
+        from spec.integrations.backends.base import matches_common_rate_limit
+
+        assert (
+            matches_common_rate_limit("server overloaded", extra_keywords=("overloaded",)) is True
+        )
+        assert matches_common_rate_limit("server overloaded") is False
+
+    def test_extra_status_re(self):
+        """Extra status code regex is checked."""
+        import re
+
+        from spec.integrations.backends.base import matches_common_rate_limit
+
+        assert (
+            matches_common_rate_limit("Error 529", extra_status_re=re.compile(r"\b529\b")) is True
+        )
+        assert matches_common_rate_limit("Error 529") is False
+
+
 class TestBaseBackendProtocolCompliance:
     """Tests verifying BaseBackend subclasses satisfy AIBackend protocol."""
 

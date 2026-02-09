@@ -142,10 +142,53 @@ class GitOperationError(SpecError):
     _default_exit_code: ClassVar[ExitCode] = ExitCode.GIT_ERROR
 
 
+# ── Rate-limit exceptions ────────────────────────────────────────────────────
+# Defined here (in the dependency-free base error module) to break the
+# circular import chain: auggie.py → utils → utils.retry → auggie.py.
+# Re-exported from their original modules for backward compatibility.
+
+
+class AuggieRateLimitError(Exception):
+    """Raised when Auggie CLI output indicates a rate limit error.
+
+    Re-exported from spec.integrations.auggie for backward compatibility.
+
+    Attributes:
+        output: The output that triggered rate limit detection
+    """
+
+    def __init__(self, message: str, output: str):
+        super().__init__(message)
+        self.output = output
+
+
+class BackendRateLimitError(SpecError):
+    """Raised when any backend hits a rate limit.
+
+    Re-exported from spec.integrations.backends.errors for backward compatibility.
+
+    Attributes:
+        output: The output that triggered rate limit detection
+        backend_name: Name of the backend that hit the rate limit
+    """
+
+    def __init__(
+        self,
+        message: str,
+        output: str = "",
+        backend_name: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.output = output
+        self.backend_name = backend_name
+
+
 __all__ = [
     "ExitCode",
     "SpecError",
     "AuggieNotInstalledError",
+    "AuggieRateLimitError",
+    "BackendRateLimitError",
     "PlatformNotConfiguredError",
     "UserCancelledError",
     "GitOperationError",

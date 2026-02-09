@@ -636,6 +636,15 @@ def _execute_parallel_fallback(
                 skipped_tasks.append(task.name)
                 print_info(f"[PARALLEL] Skipped (cancelled): {task.name}")
                 continue
+            except Exception as e:
+                task = futures[future]
+                failed_tasks.append(task.name)
+                print_error(f"[PARALLEL] Crashed: {task.name}: {e}")
+                if state.fail_fast:
+                    stop_flag.set()
+                    for f in futures:
+                        f.cancel()
+                continue
 
             if success is None:
                 # Task was skipped due to stop_flag
@@ -855,17 +864,23 @@ def _execute_task(
     prompt = _build_task_prompt(task, plan_path, is_parallel=False)
 
     try:
-        success, _ = backend.run_with_callback(
+        success, output = backend.run_with_callback(
             prompt,
             subagent=state.subagent_names["implementer"],
             output_callback=lambda _line: None,
             dont_save_session=True,
         )
+        if not success and backend.detect_rate_limit(output):
+            raise BackendRateLimitError(
+                "Rate limit detected", output=output, backend_name=backend.name
+            )
         if success:
             print_success(f"Task completed: {task.name}")
         else:
             print_warning(f"Task returned failure: {task.name}")
         return success
+    except BackendRateLimitError:
+        raise  # Let retry decorator handle
     except Exception as e:
         print_error(f"Task execution crashed: {e}")
         return False
@@ -951,12 +966,25 @@ def _execute_task_with_retry(
 
     # Skip retry wrapper if retries disabled
     if config.max_retries <= 0:
-        if callback:
-            return _execute_task_with_callback(
-                state, task, plan_path, backend=backend, callback=callback, is_parallel=is_parallel
-            )
-        else:
-            return _execute_task(state, task, plan_path, backend)
+        try:
+            if callback:
+                return _execute_task_with_callback(
+                    state,
+                    task,
+                    plan_path,
+                    backend=backend,
+                    callback=callback,
+                    is_parallel=is_parallel,
+                )
+            else:
+                return _execute_task(state, task, plan_path, backend)
+        except BackendRateLimitError:
+            # No retries available — treat as failure
+            error_msg = "[FAILED] Rate limit detected but retries are disabled"
+            if callback:
+                callback(error_msg)
+            print_warning(error_msg)
+            return False
 
     def log_retry(attempt: int, delay: float, error: Exception) -> None:
         """Log retry attempts."""

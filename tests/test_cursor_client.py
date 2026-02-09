@@ -580,6 +580,10 @@ class TestLooksLikeRateLimit:
         """Empty string returns False."""
         assert looks_like_rate_limit("") is False
 
+    def test_none_output_returns_false(self):
+        """None output returns False without raising."""
+        assert looks_like_rate_limit(None) is False
+
 
 class TestCursorStabilityMechanism:
     """Tests for CursorClient stability mechanisms."""

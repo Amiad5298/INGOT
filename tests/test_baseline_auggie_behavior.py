@@ -370,38 +370,32 @@ class TestRateLimitDetection:
         for output in normal_outputs:
             assert not looks_like_rate_limit(output), f"Should NOT detect: {output}"
 
-    def testlooks_like_rate_limit_false_positives_documented(self):
-        """Document known false positives in current implementation.
+    def test_looks_like_rate_limit_fixed_false_positives(self):
+        """Verify that most former false positives are now correctly rejected.
 
-        IMPORTANT: This test documents the CURRENT behavior, which includes
-        false positives. The implementation uses simple substring matching
-        that cannot distinguish context.
+        Word-boundary matching prevents "PROJ-4290" from matching "429".
+        Removal of 502/503/504 from rate-limit detection means those
+        server errors no longer trigger detect_rate_limit.
 
-        Known false positives (these ARE detected as rate limits even though they shouldn't be):
-        - "Error on line 429 of main.py" - contains "429"
-        - "Expected 503 but got 200" - contains "503"
-        - "Test case 502 failed" - contains "502"
-
-        This is a known limitation that may be addressed in future versions.
+        Remaining known limitation: standalone "429" in non-HTTP context
+        (e.g., "line 429") is inherently ambiguous and still matches.
         """
         from spec.integrations.auggie import looks_like_rate_limit
 
-        # Document that these ARE false positives (current behavior)
-        known_false_positives = [
-            "Error on line 429 of main.py",  # 429 in context
-            "Expected 503 but got 200",  # 503 in context
-            "Test case 502 failed",  # 502 in context
+        # Fixed: 502/503 are no longer detected as rate limits
+        fixed_false_positives = [
+            "Expected 503 but got 200",  # 503 not a rate limit
+            "Test case 502 failed",  # 502 not a rate limit
         ]
+        for output in fixed_false_positives:
+            assert not looks_like_rate_limit(output), f"Should NOT detect as rate limit: '{output}'"
 
-        # These WILL be detected as rate limits (false positives)
-        # This documents the current behavior for regression testing
-        for output in known_false_positives:
-            # Current implementation has false positives - document this
-            result = looks_like_rate_limit(output)
-            # Assert the CURRENT behavior (true = false positive exists)
-            assert (
-                result is True
-            ), f"Documenting false positive: '{output}' should trigger rate limit detection"
+        # Fixed: embedded status codes no longer match
+        assert not looks_like_rate_limit("Working on PROJ-4290")
+
+        # Known limitation: standalone "429" in non-HTTP context still matches
+        # because word-boundary regex cannot distinguish context
+        assert looks_like_rate_limit("Error on line 429 of main.py")
 
     def testlooks_like_rate_limit_true_negatives(self):
         """Verify messages without rate-limit patterns are NOT detected."""

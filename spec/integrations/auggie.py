@@ -22,6 +22,7 @@ from spec.utils.console import (
     print_success,
     print_warning,
 )
+from spec.utils.errors import AuggieRateLimitError as AuggieRateLimitError
 from spec.utils.logging import log_command, log_message
 
 
@@ -129,19 +130,12 @@ def _parse_agent_definition(agent_name: str) -> AgentDefinition | None:
         return None
 
 
-class AuggieRateLimitError(Exception):
-    """Raised when Auggie CLI output indicates a rate limit error."""
-
-    def __init__(self, message: str, output: str):
-        super().__init__(message)
-        self.output = output
-
-
 def looks_like_rate_limit(output: str) -> bool:
     """Heuristic check for rate limit errors in output.
 
     Detects rate limit errors by checking for common HTTP status codes
-    and rate limit keywords in the output.
+    and rate limit keywords in the output.  Uses word-boundary matching
+    for numeric status codes to avoid false positives on ticket IDs.
 
     Args:
         output: The output string to check
@@ -149,20 +143,11 @@ def looks_like_rate_limit(output: str) -> bool:
     Returns:
         True if the output looks like a rate limit error
     """
-    output_lower = output.lower()
-    patterns = [
-        "429",
-        "rate limit",
-        "rate_limit",
-        "too many requests",
-        "quota exceeded",
-        "capacity",
-        "throttl",
-        "502",
-        "503",
-        "504",
-    ]
-    return any(p in output_lower for p in patterns)
+    # Lazy import to break circular dependency:
+    # auggie.py -> utils/console -> utils/__init__ -> utils/retry -> auggie.py
+    from spec.integrations.backends.base import matches_common_rate_limit
+
+    return matches_common_rate_limit(output, extra_keywords=("capacity",))
 
 
 @dataclass
@@ -318,7 +303,7 @@ def install_auggie() -> bool:
         major_version = int(node_version.split(".")[0])
         if major_version < REQUIRED_NODE_VERSION:
             print_error(
-                f"Node.js version {node_version} is too old. " f"Required: {REQUIRED_NODE_VERSION}+"
+                f"Node.js version {node_version} is too old. Required: {REQUIRED_NODE_VERSION}+"
             )
             print_info("Please upgrade Node.js: https://nodejs.org/")
             return False
@@ -425,7 +410,7 @@ class AuggieClient:
                 # Prepend agent's system prompt to user's prompt
                 if agent_def.prompt:
                     effective_prompt = (
-                        f"## Agent Instructions\n\n{agent_def.prompt}\n\n" f"## Task\n\n{prompt}"
+                        f"## Agent Instructions\n\n{agent_def.prompt}\n\n## Task\n\n{prompt}"
                     )
             else:
                 # Agent not found, fall back to default model

@@ -457,21 +457,25 @@ class TestLooksLikeRateLimit:
         """Detects 'capacity' keyword."""
         assert looks_like_rate_limit("insufficient capacity") is True
 
-    def test_detects_502(self):
-        """Detects HTTP 502."""
-        assert looks_like_rate_limit("502 Bad Gateway") is True
+    def test_does_not_detect_502(self):
+        """502 is a server error, not a rate limit."""
+        assert looks_like_rate_limit("502 Bad Gateway") is False
 
-    def test_detects_503(self):
-        """Detects HTTP 503."""
-        assert looks_like_rate_limit("503 Service Unavailable") is True
+    def test_does_not_detect_503(self):
+        """503 is a server error, not a rate limit."""
+        assert looks_like_rate_limit("503 Service Unavailable") is False
 
-    def test_detects_504(self):
-        """Detects HTTP 504."""
-        assert looks_like_rate_limit("504 Gateway Timeout") is True
+    def test_does_not_detect_504(self):
+        """504 is a server error, not a rate limit."""
+        assert looks_like_rate_limit("504 Gateway Timeout") is False
 
     def test_normal_output_returns_false(self):
         """Normal output returns False."""
         assert looks_like_rate_limit("Successfully generated code") is False
+
+    def test_none_output_returns_false(self):
+        """None output returns False without raising."""
+        assert looks_like_rate_limit(None) is False
 
     def test_empty_string_returns_false(self):
         """Empty string returns False."""

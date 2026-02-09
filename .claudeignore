@@ -1,0 +1,32 @@
+# Python Caches & Build
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# AI Tool Metadata (Specific to your setup)
+.augment/
+.ai_workflow/
+.claude/
+.spec/
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+
+# Version Control
+.git/
+
+# Secrets
+.env
+*.secrets

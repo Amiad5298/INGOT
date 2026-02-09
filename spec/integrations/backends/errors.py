@@ -6,45 +6,21 @@ other backends.
 
 All errors inherit from SpecError to leverage exit code semantics and
 the existing exception hierarchy.
+
+Note: BackendRateLimitError and AuggieRateLimitError are defined in
+spec.utils.errors (the dependency-free base error module) to break
+circular imports. They are re-exported here for backward compatibility.
 """
 
-from spec.utils.errors import SpecError
-
-
-class BackendRateLimitError(SpecError):
-    """Raised when any backend hits a rate limit.
-
-    Replaces AuggieRateLimitError for backend-agnostic handling.
-    Carries backend_name and output for context.
-
-    Attributes:
-        output: The output that triggered rate limit detection
-        backend_name: Name of the backend that hit the rate limit
-
-    Example:
-        >>> raise BackendRateLimitError(
-        ...     "Rate limit detected",
-        ...     output="Error 429: Too Many Requests",
-        ...     backend_name="Auggie",
-        ... )
-    """
-
-    def __init__(
-        self,
-        message: str,
-        output: str = "",
-        backend_name: str = "",
-    ) -> None:
-        """Initialize the rate limit error.
-
-        Args:
-            message: Error message describing the rate limit
-            output: The output that triggered rate limit detection
-            backend_name: Name of the backend (e.g., "Auggie", "Claude")
-        """
-        super().__init__(message)
-        self.output = output
-        self.backend_name = backend_name
+from spec.utils.errors import (
+    AuggieRateLimitError as AuggieRateLimitError,
+)
+from spec.utils.errors import (
+    BackendRateLimitError as BackendRateLimitError,
+)
+from spec.utils.errors import (
+    SpecError,
+)
 
 
 class BackendNotInstalledError(SpecError):
@@ -110,6 +86,7 @@ class BackendTimeoutError(SpecError):
 
 
 __all__ = [
+    "AuggieRateLimitError",
     "BackendRateLimitError",
     "BackendNotInstalledError",
     "BackendNotConfiguredError",

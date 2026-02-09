@@ -595,6 +595,74 @@ class TestCursorBackendClose:
         backend.close()  # Should not raise
 
 
+class TestCursorDetectRateLimit:
+    """Comprehensive rate limit detection tests for Cursor backend."""
+
+    @pytest.fixture
+    def backend(self):
+        return CursorBackend()
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            "Error 429: Too Many Requests",
+            "rate limit exceeded, please wait",
+            "rate_limit_error: quota used up",
+            "too many requests, slow down",
+            "quota exceeded for model",
+            "request throttled by API",
+            "API is overloaded, try later",
+        ],
+        ids=[
+            "429",
+            "rate_limit",
+            "rate_limit_underscore",
+            "too_many_requests",
+            "quota_exceeded",
+            "throttle",
+            "overloaded",
+        ],
+    )
+    def test_positive_detection(self, backend, output):
+        """Output containing rate limit patterns returns True."""
+        assert backend.detect_rate_limit(output) is True
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            "normal output",
+            "Task completed successfully",
+            "Created file utils.py",
+            "Error: file not found",
+            "",
+            "HTTP 502 Bad Gateway",
+            "Service Unavailable 503",
+            "Gateway Timeout: 504",
+        ],
+        ids=[
+            "normal",
+            "success",
+            "file_created",
+            "file_not_found",
+            "empty",
+            "502_server_error",
+            "503_server_error",
+            "504_server_error",
+        ],
+    )
+    def test_negative_detection(self, backend, output):
+        """Output without rate limit indicators returns False."""
+        assert backend.detect_rate_limit(output) is False
+
+    def test_429_word_boundary_no_false_positive(self, backend):
+        """'429' embedded in identifiers (e.g., PROJ-4290) should not match."""
+        assert backend.detect_rate_limit("Working on PROJ-4290") is False
+
+    def test_429_word_boundary_true_positive(self, backend):
+        """Standalone '429' status code should match."""
+        assert backend.detect_rate_limit("HTTP 429 error") is True
+
+
 @pytest.mark.skipif(
     os.environ.get("SPEC_INTEGRATION_TESTS") != "1",
     reason="Integration tests require SPEC_INTEGRATION_TESTS=1",

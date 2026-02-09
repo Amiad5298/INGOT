@@ -8,10 +8,13 @@ handling during concurrent task execution. It includes:
 """
 
 import random
+import re
 import time
 from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
+
+from spec.utils.errors import AuggieRateLimitError, BackendRateLimitError
 
 if TYPE_CHECKING:
     from spec.workflow.state import RateLimitConfig
@@ -155,11 +158,17 @@ def _is_retryable_error(error: Exception, config: "RateLimitConfig") -> bool:
     Returns:
         True if the error is retryable, False otherwise
     """
+    if isinstance(error, BackendRateLimitError | AuggieRateLimitError):
+        return True
+
     error_str = str(error).lower()
 
-    # Check for HTTP status codes in error message
-    for status_code in config.retryable_status_codes:
-        if str(status_code) in error_str:
+    # Check for HTTP status codes in error message using word boundaries
+    # to avoid false positives (e.g., "PROJ-4290" should not match 429).
+    # Compile a single combined regex for all configured status codes.
+    if config.retryable_status_codes:
+        codes_pattern = "|".join(str(c) for c in config.retryable_status_codes)
+        if re.search(rf"\b(?:{codes_pattern})\b", error_str):
             return True
 
     # Check for common rate limit keywords
@@ -180,4 +189,3 @@ __all__ = [
     "calculate_backoff_delay",
     "with_rate_limit_retry",
 ]
-

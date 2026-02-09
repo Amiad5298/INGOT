@@ -1833,6 +1833,27 @@ class TestTaskRetry:
         assert result is True
         assert mock_execute.call_count == 2
 
+    @patch("spec.workflow.step3_execute._execute_task")
+    def test_rate_limit_error_returns_false_when_retries_disabled(
+        self, mock_execute, mock_backend, workflow_state, tmp_path
+    ):
+        """BackendRateLimitError returns False (not raises) when max_retries=0."""
+        from spec.integrations.backends.errors import BackendRateLimitError
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
+
+        mock_execute.side_effect = BackendRateLimitError(
+            "Rate limit detected", output="429 error", backend_name="Test"
+        )
+        workflow_state.rate_limit_config = RateLimitConfig(max_retries=0)
+
+        task = Task(name="No-Retry Task")
+        result = _execute_task_with_retry(
+            workflow_state, task, workflow_state.get_plan_path(), backend=mock_backend
+        )
+
+        assert result is False
+
 
 # =============================================================================
 # Tests for Parallel Execution Enhancements
@@ -2073,6 +2094,120 @@ class TestExecuteTaskWithCallbackRateLimit:
         )
 
         assert result is False
+
+
+class TestRateLimitFlowWithFakeBackend:
+    """End-to-end rate limit retry flow tests using FakeBackend."""
+
+    def test_full_rate_limit_retry_flow(self, workflow_state):
+        """Rate-limited backend retries and eventually succeeds."""
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
+        from tests.fakes.fake_backend import make_rate_limited_backend
+
+        backend = make_rate_limited_backend(fail_count=2)
+        workflow_state.rate_limit_config = RateLimitConfig(
+            max_retries=3,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.1,
+            jitter_factor=0.0,
+        )
+
+        task = Task(name="Retry Task")
+        callback = MagicMock()
+        result = _execute_task_with_retry(
+            workflow_state,
+            task,
+            workflow_state.get_plan_path(),
+            backend=backend,
+            callback=callback,
+        )
+
+        assert result is True
+        assert backend.call_count == 3
+
+    def test_rate_limit_exhaustion_with_fake_backend(self, workflow_state):
+        """More failures than retries exhausts retries and returns False."""
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
+        from tests.fakes.fake_backend import FakeBackend
+
+        # 5 rate-limit failures, only 2 retries allowed
+        responses = [(False, "Error 429: rate limit hit")] * 5
+        backend = FakeBackend(responses)
+        workflow_state.rate_limit_config = RateLimitConfig(
+            max_retries=2,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.1,
+            jitter_factor=0.0,
+        )
+
+        task = Task(name="Exhaustion Task")
+        callback = MagicMock()
+        result = _execute_task_with_retry(
+            workflow_state,
+            task,
+            workflow_state.get_plan_path(),
+            backend=backend,
+            callback=callback,
+        )
+
+        assert result is False
+
+    def test_non_callback_path_retries_on_rate_limit(self, workflow_state):
+        """Non-callback path (_execute_task) also triggers retry on rate limit."""
+        from spec.workflow.state import RateLimitConfig
+        from spec.workflow.step3_execute import _execute_task_with_retry
+        from tests.fakes.fake_backend import make_rate_limited_backend
+
+        backend = make_rate_limited_backend(fail_count=1)
+        workflow_state.rate_limit_config = RateLimitConfig(
+            max_retries=3,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.1,
+            jitter_factor=0.0,
+        )
+
+        task = Task(name="No-Callback Retry Task")
+        result = _execute_task_with_retry(
+            workflow_state,
+            task,
+            workflow_state.get_plan_path(),
+            backend=backend,
+            callback=None,
+        )
+
+        assert result is True
+        assert backend.call_count == 2
+
+
+class TestFakeBackendConfiguration:
+    """Tests for FakeBackend configurability."""
+
+    def test_check_installed_default_true(self):
+        """FakeBackend reports installed by default."""
+        from tests.fakes.fake_backend import FakeBackend
+
+        backend = FakeBackend([(True, "ok")])
+        installed, msg = backend.check_installed()
+        assert installed is True
+
+    def test_check_installed_false(self):
+        """FakeBackend can simulate not-installed state."""
+        from tests.fakes.fake_backend import FakeBackend
+
+        backend = FakeBackend([(True, "ok")], installed=False)
+        installed, msg = backend.check_installed()
+        assert installed is False
+        assert "not installed" in msg.lower()
+
+    def test_custom_platform(self):
+        """FakeBackend can use a custom platform."""
+        from spec.config.fetch_config import AgentPlatform
+        from tests.fakes.fake_backend import FakeBackend
+
+        backend = FakeBackend([(True, "ok")], platform=AgentPlatform.CLAUDE)
+        assert backend.platform == AgentPlatform.CLAUDE
 
 
 class TestCaptureBaselineForDiffs:

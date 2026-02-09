@@ -381,7 +381,6 @@ class TestBaselineRegressionChecks:
             "too many requests",
             "429",
             "quota exceeded",
-            "503 Service Unavailable",
         ]
         for output in positive_samples:
             result = looks_like_rate_limit(output)

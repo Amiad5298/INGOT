@@ -628,17 +628,17 @@ class TestLooksLikeRateLimit:
         assert looks_like_rate_limit("Request throttled") is True
         assert looks_like_rate_limit("Throttling applied") is True
 
-    def test_detects_502(self):
-        """Detects 502 status code."""
-        assert looks_like_rate_limit("HTTP 502 Bad Gateway") is True
+    def test_does_not_detect_502(self):
+        """502 is a server error, not a rate limit."""
+        assert looks_like_rate_limit("HTTP 502 Bad Gateway") is False
 
-    def test_detects_503(self):
-        """Detects 503 status code."""
-        assert looks_like_rate_limit("503 Service Unavailable") is True
+    def test_does_not_detect_503(self):
+        """503 is a server error, not a rate limit."""
+        assert looks_like_rate_limit("503 Service Unavailable") is False
 
-    def test_detects_504(self):
-        """Detects 504 status code."""
-        assert looks_like_rate_limit("Gateway Timeout 504") is True
+    def test_does_not_detect_504(self):
+        """504 is a server error, not a rate limit."""
+        assert looks_like_rate_limit("Gateway Timeout 504") is False
 
     def test_returns_false_for_normal_output(self):
         """Returns False for normal output."""
@@ -650,6 +650,14 @@ class TestLooksLikeRateLimit:
         assert looks_like_rate_limit("RATE LIMIT") is True
         assert looks_like_rate_limit("Rate Limit") is True
         assert looks_like_rate_limit("QUOTA EXCEEDED") is True
+
+    def test_none_output_returns_false(self):
+        """None output returns False without raising."""
+        assert looks_like_rate_limit(None) is False
+
+    def test_empty_string_returns_false(self):
+        """Empty string returns False."""
+        assert looks_like_rate_limit("") is False
 
 
 class TestSubagentConstants:
