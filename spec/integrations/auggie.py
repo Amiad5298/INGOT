@@ -381,7 +381,9 @@ class AuggieClient:
 
         When an agent is specified, the agent definition file is parsed to extract
         the model and system prompt. The agent's prompt is prepended to the user's
-        prompt, and the model from the agent definition is used.
+        prompt.
+
+        Model precedence: explicit model > agent definition model > instance default.
 
         Note: The auggie CLI does not have an --agent flag. Subagents are invoked
         by embedding their instructions in the prompt and using their model.
@@ -389,7 +391,7 @@ class AuggieClient:
         Args:
             prompt: The prompt to send to Auggie
             agent: Agent name to use (reads model and prompt from agent definition file)
-            model: Override model for this command (ignored when agent is set)
+            model: Override model for this command (takes precedence over agent model)
             print_mode: Use --print flag
             quiet: Use --quiet flag
             dont_save_session: Use --dont-save-session flag
@@ -400,13 +402,14 @@ class AuggieClient:
         cmd = ["auggie"]
         effective_prompt = prompt
 
-        # Agent takes precedence - parse agent definition for model and prompt
+        # Agent takes precedence for prompt - parse agent definition
         if agent:
             agent_def = _parse_agent_definition(agent)
             if agent_def:
-                # Use model from agent definition
-                if agent_def.model:
-                    cmd.extend(["--model", agent_def.model])
+                # Explicit model override takes precedence over agent definition model
+                effective_model = model or agent_def.model or self.model
+                if effective_model:
+                    cmd.extend(["--model", effective_model])
                 # Prepend agent's system prompt to user's prompt
                 if agent_def.prompt:
                     effective_prompt = (
@@ -449,7 +452,7 @@ class AuggieClient:
         Args:
             prompt: The prompt to send to Auggie
             agent: Agent to use (model comes from agent definition file)
-            model: Override model for this command (ignored when agent is set)
+            model: Override model for this command (takes precedence over agent model)
             print_mode: Use --print flag
             quiet: Use --quiet flag
             dont_save_session: Use --dont-save-session flag
@@ -490,7 +493,7 @@ class AuggieClient:
         Args:
             prompt: The prompt to send
             agent: Agent to use (model comes from agent definition file)
-            model: Override model for this command (ignored when agent is set)
+            model: Override model for this command (takes precedence over agent model)
             dont_save_session: Use --dont-save-session flag
 
         Returns:
@@ -518,7 +521,7 @@ class AuggieClient:
         Args:
             prompt: The prompt to send
             agent: Agent to use (model comes from agent definition file)
-            model: Override model for this command (ignored when agent is set)
+            model: Override model for this command (takes precedence over agent model)
             dont_save_session: Use --dont-save-session flag
 
         Returns:
@@ -550,7 +553,7 @@ class AuggieClient:
         Args:
             prompt: The prompt to send
             agent: Agent to use (model comes from agent definition file)
-            model: Override model for this command (ignored when agent is set)
+            model: Override model for this command (takes precedence over agent model)
             dont_save_session: Use --dont-save-session flag
 
         Returns:
@@ -588,7 +591,7 @@ class AuggieClient:
             prompt: The prompt to send to Auggie
             output_callback: Callback function invoked for each output line
             agent: Agent to use (model comes from agent definition file)
-            model: Override model for this command (ignored when agent is set)
+            model: Override model for this command (takes precedence over agent model)
             dont_save_session: Use --dont-save-session flag
 
         Returns:

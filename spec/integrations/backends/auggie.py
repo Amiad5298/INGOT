@@ -10,6 +10,7 @@ AuggieBackend is the reference implementation demonstrating how concrete backend
 - Map parameters between protocol and client APIs
 """
 
+import subprocess
 from collections.abc import Callable
 
 from spec.config.fetch_config import AgentPlatform
@@ -19,6 +20,7 @@ from spec.integrations.auggie import (
     looks_like_rate_limit,
 )
 from spec.integrations.backends.base import BaseBackend
+from spec.integrations.backends.errors import BackendTimeoutError
 
 
 class AuggieBackend(BaseBackend):
@@ -74,11 +76,6 @@ class AuggieBackend(BaseBackend):
 
         Uses BaseBackend._run_streaming_with_timeout() for timeout enforcement.
         This wraps the AuggieClient call with the streaming-safe watchdog pattern.
-
-        Note on model resolution: _resolve_model() returns the correct precedence
-        (explicit → frontmatter → default), but when subagent is set, Auggie's
-        _build_command() may ignore the resolved model and use the agent
-        definition's model instead. This is a known limitation of the Auggie CLI.
 
         Args:
             prompt: The prompt to send to Auggie.
@@ -138,11 +135,45 @@ class AuggieBackend(BaseBackend):
     ) -> tuple[bool, str]:
         """Run with --print flag, return success status and captured output.
 
-        Warning: timeout_seconds is accepted per protocol but NOT enforced in
-        this version. Callers should not assume timeout works for this method.
-        Timeout support can be added in a future enhancement if needed.
+        Args:
+            prompt: The prompt to send to Auggie.
+            subagent: Optional subagent name (mapped to 'agent' in AuggieClient).
+            model: Optional model override.
+            dont_save_session: If True, don't save the session.
+            timeout_seconds: Optional timeout in seconds (None = no timeout).
+
+        Returns:
+            Tuple of (success, output).
+
+        Raises:
+            BackendTimeoutError: If timeout_seconds is exceeded.
         """
         resolved_model = self._resolve_model(model, subagent)
+
+        if timeout_seconds is not None:
+            cmd = self._client._build_command(
+                prompt,
+                agent=subagent,
+                model=resolved_model,
+                print_mode=True,
+                dont_save_session=dont_save_session,
+            )
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout_seconds,
+                )
+                return result.returncode == 0, result.stdout
+            except subprocess.TimeoutExpired:
+                raise BackendTimeoutError(
+                    f"Operation timed out after {timeout_seconds}s",
+                    timeout_seconds=timeout_seconds,
+                ) from None
+
         return self._client.run_print_with_output(
             prompt,
             agent=subagent,
@@ -161,11 +192,46 @@ class AuggieBackend(BaseBackend):
     ) -> str:
         """Run with --print --quiet, return output only.
 
-        Warning: timeout_seconds is accepted per protocol but NOT enforced in
-        this version. Callers should not assume timeout works for this method.
-        Timeout support can be added in a future enhancement if needed.
+        Args:
+            prompt: The prompt to send to Auggie.
+            subagent: Optional subagent name (mapped to 'agent' in AuggieClient).
+            model: Optional model override.
+            dont_save_session: If True, don't save the session.
+            timeout_seconds: Optional timeout in seconds (None = no timeout).
+
+        Returns:
+            Command output string.
+
+        Raises:
+            BackendTimeoutError: If timeout_seconds is exceeded.
         """
         resolved_model = self._resolve_model(model, subagent)
+
+        if timeout_seconds is not None:
+            cmd = self._client._build_command(
+                prompt,
+                agent=subagent,
+                model=resolved_model,
+                print_mode=True,
+                quiet=True,
+                dont_save_session=dont_save_session,
+            )
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout_seconds,
+                )
+                return result.stdout
+            except subprocess.TimeoutExpired:
+                raise BackendTimeoutError(
+                    f"Operation timed out after {timeout_seconds}s",
+                    timeout_seconds=timeout_seconds,
+                ) from None
+
         return self._client.run_print_quiet(
             prompt,
             agent=subagent,

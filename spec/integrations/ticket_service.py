@@ -354,37 +354,50 @@ async def create_ticket_service(
     primary: TicketFetcherProtocol | None = None
     fallback: TicketFetcherProtocol | None = None
 
-    # Configure primary fetcher based on backend platform
+    # Configure primary fetcher based on backend platform and compatibility matrix
     if backend is not None:
-        if backend.platform == AgentPlatform.AUGGIE:
-            primary = AuggieMediatedFetcher(
-                backend=backend,
-                config_manager=config_manager,
-            )
-        elif backend.platform == AgentPlatform.CLAUDE:
-            from spec.integrations.fetchers.claude_fetcher import ClaudeMediatedFetcher
+        from spec.config.compatibility import MCP_SUPPORT
 
-            primary = ClaudeMediatedFetcher(
-                backend=backend,
-                config_manager=config_manager,
-            )
-        elif backend.platform == AgentPlatform.CURSOR:
-            from spec.integrations.fetchers.cursor_fetcher import CursorMediatedFetcher
+        supported_platforms = MCP_SUPPORT.get(backend.platform, frozenset())
 
-            primary = CursorMediatedFetcher(
-                backend=backend,
-                config_manager=config_manager,
-            )
-        elif backend.platform in (AgentPlatform.AIDER, AgentPlatform.MANUAL):
-            # AIDER and MANUAL have no mediated fetcher by design
+        if supported_platforms:
+            # Backend has MCP support — create the appropriate mediated fetcher
+            if backend.platform == AgentPlatform.AUGGIE:
+                primary = AuggieMediatedFetcher(
+                    backend=backend,
+                    config_manager=config_manager,
+                )
+            elif backend.platform == AgentPlatform.CLAUDE:
+                from spec.integrations.fetchers.claude_fetcher import ClaudeMediatedFetcher
+
+                primary = ClaudeMediatedFetcher(
+                    backend=backend,
+                    config_manager=config_manager,
+                )
+            elif backend.platform == AgentPlatform.CURSOR:
+                from spec.integrations.fetchers.cursor_fetcher import CursorMediatedFetcher
+
+                primary = CursorMediatedFetcher(
+                    backend=backend,
+                    config_manager=config_manager,
+                )
+            else:
+                # Platform has MCP entries but no fetcher implementation yet
+                logger.warning(
+                    "Backend %s has MCP support but no fetcher implementation; "
+                    "using direct API only",
+                    backend.platform.value,
+                )
+
             logger.debug(
-                "Platform %s has no mediated fetcher by design; " "using direct API only",
+                "Backend %s supports MCP for platforms: %s",
                 backend.platform.value,
+                ", ".join(p.name for p in sorted(supported_platforms, key=lambda p: p.name)),
             )
         else:
-            # Defensive: unknown platform added to enum but not handled here
-            logger.warning(
-                "Unknown platform %s has no mediated fetcher; " "using direct API only",
+            # No MCP support (e.g., AIDER, MANUAL)
+            logger.debug(
+                "Backend %s has no MCP support; using direct API only",
                 backend.platform.value,
             )
 

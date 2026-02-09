@@ -246,9 +246,8 @@ class TestAuggieBackendModelResolution:
     2. Subagent frontmatter model field
     3. Instance default model (lowest priority)
 
-    Note: When subagent is set, Auggie's _build_command() may ignore the
-    resolved model and use the agent definition's model instead. This is
-    a known limitation documented in the implementation plan.
+    Note: AuggieClient._build_command() now respects explicit model overrides
+    even when a subagent is set (explicit > agent definition > default).
     """
 
     def test_run_with_callback_resolves_model(self):
@@ -452,6 +451,94 @@ class TestAuggieBackendTimeout:
 
         assert exc_info.value.timeout_seconds == 30.0
 
+    def test_run_print_with_output_enforces_timeout(self, mocker):
+        """run_print_with_output enforces timeout via subprocess.run(timeout=...)."""
+        import subprocess
+
+        backend = AuggieBackend()
+        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch(
+            "spec.integrations.backends.auggie.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["auggie"], timeout=10.0),
+        )
+
+        with pytest.raises(BackendTimeoutError) as exc_info:
+            backend.run_print_with_output("test prompt", timeout_seconds=10.0)
+
+        assert exc_info.value.timeout_seconds == 10.0
+
+    def test_run_print_with_output_timeout_returns_result(self, mocker):
+        """run_print_with_output with timeout returns normally on success."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "output text"
+
+        backend = AuggieBackend()
+        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch("spec.integrations.backends.auggie.subprocess.run", return_value=mock_result)
+
+        success, output = backend.run_print_with_output("test prompt", timeout_seconds=30.0)
+
+        assert success is True
+        assert output == "output text"
+
+    def test_run_print_with_output_without_timeout_delegates(self, mocker):
+        """run_print_with_output without timeout delegates to client."""
+        backend = AuggieBackend()
+        mock_run = mocker.patch.object(
+            backend._client, "run_print_with_output", return_value=(True, "delegated")
+        )
+        mock_subprocess = mocker.patch("spec.integrations.backends.auggie.subprocess.run")
+
+        success, output = backend.run_print_with_output("test prompt", timeout_seconds=None)
+
+        mock_run.assert_called_once()
+        mock_subprocess.assert_not_called()
+        assert success is True
+        assert output == "delegated"
+
+    def test_run_print_quiet_enforces_timeout(self, mocker):
+        """run_print_quiet enforces timeout via subprocess.run(timeout=...)."""
+        import subprocess
+
+        backend = AuggieBackend()
+        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch(
+            "spec.integrations.backends.auggie.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["auggie"], timeout=15.0),
+        )
+
+        with pytest.raises(BackendTimeoutError) as exc_info:
+            backend.run_print_quiet("test prompt", timeout_seconds=15.0)
+
+        assert exc_info.value.timeout_seconds == 15.0
+
+    def test_run_print_quiet_timeout_returns_result(self, mocker):
+        """run_print_quiet with timeout returns output on success."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "quiet output"
+
+        backend = AuggieBackend()
+        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch("spec.integrations.backends.auggie.subprocess.run", return_value=mock_result)
+
+        output = backend.run_print_quiet("test prompt", timeout_seconds=30.0)
+
+        assert output == "quiet output"
+
+    def test_run_print_quiet_without_timeout_delegates(self, mocker):
+        """run_print_quiet without timeout delegates to client."""
+        backend = AuggieBackend()
+        mock_run = mocker.patch.object(backend._client, "run_print_quiet", return_value="delegated")
+        mock_subprocess = mocker.patch("spec.integrations.backends.auggie.subprocess.run")
+
+        output = backend.run_print_quiet("test prompt", timeout_seconds=None)
+
+        mock_run.assert_called_once()
+        mock_subprocess.assert_not_called()
+        assert output == "delegated"
+
 
 class TestAuggieClientContract:
     """Tests verifying AuggieClient private API contract.
@@ -480,14 +567,10 @@ class TestAuggieClientContract:
         model_idx = cmd.index("--model")
         assert cmd[model_idx + 1] == "test-model"
 
-    def test_build_command_model_ignored_when_agent_set(self):
-        """Document known limitation: model is ignored when agent is specified.
+    def test_build_command_explicit_model_overrides_agent_model(self):
+        """Explicit model override takes precedence over agent definition model.
 
-        This documents the known limitation - explicit model override
-        does not work when a subagent is specified. The agent definition's
-        model takes precedence over any explicitly passed model parameter.
-
-        See: specs/AMI-51-implementation-plan.md "Known Limitations" section.
+        Model precedence: explicit > agent definition > instance default.
         """
         from unittest.mock import MagicMock, patch
 
@@ -507,13 +590,39 @@ class TestAuggieClientContract:
             cmd = client._build_command(
                 "test prompt",
                 agent="test-agent",
-                model="explicit-override-model",  # This should be ignored
+                model="explicit-override-model",
             )
 
-        # Agent's model is used, not the explicit override
+        # Explicit model takes precedence over agent definition model
         assert "--model" in cmd
         model_idx = cmd.index("--model")
-        assert cmd[model_idx + 1] == "agent-model"  # NOT "explicit-override-model"
+        assert cmd[model_idx + 1] == "explicit-override-model"
+
+    def test_build_command_agent_model_used_when_no_explicit(self):
+        """Agent definition model is used when no explicit model is passed."""
+        from unittest.mock import MagicMock, patch
+
+        from spec.integrations.auggie import AuggieClient
+
+        client = AuggieClient()
+
+        mock_agent_def = MagicMock()
+        mock_agent_def.model = "agent-model"
+        mock_agent_def.prompt = "Agent instructions"
+
+        with patch(
+            "spec.integrations.auggie._parse_agent_definition",
+            return_value=mock_agent_def,
+        ):
+            cmd = client._build_command(
+                "test prompt",
+                agent="test-agent",
+                # No explicit model - agent model should be used
+            )
+
+        assert "--model" in cmd
+        model_idx = cmd.index("--model")
+        assert cmd[model_idx + 1] == "agent-model"
 
 
 class TestAuggieBackendClose:

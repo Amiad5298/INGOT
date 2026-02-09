@@ -505,11 +505,12 @@ class TestCreateTicketService:
         mock_auggie.platform = AgentPlatform.AUGGIE
         mock_auth = MagicMock()
 
-        with patch(
-            "spec.integrations.ticket_service.AuggieMediatedFetcher"
-        ) as mock_auggie_fetcher_class, patch(
-            "spec.integrations.ticket_service.DirectAPIFetcher"
-        ) as mock_direct_fetcher_class:
+        with (
+            patch(
+                "spec.integrations.ticket_service.AuggieMediatedFetcher"
+            ) as mock_auggie_fetcher_class,
+            patch("spec.integrations.ticket_service.DirectAPIFetcher") as mock_direct_fetcher_class,
+        ):
             mock_auggie_fetcher_class.return_value.name = "AuggieMediatedFetcher"
             mock_direct_fetcher_class.return_value.name = "DirectAPIFetcher"
             mock_direct_fetcher_class.return_value.close = AsyncMock()
@@ -679,3 +680,37 @@ class TestCreateTicketService:
 
         with pytest.raises(ValueError, match="no fetchers configured"):
             await create_ticket_service(backend=mock_backend)
+
+    @pytest.mark.asyncio
+    async def test_create_consults_compatibility_matrix(self):
+        """Patching MCP_SUPPORT changes fetcher selection, proving the matrix is consulted."""
+        mock_backend = MagicMock()
+        mock_backend.platform = AgentPlatform.AUGGIE
+        mock_auth = MagicMock()
+
+        # Patch MCP_SUPPORT so AUGGIE has no MCP platforms
+        patched_mcp = {
+            AgentPlatform.AUGGIE: frozenset(),
+            AgentPlatform.CLAUDE: frozenset(),
+            AgentPlatform.CURSOR: frozenset(),
+            AgentPlatform.AIDER: frozenset(),
+            AgentPlatform.MANUAL: frozenset(),
+        }
+
+        with (
+            patch("spec.config.compatibility.MCP_SUPPORT", patched_mcp),
+            patch("spec.integrations.ticket_service.DirectAPIFetcher") as mock_direct_cls,
+        ):
+            mock_direct_cls.return_value.name = "DirectAPIFetcher"
+            mock_direct_cls.return_value.close = AsyncMock()
+
+            service = await create_ticket_service(
+                backend=mock_backend,
+                auth_manager=mock_auth,
+            )
+
+            # AUGGIE would normally get AuggieMediatedFetcher, but with
+            # empty MCP_SUPPORT it falls through to DirectAPIFetcher
+            assert service.primary_fetcher_name == "DirectAPIFetcher"
+            assert service.fallback_fetcher_name is None
+            await service.close()
