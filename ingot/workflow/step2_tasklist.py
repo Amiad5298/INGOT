@@ -303,6 +303,9 @@ Implementation Plan:
 
 Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
 
+    if state.user_context and state.user_context.strip():
+        prompt += f"\n\nAdditional Context (use for scope and prioritization only — do not generate implementation details or code):\n{state.user_context.strip()}"
+
     # Use run_with_callback to capture AI output (Phase 2 migration)
     success, output = backend.run_with_callback(
         prompt,

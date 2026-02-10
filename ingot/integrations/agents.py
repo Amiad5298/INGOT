@@ -505,6 +505,19 @@ When running in parallel with other tasks:
 - Staging/committing will be done after all tasks complete
 - Focus only on your specific task
 
+## Dynamic Context
+
+The task prompt may include additional context:
+
+### Target Files
+If the prompt lists "Target files for this task:", focus your modifications on those files.
+Do not treat them as exhaustive -- you may need to read other files for context --
+but your write operations should target the listed files unless the task requires otherwise.
+
+### Additional Context
+If the prompt includes "Additional Context:", this is information the user provided
+at workflow start. Consider it as supplementary guidance for how to approach the task.
+
 ## Output
 
 When complete, briefly summarize:
@@ -573,6 +586,14 @@ Review the changes made for a specific task and validate:
 ```
 
 Keep reviews quick and focused - this is a sanity check, not a full code review.
+
+## Dynamic Context
+
+The review prompt may include additional context:
+
+### Additional Context
+If the prompt includes "Additional Context:", this is information the user provided
+at workflow start. Use it to verify that the implementation respects these constraints.
 
 ## Guidelines
 

@@ -557,6 +557,97 @@ class TestGenerateTasklist:
         # Default template has placeholder tasks
         assert "[Core functionality implementation with tests]" in content
 
+    def test_includes_user_context_in_prompt(
+        self,
+        tmp_path,
+        mock_backend,
+    ):
+        """User context appears in prompt when state.user_context is set."""
+        ticket = GenericTicket(
+            id="TEST-CTX",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-CTX",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
+        state = WorkflowState(ticket=ticket)
+        state.user_context = "Focus on backward compatibility"
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir(parents=True)
+        plan_path = specs_dir / "TEST-CTX-plan.md"
+        plan_path.write_text("# Plan\n\nDo something.")
+        tasklist_path = specs_dir / "TEST-CTX-tasklist.md"
+
+        mock_backend.run_with_callback.return_value = (True, "- [ ] Single task\n")
+
+        _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
+
+        prompt = mock_backend.run_with_callback.call_args[0][0]
+        assert "Additional Context" in prompt
+        assert "Focus on backward compatibility" in prompt
+
+    def test_excludes_user_context_when_empty(
+        self,
+        tmp_path,
+        mock_backend,
+    ):
+        """User context section absent when state.user_context is empty."""
+        ticket = GenericTicket(
+            id="TEST-NOCTX",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-NOCTX",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
+        state = WorkflowState(ticket=ticket)
+        state.user_context = ""
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir(parents=True)
+        plan_path = specs_dir / "TEST-NOCTX-plan.md"
+        plan_path.write_text("# Plan\n\nDo something.")
+        tasklist_path = specs_dir / "TEST-NOCTX-tasklist.md"
+
+        mock_backend.run_with_callback.return_value = (True, "- [ ] Single task\n")
+
+        _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
+
+        prompt = mock_backend.run_with_callback.call_args[0][0]
+        assert "Additional Context" not in prompt
+
+    def test_excludes_user_context_when_whitespace_only(
+        self,
+        tmp_path,
+        mock_backend,
+    ):
+        """User context section absent when state.user_context is whitespace only."""
+        ticket = GenericTicket(
+            id="TEST-WS",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-WS",
+            title="Test",
+            description="Test description",
+            branch_summary="Test",
+        )
+        state = WorkflowState(ticket=ticket)
+        state.user_context = "   \n  "
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir(parents=True)
+        plan_path = specs_dir / "TEST-WS-plan.md"
+        plan_path.write_text("# Plan\n\nDo something.")
+        tasklist_path = specs_dir / "TEST-WS-tasklist.md"
+
+        mock_backend.run_with_callback.return_value = (True, "- [ ] Single task\n")
+
+        _generate_tasklist(state, plan_path, tasklist_path, mock_backend)
+
+        prompt = mock_backend.run_with_callback.call_args[0][0]
+        assert "Additional Context" not in prompt
+
 
 class TestStep2CreateTasklist:
     """Tests for step_2_create_tasklist function."""

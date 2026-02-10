@@ -297,6 +297,7 @@ class TestBuildReviewPrompt:
 
         state = MagicMock()
         state.get_plan_path.return_value = "specs/TEST-123-plan.md"
+        state.user_context = ""
 
         result = build_review_prompt(
             state=state,
@@ -319,6 +320,7 @@ class TestBuildReviewPrompt:
 
         state = MagicMock()
         state.get_plan_path.return_value = "specs/PROJ-456-plan.md"
+        state.user_context = ""
 
         result = build_review_prompt(
             state=state,
@@ -339,6 +341,7 @@ class TestBuildReviewPrompt:
 
         state = MagicMock()
         state.get_plan_path.return_value = "plan.md"
+        state.user_context = ""
 
         result = build_review_prompt(
             state=state,
@@ -350,6 +353,64 @@ class TestBuildReviewPrompt:
         assert "Review Instructions" in result
         assert "align with the implementation plan" in result
         assert "NEEDS_ATTENTION" in result
+
+    def test_includes_user_context_when_provided(self):
+        """Includes user context in the review prompt when available."""
+        from unittest.mock import MagicMock
+
+        from ingot.workflow.review import build_review_prompt
+
+        state = MagicMock()
+        state.get_plan_path.return_value = "plan.md"
+        state.user_context = "Focus on backward compatibility"
+
+        result = build_review_prompt(
+            state=state,
+            phase="fundamental",
+            diff_output="some diff",
+            is_truncated=False,
+        )
+
+        assert "Additional Context" in result
+        assert "Focus on backward compatibility" in result
+
+    def test_excludes_user_context_when_empty(self):
+        """Does not include user context section when empty."""
+        from unittest.mock import MagicMock
+
+        from ingot.workflow.review import build_review_prompt
+
+        state = MagicMock()
+        state.get_plan_path.return_value = "plan.md"
+        state.user_context = ""
+
+        result = build_review_prompt(
+            state=state,
+            phase="fundamental",
+            diff_output="some diff",
+            is_truncated=False,
+        )
+
+        assert "Additional Context" not in result
+
+    def test_excludes_user_context_when_whitespace_only(self):
+        """Does not include user context section when whitespace only."""
+        from unittest.mock import MagicMock
+
+        from ingot.workflow.review import build_review_prompt
+
+        state = MagicMock()
+        state.get_plan_path.return_value = "plan.md"
+        state.user_context = "   \n  "
+
+        result = build_review_prompt(
+            state=state,
+            phase="fundamental",
+            diff_output="some diff",
+            is_truncated=False,
+        )
+
+        assert "Additional Context" not in result
 
 
 class TestGetDiffForReview:

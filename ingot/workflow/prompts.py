@@ -13,7 +13,9 @@ if TYPE_CHECKING:
     from ingot.workflow.tasks import Task
 
 
-def build_task_prompt(task: Task, plan_path: Path, *, is_parallel: bool = False) -> str:
+def build_task_prompt(
+    task: Task, plan_path: Path, *, is_parallel: bool = False, user_context: str = ""
+) -> str:
     """Build a minimal prompt for task execution.
 
     Passes a plan path reference rather than the full plan content to:
@@ -25,6 +27,7 @@ def build_task_prompt(task: Task, plan_path: Path, *, is_parallel: bool = False)
         task: Task to execute
         plan_path: Path to the implementation plan file
         is_parallel: Whether this task runs in parallel with others
+        user_context: Optional additional context provided by the user
 
     Returns:
         Minimal prompt string with task context
@@ -46,6 +49,22 @@ Use codebase-retrieval to read relevant sections of the plan as needed."""
         prompt += """
 
 Use codebase-retrieval to understand existing patterns before making changes."""
+
+    # Add target files if task has them
+    if task.target_files:
+        files_list = "\n".join(f"- {f}" for f in task.target_files)
+        prompt += f"""
+
+Target files for this task:
+{files_list}
+Focus your changes on these files."""
+
+    # Add user-provided context if available
+    if user_context and user_context.strip():
+        prompt += f"""
+
+Additional Context:
+{user_context.strip()}"""
 
     # Add critical constraints reminder
     prompt += """

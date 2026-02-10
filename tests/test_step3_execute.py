@@ -274,6 +274,87 @@ class TestBuildTaskPrompt:
 
         assert "Do NOT commit" in result
 
+    def test_includes_target_files_when_present(self, tmp_path):
+        """Prompt includes target files when task has them."""
+        task = Task(name="Fix module", target_files=["src/foo.py", "src/bar.py"])
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(task, plan_path)
+
+        assert "Target files for this task:" in result
+        assert "- src/foo.py" in result
+        assert "- src/bar.py" in result
+        assert "Focus your changes on these files" in result
+
+    def test_excludes_target_files_when_empty(self, sample_task, tmp_path):
+        """Prompt does not include target files section when list is empty."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path)
+
+        assert "Target files for this task:" not in result
+
+    def test_includes_user_context_when_provided(self, sample_task, tmp_path):
+        """Prompt includes user context when non-empty."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(
+            sample_task, plan_path, user_context="Use the new API v2 endpoints"
+        )
+
+        assert "Additional Context:" in result
+        assert "Use the new API v2 endpoints" in result
+
+    def test_excludes_user_context_when_empty(self, sample_task, tmp_path):
+        """Prompt does not include user context section when empty."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path, user_context="")
+
+        assert "Additional Context:" not in result
+
+    def test_includes_both_target_files_and_user_context(self, tmp_path):
+        """Prompt includes both target files and user context, in correct order."""
+        task = Task(name="Update handler", target_files=["handler.py"])
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(task, plan_path, user_context="Follow REST conventions")
+
+        assert "Target files for this task:" in result
+        assert "Additional Context:" in result
+        # Target files should appear before user context
+        target_pos = result.index("Target files for this task:")
+        context_pos = result.index("Additional Context:")
+        assert target_pos < context_pos
+
+    def test_excludes_user_context_when_whitespace_only(self, sample_task, tmp_path):
+        """Prompt does not include user context section when whitespace only."""
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(sample_task, plan_path, user_context="   \n  ")
+
+        assert "Additional Context:" not in result
+
+    def test_no_commit_constraint_last_with_all_sections(self, tmp_path):
+        """No-commit constraint is still present with all optional sections."""
+        task = Task(name="Update handler", target_files=["handler.py"])
+        plan_path = tmp_path / "plan.md"
+        plan_path.write_text("# Plan")
+
+        result = _build_task_prompt(task, plan_path, user_context="Extra info")
+
+        assert "Do NOT commit" in result
+        # No-commit constraint should be after user context
+        context_pos = result.index("Extra info")
+        commit_pos = result.index("Do NOT commit")
+        assert commit_pos > context_pos
+
 
 # =============================================================================
 # Tests for _execute_task()
@@ -323,6 +404,17 @@ class TestExecuteTask:
         call_kwargs = mock_backend.run_with_callback.call_args[1]
         assert call_kwargs["subagent"] == workflow_state.subagent_names["implementer"]
         assert call_kwargs["dont_save_session"] is True
+
+    def test_propagates_user_context_to_prompt(self, mock_backend, workflow_state, sample_task):
+        """User context from state appears in prompt passed to backend."""
+        mock_backend.run_with_callback.return_value = (True, "Output")
+        workflow_state.user_context = "Use the legacy API adapter"
+
+        _execute_task(workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend)
+
+        prompt = mock_backend.run_with_callback.call_args[0][0]
+        assert "Additional Context:" in prompt
+        assert "Use the legacy API adapter" in prompt
 
 
 # =============================================================================
@@ -424,6 +516,24 @@ class TestExecuteTaskWithCallback:
         call_kwargs = mock_backend.run_with_callback.call_args[1]
         assert call_kwargs["subagent"] == workflow_state.subagent_names["implementer"]
         assert call_kwargs["dont_save_session"] is True
+
+    def test_propagates_user_context_to_prompt(self, mock_backend, workflow_state, sample_task):
+        """User context from state appears in prompt passed to backend."""
+        mock_backend.run_with_callback.return_value = (True, "Output")
+        workflow_state.user_context = "Prefer functional style"
+
+        callback = MagicMock()
+        _execute_task_with_callback(
+            workflow_state,
+            sample_task,
+            workflow_state.get_plan_path(),
+            backend=mock_backend,
+            callback=callback,
+        )
+
+        prompt = mock_backend.run_with_callback.call_args[0][0]
+        assert "Additional Context:" in prompt
+        assert "Prefer functional style" in prompt
 
 
 # =============================================================================

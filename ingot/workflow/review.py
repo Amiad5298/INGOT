@@ -156,6 +156,14 @@ Use `git diff -- <file_path>` to inspect specific files that need detailed revie
 Focus on files most critical to the implementation plan.
 """
 
+    # Add user-provided context if available
+    user_context = state.user_context.strip() if state.user_context else ""
+    if user_context:
+        prompt += f"""
+## Additional Context
+{user_context}
+"""
+
     prompt += """
 ## Review Instructions
 1. Check that changes align with the implementation plan

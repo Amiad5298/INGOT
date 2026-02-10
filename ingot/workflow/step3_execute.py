@@ -861,7 +861,7 @@ def _execute_task(
     """
     # Build minimal prompt - pass plan path reference, not full content
     # The agent uses codebase-retrieval to read relevant sections
-    prompt = _build_task_prompt(task, plan_path, is_parallel=False)
+    prompt = _build_task_prompt(task, plan_path, is_parallel=False, user_context=state.user_context)
 
     try:
         success, output = backend.run_with_callback(
@@ -916,7 +916,9 @@ def _execute_task_with_callback(
     """
     # Build minimal prompt - pass plan path reference, not full content
     # The agent uses codebase-retrieval to read relevant sections
-    prompt = _build_task_prompt(task, plan_path, is_parallel=is_parallel)
+    prompt = _build_task_prompt(
+        task, plan_path, is_parallel=is_parallel, user_context=state.user_context
+    )
 
     try:
         success, output = backend.run_with_callback(
