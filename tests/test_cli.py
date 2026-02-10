@@ -19,14 +19,14 @@ class TestCLIVersion:
         result = runner.invoke(app, ["--version"])
 
         assert result.exit_code == 0
-        assert "2.0.0" in result.stdout
+        assert "0.0.0-dev" in result.stdout
 
     def test_short_version_flag(self):
         """-v shows version and exits."""
         result = runner.invoke(app, ["-v"])
 
         assert result.exit_code == 0
-        assert "2.0.0" in result.stdout
+        assert "0.0.0-dev" in result.stdout
 
 
 class TestCLIConfig:

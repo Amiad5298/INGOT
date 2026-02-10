@@ -143,5 +143,5 @@ class TestVersion:
 
         # Check version is displayed
         calls = [str(c) for c in mock_console.print.call_args_list]
-        version_shown = any("2.0.0" in c for c in calls)
+        version_shown = any("0.0.0-dev" in c for c in calls)
         assert version_shown

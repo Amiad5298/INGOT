@@ -4,7 +4,7 @@ This package provides a Python CLI application for spec-driven development
 workflows.
 """
 
-__version__ = "2.0.0"
+__version__ = "0.0.0-dev"
 SCRIPT_NAME = "INGOT"
 REQUIRED_AUGGIE_VERSION = "0.13.0"
 REQUIRED_NODE_VERSION = 22
