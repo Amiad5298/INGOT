@@ -47,13 +47,6 @@ def calculate_backoff_delay(
     The jitter helps prevent thundering herd problems where multiple
     concurrent tasks retry at the same time.
 
-    Args:
-        attempt: Current attempt number (0-indexed)
-        config: Rate limit configuration
-
-    Returns:
-        Delay in seconds
-
     Example delays with default config (base=2s, jitter=0.5):
         Attempt 0: 2.0 - 3.0s
         Attempt 1: 4.0 - 6.0s
@@ -81,15 +74,6 @@ def with_rate_limit_retry(
 
     Wraps a function to automatically retry on rate limit or transient
     errors with exponential backoff and jitter.
-
-    Args:
-        config: Rate limit configuration
-        on_retry: Optional callback called before each retry.
-                  Receives (attempt_number, delay_seconds, exception).
-                  Useful for logging retry attempts.
-
-    Returns:
-        Decorator function
 
     Usage:
         @with_rate_limit_retry(config, on_retry=log_retry)
@@ -150,13 +134,6 @@ def _is_retryable_error(error: Exception, config: "RateLimitConfig") -> bool:
 
     Handles various error types from different API clients by checking
     both HTTP status codes and common rate limit keywords in error messages.
-
-    Args:
-        error: The exception to check
-        config: Rate limit configuration with retryable status codes
-
-    Returns:
-        True if the error is retryable, False otherwise
     """
     if isinstance(error, BackendRateLimitError | AuggieRateLimitError):
         return True

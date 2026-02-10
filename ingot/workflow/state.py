@@ -34,12 +34,6 @@ class RateLimitConfig:
     Implements exponential backoff with jitter to handle rate limit errors
     (HTTP 429) from concurrent API calls during parallel task execution.
 
-    Attributes:
-        max_retries: Maximum retry attempts before giving up
-        base_delay_seconds: Initial delay before first retry
-        max_delay_seconds: Maximum delay cap to prevent excessive waits
-        jitter_factor: Random jitter factor (0.5 = up to 50% of delay)
-        retryable_status_codes: HTTP status codes that trigger retry
     """
 
     max_retries: int = 5  # Maximum retry attempts
@@ -68,23 +62,6 @@ class WorkflowState:
     This dataclass holds all the state needed to execute and resume
     the AI-assisted development workflow.
 
-    Attributes:
-        ticket: Ticket information (platform-agnostic)
-        branch_name: Git branch name for this workflow
-        base_commit: Commit hash before workflow started
-        planning_model: AI model for planning phases
-        implementation_model: AI model for implementation phase
-        skip_clarification: Whether to skip clarification step
-        squash_at_end: Whether to squash commits at end
-        plan_file: Path to the implementation plan file
-        tasklist_file: Path to the task list file
-        completed_tasks: List of completed task names
-        checkpoint_commits: List of checkpoint commit hashes
-        current_step: Current workflow step (1, 2, 3, or 4)
-        retry_count: Number of retries for current task
-        max_retries: Maximum retries before asking user
-        subagent_names: Dictionary mapping role names to agent names
-            (planner, tasklist, implementer, reviewer, doc_updater)
     """
 
     # Ticket information (platform-agnostic)
@@ -165,57 +142,33 @@ class WorkflowState:
 
     @property
     def specs_dir(self) -> Path:
-        """Get the specs directory path.
-
-        Returns:
-            Path to specs directory
-        """
+        """Get the specs directory path."""
         return Path("specs")
 
     @property
     def plan_filename(self) -> str:
-        """Get the plan filename.
-
-        Returns:
-            Plan filename based on ticket ID (filesystem-safe)
-        """
+        """Get the plan filename based on ticket ID (filesystem-safe)."""
         return f"{self.ticket.safe_filename_stem}-plan.md"
 
     @property
     def tasklist_filename(self) -> str:
-        """Get the task list filename.
-
-        Returns:
-            Task list filename based on ticket ID (filesystem-safe)
-        """
+        """Get the task list filename based on ticket ID (filesystem-safe)."""
         return f"{self.ticket.safe_filename_stem}-tasklist.md"
 
     def get_plan_path(self) -> Path:
-        """Get full path to plan file.
-
-        Returns:
-            Full path to plan file
-        """
+        """Get full path to plan file."""
         if self.plan_file:
             return self.plan_file
         return self.specs_dir / self.plan_filename
 
     def get_tasklist_path(self) -> Path:
-        """Get full path to task list file.
-
-        Returns:
-            Full path to task list file
-        """
+        """Get full path to task list file."""
         if self.tasklist_file:
             return self.tasklist_file
         return self.specs_dir / self.tasklist_filename
 
     def mark_task_complete(self, task_name: str) -> None:
-        """Mark a task as complete.
-
-        Args:
-            task_name: Name of the completed task
-        """
+        """Mark a task as complete."""
         if task_name not in self.completed_tasks:
             self.completed_tasks.append(task_name)
 

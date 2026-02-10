@@ -47,28 +47,20 @@ class TestIsFirstRun:
         assert is_first_run(config) is True
 
     def test_ai_backend_set_regardless_of_agent_config(self):
-        """is_first_run checks only raw AI_BACKEND, not agent_config.platform.
-
-        get_agent_config().platform always defaults to AUGGIE, so checking it
-        would make is_first_run() always return False (never trigger onboarding).
-        """
         # AI_BACKEND empty but agent_config.platform set → still first run
         config = _make_config("", platform_enum=AgentPlatform.AUGGIE)
         assert is_first_run(config) is True
 
     def test_ai_backend_empty_platform_none(self):
-        """No AI_BACKEND and no agent platform means first run."""
         config = _make_config("", platform_enum=None)
         assert is_first_run(config) is True
 
     def test_ai_backend_set_agent_config_none(self):
-        """is_first_run returns False when AI_BACKEND is set regardless of agent_config."""
         config = _make_config("auggie")
         config.get_agent_config.return_value = None
         assert is_first_run(config) is False
 
     def test_only_checks_raw_ai_backend_key(self):
-        """is_first_run does not call get_agent_config (relies on raw key only)."""
         config = _make_config("claude")
         is_first_run(config)
         config.get_agent_config.assert_not_called()
@@ -189,7 +181,6 @@ class TestVerifyInstallation:
     @patch("ingot.onboarding.flow.print_error")
     @patch("ingot.onboarding.flow.BackendFactory")
     def test_factory_not_implemented_error(self, mock_factory, mock_error):
-        """BackendFactory.create raising NotImplementedError returns None."""
         mock_factory.create.side_effect = NotImplementedError("Backend not implemented")
 
         flow = OnboardingFlow(_make_config())
@@ -203,7 +194,6 @@ class TestVerifyInstallation:
     def test_user_cancelled_during_retry_prompt(
         self, mock_factory, mock_confirm, mock_error, mock_info
     ):
-        """UserCancelledError during prompt_confirm in verify loop propagates."""
         backend_instance = MagicMock()
         backend_instance.check_installed.return_value = (False, "CLI not found")
         mock_factory.create.return_value = backend_instance
@@ -313,7 +303,6 @@ class TestFullFlow:
         mock_info,
         mock_print_success,
     ):
-        """When user switches backends during verification, the switched-to backend is saved."""
         # First select Auggie, then when verification fails, switch to Claude
         mock_select.side_effect = ["Auggie (Augment Code CLI)", "Claude Code CLI"]
 
@@ -365,7 +354,6 @@ class TestFullFlow:
         mock_print_success,
         mock_print_error,
     ):
-        """IngotError from _save_configuration returns failure result instead of crashing."""
         mock_select.return_value = "Auggie (Augment Code CLI)"
 
         backend_instance = MagicMock()
@@ -443,7 +431,6 @@ class TestCLIIntegration:
 
 class TestCompatibilityMatrix:
     def test_mcp_support_covers_all_backends(self):
-        """Every AgentPlatform member has an entry in MCP_SUPPORT."""
         from ingot.config.compatibility import MCP_SUPPORT
 
         for member in AgentPlatform:
@@ -557,7 +544,6 @@ class TestFetchTicketWithOnboarding:
     def test_no_double_onboarding_after_config_reload(
         self, mock_first_run, mock_onboard, mock_run_async
     ):
-        """If config reload shows backend is already configured, skip onboarding."""
         import typer
 
         from ingot.cli import _fetch_ticket_with_onboarding
@@ -583,7 +569,6 @@ class TestFetchTicketWithOnboarding:
     def test_specific_error_after_onboarding_uses_same_message(
         self, mock_onboard, mock_first_run, mock_run_async, mock_print_error
     ):
-        """TicketNotFoundError after onboarding produces the same message as before onboarding."""
         import typer
 
         from ingot.cli import _fetch_ticket_with_onboarding
@@ -610,7 +595,6 @@ class TestFetchTicketWithOnboarding:
     @patch("ingot.cli.print_error")
     @patch("ingot.cli.run_async")
     def test_ticket_not_found_before_onboarding_message(self, mock_run_async, mock_print_error):
-        """TicketNotFoundError on initial fetch shows the same message format."""
         import typer
 
         from ingot.cli import _fetch_ticket_with_onboarding

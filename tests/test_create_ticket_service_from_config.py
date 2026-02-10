@@ -26,11 +26,8 @@ from ingot.integrations.ticket_service import TicketService
 
 
 class TestCreateTicketServiceFromConfig:
-    """Unit tests for create_ticket_service_from_config()."""
-
     @pytest.mark.asyncio
     async def test_resolves_backend_from_config(self):
-        """Verifies resolve_backend_platform called with (config_manager, None)."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -64,7 +61,6 @@ class TestCreateTicketServiceFromConfig:
 
     @pytest.mark.asyncio
     async def test_resolves_backend_from_cli_override(self):
-        """Verifies CLI override 'auggie' passed to resolver."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -101,7 +97,6 @@ class TestCreateTicketServiceFromConfig:
 
     @pytest.mark.asyncio
     async def test_creates_auth_manager_when_not_provided(self):
-        """Verifies AuthenticationManager(config_manager) created when auth_manager is None."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -136,7 +131,6 @@ class TestCreateTicketServiceFromConfig:
 
     @pytest.mark.asyncio
     async def test_uses_provided_auth_manager(self):
-        """Verifies provided auth_manager passed through, AuthenticationManager not called."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -176,7 +170,6 @@ class TestCreateTicketServiceFromConfig:
 
     @pytest.mark.asyncio
     async def test_returns_service_and_backend_tuple(self):
-        """Verifies return type is (TicketService, AIBackend)."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -216,7 +209,6 @@ class TestCreateTicketServiceFromConfig:
 
     @pytest.mark.asyncio
     async def test_raises_backend_not_configured_error(self):
-        """resolve_backend_platform raises BackendNotConfiguredError → propagates."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -230,7 +222,6 @@ class TestCreateTicketServiceFromConfig:
 
     @pytest.mark.asyncio
     async def test_raises_backend_not_installed_error(self):
-        """BackendFactory.create raises BackendNotInstalledError → propagates."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()

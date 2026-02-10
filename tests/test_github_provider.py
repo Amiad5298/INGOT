@@ -43,15 +43,11 @@ def provider_with_defaults():
 
 
 class TestGitHubProviderRegistration:
-    """Test provider registration with ProviderRegistry."""
-
     def test_provider_has_platform_attribute(self):
-        """GitHubProvider has required PLATFORM class attribute."""
         assert hasattr(GitHubProvider, "PLATFORM")
         assert GitHubProvider.PLATFORM == Platform.GITHUB
 
     def test_provider_registers_successfully(self):
-        """GitHubProvider can be registered with ProviderRegistry."""
         # Manually register since the decorator ran at import time before clear()
         ProviderRegistry.register(GitHubProvider)
 
@@ -60,7 +56,6 @@ class TestGitHubProviderRegistration:
         assert isinstance(provider, GitHubProvider)
 
     def test_singleton_pattern(self):
-        """Same instance returned for multiple get_provider calls."""
         # Manually register since the decorator ran at import time before clear()
         ProviderRegistry.register(GitHubProvider)
 
@@ -70,20 +65,14 @@ class TestGitHubProviderRegistration:
 
 
 class TestGitHubProviderProperties:
-    """Test provider properties."""
-
     def test_platform_property(self, provider):
-        """platform property returns Platform.GITHUB."""
         assert provider.platform == Platform.GITHUB
 
     def test_name_property(self, provider):
-        """name property returns 'GitHub Issues'."""
         assert provider.name == "GitHub Issues"
 
 
 class TestGitHubProviderCanHandle:
-    """Test can_handle() method."""
-
     # Valid GitHub.com URLs
     @pytest.mark.parametrize(
         "url",
@@ -96,7 +85,6 @@ class TestGitHubProviderCanHandle:
         ],
     )
     def test_can_handle_valid_github_urls(self, provider, url):
-        """Provider recognizes valid GitHub.com URLs."""
         assert provider.can_handle(url) is True
 
     # GitHub Enterprise URLs - should NOT be accepted without explicit configuration
@@ -108,7 +96,6 @@ class TestGitHubProviderCanHandle:
         ],
     )
     def test_can_handle_github_enterprise_urls_without_config(self, provider, url):
-        """Provider rejects GitHub Enterprise URLs when GITHUB_BASE_URL is not set."""
         assert provider.can_handle(url) is False
 
     # Valid short references
@@ -123,7 +110,6 @@ class TestGitHubProviderCanHandle:
         ],
     )
     def test_can_handle_valid_short_refs(self, provider, ref):
-        """Provider recognizes owner/repo#123 format."""
         assert provider.can_handle(ref) is True
 
     # Invalid inputs (should not be handled)
@@ -141,13 +127,10 @@ class TestGitHubProviderCanHandle:
         ],
     )
     def test_can_handle_invalid_inputs(self, provider, input_str):
-        """Provider rejects non-GitHub inputs."""
         assert provider.can_handle(input_str) is False
 
 
 class TestGitHubEnterpriseWithConfig:
-    """Test GitHub Enterprise URL handling with GITHUB_BASE_URL configured."""
-
     @pytest.fixture
     def provider_with_ghe(self, monkeypatch):
         """Create a GitHubProvider with mocked GITHUB_BASE_URL."""
@@ -155,43 +138,31 @@ class TestGitHubEnterpriseWithConfig:
         return GitHubProvider()
 
     def test_can_handle_configured_enterprise_url(self, provider_with_ghe):
-        """Provider accepts Enterprise URL when GITHUB_BASE_URL matches."""
         url = "https://github.mycompany.com/owner/repo/issues/99"
         assert provider_with_ghe.can_handle(url) is True
 
     def test_can_handle_configured_enterprise_pr_url(self, provider_with_ghe):
-        """Provider accepts Enterprise PR URL when GITHUB_BASE_URL matches."""
         url = "https://github.mycompany.com/org/project/pull/42"
         assert provider_with_ghe.can_handle(url) is True
 
     def test_can_handle_github_com_with_enterprise_config(self, provider_with_ghe):
-        """Provider still accepts github.com URLs when Enterprise is configured."""
         url = "https://github.com/owner/repo/issues/123"
         assert provider_with_ghe.can_handle(url) is True
 
     def test_can_handle_wrong_enterprise_url(self, provider_with_ghe):
-        """Provider rejects Enterprise URL when host doesn't match config."""
         url = "https://github.othercompany.com/owner/repo/issues/99"
         assert provider_with_ghe.can_handle(url) is False
 
     def test_parse_configured_enterprise_url(self, provider_with_ghe):
-        """Parse Enterprise URL when GITHUB_BASE_URL matches."""
         url = "https://github.mycompany.com/org/project/issues/99"
         assert provider_with_ghe.parse_input(url) == "org/project#99"
 
     def test_parse_wrong_enterprise_url_raises(self, provider_with_ghe):
-        """Parse raises ValueError when Enterprise host doesn't match config."""
         url = "https://github.othercompany.com/org/project/issues/99"
         with pytest.raises(ValueError, match="not allowed"):
             provider_with_ghe.parse_input(url)
 
     def test_domain_not_allowed_error_is_reachable(self, provider_with_ghe):
-        """Verify that 'Domain not allowed' ValueError is properly raised.
-
-        This test ensures the refactored _is_allowed_url returns (False, match)
-        for URLs with valid structure but disallowed hosts, making the error
-        handling in parse_input reachable.
-        """
         # URL has valid GitHub-like structure but host is not in allowed list
         url = "https://github.unauthorized.com/owner/repo/issues/42"
         with pytest.raises(ValueError) as exc_info:
@@ -203,8 +174,6 @@ class TestGitHubEnterpriseWithConfig:
 
 
 class TestGitHubEnterpriseWithoutScheme:
-    """Test GITHUB_BASE_URL parsing when set without http:// or https:// scheme."""
-
     @pytest.fixture
     def provider_with_ghe_no_scheme(self, monkeypatch):
         """Create a GitHubProvider with GITHUB_BASE_URL set without scheme."""
@@ -212,17 +181,14 @@ class TestGitHubEnterpriseWithoutScheme:
         return GitHubProvider()
 
     def test_can_handle_enterprise_url_without_scheme_config(self, provider_with_ghe_no_scheme):
-        """Provider accepts Enterprise URL when GITHUB_BASE_URL is set without scheme."""
         url = "https://github.mycompany.com/owner/repo/issues/99"
         assert provider_with_ghe_no_scheme.can_handle(url) is True
 
     def test_parse_enterprise_url_without_scheme_config(self, provider_with_ghe_no_scheme):
-        """Parse Enterprise URL when GITHUB_BASE_URL is set without scheme."""
         url = "https://github.mycompany.com/org/project/issues/42"
         assert provider_with_ghe_no_scheme.parse_input(url) == "org/project#42"
 
     def test_github_com_still_works_without_scheme_config(self, provider_with_ghe_no_scheme):
-        """github.com URLs still work when GITHUB_BASE_URL has no scheme."""
         url = "https://github.com/owner/repo/issues/123"
         assert provider_with_ghe_no_scheme.can_handle(url) is True
         assert provider_with_ghe_no_scheme.parse_input(url) == "owner/repo#123"
@@ -234,7 +200,6 @@ class TestGitHubEnterpriseWithoutScheme:
         return GitHubProvider()
 
     def test_handles_trailing_slash_in_base_url(self, provider_with_ghe_trailing_slash):
-        """Provider handles GITHUB_BASE_URL with trailing slash."""
         url = "https://github.mycompany.com/owner/repo/issues/99"
         assert provider_with_ghe_trailing_slash.can_handle(url) is True
 
@@ -245,12 +210,10 @@ class TestGitHubEnterpriseWithoutScheme:
         return GitHubProvider()
 
     def test_handles_whitespace_in_base_url(self, provider_with_ghe_whitespace):
-        """Provider handles GITHUB_BASE_URL with leading/trailing whitespace."""
         url = "https://github.mycompany.com/owner/repo/issues/99"
         assert provider_with_ghe_whitespace.can_handle(url) is True
 
     def test_parse_with_whitespace_in_base_url(self, provider_with_ghe_whitespace):
-        """Parse Enterprise URL when GITHUB_BASE_URL has whitespace."""
         url = "https://github.mycompany.com/org/project/issues/42"
         assert provider_with_ghe_whitespace.parse_input(url) == "org/project#42"
 
@@ -261,17 +224,14 @@ class TestGitHubEnterpriseWithoutScheme:
         return GitHubProvider()
 
     def test_handles_port_in_base_url_matches_url_without_port(self, provider_with_ghe_port):
-        """Provider with port in config matches URL without port (same hostname)."""
         url = "https://github.company.com/owner/repo/issues/99"
         assert provider_with_ghe_port.can_handle(url) is True
 
     def test_handles_port_in_base_url_matches_url_with_different_port(self, provider_with_ghe_port):
-        """Provider with port in config matches URL with different port (same hostname)."""
         url = "https://github.company.com:9000/owner/repo/issues/99"
         assert provider_with_ghe_port.can_handle(url) is True
 
     def test_parse_with_port_in_base_url(self, provider_with_ghe_port):
-        """Parse Enterprise URL when GITHUB_BASE_URL has port."""
         url = "https://github.company.com/org/project/issues/42"
         assert provider_with_ghe_port.parse_input(url) == "org/project#42"
 
@@ -282,61 +242,47 @@ class TestGitHubEnterpriseWithoutScheme:
         return GitHubProvider()
 
     def test_config_without_port_matches_url_with_port(self, provider_with_ghe_no_port):
-        """Provider without port in config matches URL with port (same hostname)."""
         url = "https://github.company.com:8443/owner/repo/issues/99"
         assert provider_with_ghe_no_port.can_handle(url) is True
 
     def test_parse_url_with_port_when_config_has_no_port(self, provider_with_ghe_no_port):
-        """Parse Enterprise URL with port when config has no port."""
         url = "https://github.company.com:8443/org/project/issues/42"
         assert provider_with_ghe_no_port.parse_input(url) == "org/project#42"
 
 
 class TestGitHubProviderParseInput:
-    """Test parse_input() method."""
-
     def test_parse_issue_url(self, provider):
-        """Parse GitHub issue URL."""
         url = "https://github.com/octocat/Hello-World/issues/42"
         assert provider.parse_input(url) == "octocat/Hello-World#42"
 
     def test_parse_pr_url(self, provider):
-        """Parse GitHub PR URL."""
         url = "https://github.com/owner/repo/pull/123"
         assert provider.parse_input(url) == "owner/repo#123"
 
     def test_parse_ghe_url_without_config_raises(self, provider):
-        """Parse GitHub Enterprise URL without config raises ValueError."""
         url = "https://github.company.com/org/project/issues/99"
         with pytest.raises(ValueError, match="not allowed"):
             provider.parse_input(url)
 
     def test_parse_short_ref(self, provider):
-        """Parse short reference format."""
         assert provider.parse_input("owner/repo#123") == "owner/repo#123"
 
     def test_parse_with_whitespace(self, provider):
-        """Parse input with leading/trailing whitespace."""
         assert provider.parse_input("  owner/repo#123  ") == "owner/repo#123"
 
     def test_parse_bare_number_with_defaults(self, provider_with_defaults):
-        """Parse bare issue number when defaults configured."""
         assert provider_with_defaults.parse_input("#123") == "myorg/myrepo#123"
 
     def test_parse_invalid_raises_valueerror(self, provider):
-        """Invalid input raises ValueError."""
         with pytest.raises(ValueError, match="Cannot parse GitHub issue"):
             provider.parse_input("PROJ-123")  # Jira format
 
     def test_parse_bare_number_without_defaults_raises(self, provider):
-        """Bare number without defaults raises ValueError."""
         with pytest.raises(ValueError, match="Cannot parse GitHub issue"):
             provider.parse_input("#123")
 
 
 class TestGitHubProviderNormalize:
-    """Test normalize() method."""
-
     @pytest.fixture
     def sample_github_response(self):
         """Sample GitHub API response for testing."""
@@ -361,7 +307,6 @@ class TestGitHubProviderNormalize:
         }
 
     def test_normalize_full_response(self, provider, sample_github_response):
-        """Normalize complete GitHub response."""
         ticket = provider.normalize(sample_github_response)
 
         assert ticket.id == "octocat/Hello-World#42"
@@ -378,7 +323,6 @@ class TestGitHubProviderNormalize:
         assert ticket.updated_at is not None
 
     def test_normalize_platform_metadata(self, provider, sample_github_response):
-        """Normalize populates platform_metadata correctly."""
         ticket = provider.normalize(sample_github_response)
 
         assert ticket.platform_metadata["repository"] == "octocat/Hello-World"
@@ -388,7 +332,6 @@ class TestGitHubProviderNormalize:
         assert ticket.platform_metadata["author"] == "reporter"
 
     def test_normalize_minimal_response(self, provider):
-        """Normalize minimal GitHub response."""
         minimal = {
             "number": 1,
             "title": "Minimal issue",
@@ -404,21 +347,18 @@ class TestGitHubProviderNormalize:
         assert ticket.type == TicketType.UNKNOWN
 
     def test_normalize_closed_completed(self, provider, sample_github_response):
-        """Closed issue with 'completed' reason maps to DONE."""
         sample_github_response["state"] = "closed"
         sample_github_response["state_reason"] = "completed"
         ticket = provider.normalize(sample_github_response)
         assert ticket.status == TicketStatus.DONE
 
     def test_normalize_closed_not_planned(self, provider, sample_github_response):
-        """Closed issue with 'not_planned' reason maps to CLOSED."""
         sample_github_response["state"] = "closed"
         sample_github_response["state_reason"] = "not_planned"
         ticket = provider.normalize(sample_github_response)
         assert ticket.status == TicketStatus.CLOSED
 
     def test_normalize_merged_pr(self, provider, sample_github_response):
-        """Merged PR maps to DONE status."""
         sample_github_response["pull_request"] = {"url": "..."}
         sample_github_response["merged_at"] = "2024-01-20T12:00:00Z"
         sample_github_response["state"] = "closed"
@@ -427,7 +367,6 @@ class TestGitHubProviderNormalize:
         assert ticket.platform_metadata["is_pull_request"] is True
 
     def test_normalize_without_repository_field(self, provider):
-        """Falls back to parsing html_url for repo info."""
         data = {
             "number": 42,
             "title": "Test",
@@ -441,14 +380,11 @@ class TestGitHubProviderNormalize:
 
 
 class TestDefensiveFieldHandling:
-    """Test defensive handling of malformed API responses."""
-
     @pytest.fixture
     def provider(self):
         return GitHubProvider()
 
     def test_normalize_with_none_labels(self, provider):
-        """Handle None labels gracefully."""
         data = {
             "number": 1,
             "title": "Test",
@@ -460,7 +396,6 @@ class TestDefensiveFieldHandling:
         assert ticket.labels == []
 
     def test_normalize_with_none_assignee(self, provider):
-        """Handle None assignee gracefully."""
         data = {
             "number": 1,
             "title": "Test",
@@ -473,7 +408,6 @@ class TestDefensiveFieldHandling:
         assert ticket.assignee is None
 
     def test_normalize_with_malformed_labels(self, provider):
-        """Handle malformed labels gracefully."""
         data = {
             "number": 1,
             "title": "Test",
@@ -485,7 +419,6 @@ class TestDefensiveFieldHandling:
         assert ticket.labels == ["valid"]
 
     def test_normalize_with_none_body(self, provider):
-        """Handle None body gracefully."""
         data = {
             "number": 1,
             "title": "Test",
@@ -498,7 +431,6 @@ class TestDefensiveFieldHandling:
         assert ticket.description == ""
 
     def test_normalize_with_assignees_fallback(self, provider):
-        """Use assignees array when assignee is None."""
         data = {
             "number": 1,
             "title": "Test",
@@ -513,8 +445,6 @@ class TestDefensiveFieldHandling:
 
 
 class TestStatusMapping:
-    """Test status mapping coverage."""
-
     @pytest.fixture
     def provider(self):
         return GitHubProvider()
@@ -529,7 +459,6 @@ class TestStatusMapping:
         ],
     )
     def test_status_mapping_combinations(self, provider, state, state_reason, expected_status):
-        """Test state and state_reason combinations."""
         data = {
             "number": 1,
             "title": "Test",
@@ -552,7 +481,6 @@ class TestStatusMapping:
         ],
     )
     def test_label_based_status_enhancement(self, provider, label, expected_status):
-        """Test label-based status enhancement for open issues."""
         data = {
             "number": 1,
             "title": "Test",
@@ -565,8 +493,6 @@ class TestStatusMapping:
 
 
 class TestTypeMapping:
-    """Test type mapping from labels."""
-
     @pytest.fixture
     def provider(self):
         return GitHubProvider()
@@ -586,7 +512,6 @@ class TestTypeMapping:
         ],
     )
     def test_type_inference_from_labels(self, provider, label, expected_type):
-        """Test type inference from labels."""
         data = {
             "number": 1,
             "title": "Test",
@@ -598,7 +523,6 @@ class TestTypeMapping:
         assert ticket.type == expected_type
 
     def test_type_unknown_when_no_matching_labels(self, provider):
-        """Type is UNKNOWN when no matching labels found."""
         data = {
             "number": 1,
             "title": "Test",
@@ -611,18 +535,14 @@ class TestTypeMapping:
 
 
 class TestPromptTemplate:
-    """Test get_prompt_template() method."""
-
     @pytest.fixture
     def provider(self):
         return GitHubProvider()
 
     def test_prompt_template_contains_placeholder(self, provider):
-        """Prompt template contains {ticket_id} placeholder."""
         template = provider.get_prompt_template()
         assert "{ticket_id}" in template
 
     def test_prompt_template_is_structured(self, provider):
-        """Prompt template includes structured output format."""
         template = provider.get_prompt_template()
         assert "JSON" in template or "json" in template.lower()

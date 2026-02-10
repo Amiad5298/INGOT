@@ -112,12 +112,6 @@ def _capture_baseline_for_diffs(state: WorkflowState) -> bool:
     - FAIL_FAST: Abort if working tree is dirty (default, recommended)
     - WARN_AND_CONTINUE: Warn but continue (diffs may include unrelated changes)
 
-    Args:
-        state: Current workflow state (will be updated with baseline ref)
-
-    Returns:
-        True if baseline was captured successfully, False if there was
-        a dirty working tree that prevents safe operation (only with FAIL_FAST).
     """
     # Check for dirty working tree before capturing baseline
     try:
@@ -125,8 +119,7 @@ def _capture_baseline_for_diffs(state: WorkflowState) -> bool:
         if not is_clean:
             # WARN_AND_CONTINUE policy - tree is dirty but we continue
             print_warning(
-                "Continuing with dirty working tree. "
-                "Review diffs may include pre-existing changes."
+                "Continuing with dirty working tree. Review diffs may include pre-existing changes."
             )
     except DirtyWorkingTreeError as e:
         # FAIL_FAST policy - abort on dirty tree
@@ -164,14 +157,6 @@ def step_3_execute(
     subsequent diff operations are scoped to changes introduced by this
     workflow run. Fails fast if the working tree has uncommitted changes.
 
-    Args:
-        state: Current workflow state
-        backend: AI backend instance for agent interactions
-        use_tui: Override for TUI mode. None = auto-detect.
-        verbose: Enable verbose mode in TUI (expanded log panel).
-
-    Returns:
-        True if all tasks completed successfully
     """
     print_header("Step 3: Execute Implementation")
 
@@ -344,21 +329,7 @@ def _execute_with_tui(
     verbose: bool = False,
     phase: str = "sequential",
 ) -> list[str]:
-    """Execute tasks with TUI display (sequential mode).
-
-    Args:
-        state: Current workflow state
-        pending: List of pending tasks
-        plan_path: Path to plan file
-        tasklist_path: Path to task list file
-        log_dir: Directory for log files
-        backend: AI backend instance for agent interactions
-        verbose: Enable verbose mode (expanded log panel).
-        phase: Phase identifier for logging ("fundamental", "independent", "sequential").
-
-    Returns:
-        List of failed task names
-    """
+    """Execute tasks with TUI display (sequential mode)."""
     # Lazy import to avoid circular dependency
     from ingot.ui.tui import TaskRunnerUI
 
@@ -487,19 +458,7 @@ def _execute_fallback(
     *,
     backend: AIBackend,
 ) -> list[str]:
-    """Execute tasks with fallback (non-TUI) display.
-
-    Args:
-        state: Current workflow state
-        pending: List of pending tasks
-        plan_path: Path to plan file
-        tasklist_path: Path to task list file
-        log_dir: Directory for log files
-        backend: AI backend instance for agent interactions
-
-    Returns:
-        List of failed task names
-    """
+    """Execute tasks with fallback (non-TUI) display."""
     failed_tasks: list[str] = []
 
     for i, task in enumerate(pending):
@@ -559,17 +518,6 @@ def _execute_parallel_fallback(
     Each worker creates a fresh backend instance via BackendFactory.
     Rate limit errors trigger exponential backoff retry.
     Implements fail_fast semantics with stop_flag for early termination.
-
-    Args:
-        state: Current workflow state
-        tasks: List of independent tasks to execute
-        plan_path: Path to plan file
-        tasklist_path: Path to task list file
-        log_dir: Directory for log files
-        backend: AI backend instance (platform used to create per-worker backends)
-
-    Returns:
-        List of failed task names
     """
     failed_tasks: list[str] = []
     skipped_tasks: list[str] = []
@@ -583,12 +531,7 @@ def _execute_parallel_fallback(
         """Execute a single task with retry handling (runs in thread).
 
         Each worker creates its own fresh backend instance for thread safety.
-
-        Returns:
-            Tuple of (task, success) where success is:
-            - True if task succeeded
-            - False if task failed
-            - None if task was skipped (due to stop_flag)
+        Returns (task, success) where success is True/False/None (skipped).
         """
         idx, task = task_info
 
@@ -685,18 +628,6 @@ def _execute_parallel_with_tui(
     - Main thread pumps with wait(timeout=0.1) and calls tui.refresh() each loop
     - TASK_FINISHED events are emitted from main thread after future completes
     - Each worker creates a fresh backend instance via BackendFactory
-
-    Args:
-        state: Current workflow state
-        tasks: List of independent tasks
-        plan_path: Path to plan file
-        tasklist_path: Path to task list file
-        log_dir: Directory for log files
-        backend: AI backend instance (platform used to create per-worker backends)
-        verbose: Enable verbose mode
-
-    Returns:
-        List of failed task names
     """
     from ingot.ui.tui import TaskRunnerUI
 
@@ -723,9 +654,7 @@ def _execute_parallel_with_tui(
         """Worker thread: execute task, post TASK_STARTED/TASK_OUTPUT via post_event.
 
         Each worker creates its own fresh backend instance for thread safety.
-
-        Returns:
-            Tuple of (idx, task, success) - TASK_FINISHED is emitted by main thread.
+        TASK_FINISHED is emitted by the main thread.
         """
         idx, task = task_info
 
@@ -849,15 +778,6 @@ def _execute_task(
     - No file verification
     - No retry loops
     - Minimal prompt - agent has full instructions
-
-    Args:
-        state: Current workflow state
-        task: Task to execute
-        plan_path: Path to the plan file
-        backend: AI backend instance for agent interactions
-
-    Returns:
-        True if AI reported success
     """
     # Build minimal prompt - pass plan path reference, not full content
     # The agent uses codebase-retrieval to read relevant sections
@@ -900,19 +820,8 @@ def _execute_task_with_callback(
     Uses backend.run_with_callback() for streaming output.
     Each output line is passed to the callback function.
 
-    Args:
-        state: Current workflow state
-        task: Task to execute
-        plan_path: Path to the plan file
-        backend: AI backend instance for agent interactions
-        callback: Function called for each output line
-        is_parallel: Whether this task runs in parallel with others
-
-    Returns:
-        True if AI reported success
-
     Raises:
-        BackendRateLimitError: If the output indicates a rate limit error
+        BackendRateLimitError: If the output indicates a rate limit error.
     """
     # Build minimal prompt - pass plan path reference, not full content
     # The agent uses codebase-retrieval to read relevant sections
@@ -952,17 +861,6 @@ def _execute_task_with_retry(
 
     Wraps the core execution with exponential backoff retry logic
     to handle API rate limits during parallel execution.
-
-    Args:
-        state: Current workflow state
-        task: Task to execute
-        plan_path: Path to plan file
-        backend: AI backend instance for agent interactions
-        callback: Output callback for streaming
-        is_parallel: Whether this task runs in parallel with others
-
-    Returns:
-        True if task succeeded, False otherwise
     """
     config = state.rate_limit_config
 
@@ -1015,12 +913,7 @@ def _execute_task_with_retry(
 
 
 def _show_summary(state: WorkflowState, failed_tasks: list[str] | None = None) -> None:
-    """Show execution summary.
-
-    Args:
-        state: Current workflow state
-        failed_tasks: Optional list of task names that failed
-    """
+    """Show execution summary."""
     console.print()
     print_header("Execution Summary")
 
@@ -1067,10 +960,6 @@ def _run_post_implementation_tests(state: WorkflowState, backend: AIBackend) -> 
 
     Uses TaskRunnerUI in single-operation mode to provide a consistent
     collapsible UI with verbose toggle, matching the UX of Steps 1 and 3.
-
-    Args:
-        state: Current workflow state
-        backend: AI backend instance for agent interactions
     """
     from ingot.ui.tui import TaskRunnerUI
     from ingot.workflow.events import format_run_directory
@@ -1122,9 +1011,6 @@ def _offer_commit_instructions(state: WorkflowState) -> None:
 
     Does NOT execute any git commands. Only prints suggested commands
     for the user to run manually.
-
-    Args:
-        state: Current workflow state
     """
     if not is_dirty():
         return

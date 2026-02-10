@@ -32,11 +32,6 @@ class TestImportability:
     """
 
     def testlooks_like_rate_limit_is_importable(self):
-        """Verify looks_like_rate_limit can be imported.
-
-        Contract: The private function must be accessible for testing.
-        If this fails, the function may have been renamed or made truly private.
-        """
         try:
             from ingot.integrations.auggie import looks_like_rate_limit
 
@@ -48,7 +43,6 @@ class TestImportability:
             )
 
     def test_auggie_client_is_importable(self):
-        """Verify AuggieClient can be imported."""
         try:
             from ingot.integrations.auggie import AuggieClient
 
@@ -57,7 +51,6 @@ class TestImportability:
             pytest.fail(f"Cannot import AuggieClient: {e}")
 
     def test_ingot_agent_constants_are_importable(self):
-        """Verify INGOT_AGENT_* constants can be imported."""
         try:
             from ingot.workflow.constants import (
                 INGOT_AGENT_DOC_UPDATER,
@@ -94,14 +87,6 @@ class TestAuggieClientSemantics:
     """
 
     def test_run_with_callback_returns_tuple_bool_str(self):
-        """Verify run_with_callback returns (bool, str) tuple.
-
-        Contract:
-        - Returns tuple[bool, str]
-        - First element is success (True if returncode == 0)
-        - Second element is full output (all lines concatenated)
-        - Callback is invoked for each line (stripped of newline) when successful
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -121,7 +106,6 @@ class TestAuggieClientSemantics:
             assert len(output_lines) > 0, "Callback should receive output lines on success"
 
     def test_run_with_callback_tuple_length_is_two(self):
-        """Verify run_with_callback always returns a 2-tuple (bool, str)."""
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -135,13 +119,6 @@ class TestAuggieClientSemantics:
         assert len(result) == 2, "Tuple must have exactly two elements"
 
     def test_run_print_with_output_returns_tuple_bool_str(self):
-        """Verify run_print_with_output returns (bool, str) tuple.
-
-        Contract:
-        - Returns tuple[bool, str]
-        - Wraps run_with_callback internally
-        - Prints output to terminal in real-time
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -154,13 +131,6 @@ class TestAuggieClientSemantics:
         assert isinstance(output, str), "Second element must be str"
 
     def test_run_print_quiet_returns_str(self):
-        """Verify run_print_quiet returns str only.
-
-        Contract:
-        - Returns str (stdout only)
-        - No success indicator (caller must check content)
-        - Uses --print --quiet flags
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -172,13 +142,6 @@ class TestAuggieClientSemantics:
         assert isinstance(output, str), "Must return str"
 
     def test_run_print_returns_bool(self):
-        """Verify run_print returns bool only.
-
-        Contract:
-        - Returns bool (True if command succeeded, False otherwise)
-        - Interactive mode - streams output to terminal
-        - Used in clarification flow (step1_plan.py:296)
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -190,13 +153,6 @@ class TestAuggieClientSemantics:
         assert isinstance(success, bool), "Must return bool"
 
     def test_run_returns_completed_process(self):
-        """Verify run() returns subprocess.CompletedProcess.
-
-        Contract:
-        - Returns subprocess.CompletedProcess[str]
-        - Has returncode attribute (0 = success)
-        - Low-level method used by other run_* methods
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -209,12 +165,6 @@ class TestAuggieClientSemantics:
         assert isinstance(result.returncode, int), "returncode must be int"
 
     def test_callback_receives_lines_without_newlines(self):
-        """Verify callback receives lines with newlines stripped.
-
-        Contract:
-        - Each line passed to callback has trailing newline removed
-        - Full output in return value preserves newlines
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -231,13 +181,6 @@ class TestAuggieClientSemantics:
             assert not line.endswith("\n"), f"Line should not end with newline: {repr(line)}"
 
     def test_output_aggregation_preserves_newlines(self):
-        """Verify full output preserves newlines while callback strips them.
-
-        Contract:
-        - Callback receives lines WITHOUT trailing newlines
-        - Full output in return tuple PRESERVES newlines
-        - Relationship: output contains lines joined with newlines
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -260,20 +203,6 @@ class TestAuggieClientSemantics:
             assert not line.endswith("\n"), "Callback lines should be stripped"
 
     def test_run_with_callback_failure_returns_false(self):
-        """Verify run_argv_with_callback returns False on CLI failure.
-
-        Contract:
-        - Returns (bool, str) tuple
-        - success is False when command fails (returncode != 0)
-        - Output is still captured even on failure (as str, possibly empty)
-
-        NOTE: This test uses run_argv_with_callback (not run_with_callback)
-        because run_with_callback embeds its input as a prompt string, NOT as
-        CLI argv. To test deterministic CLI failure, we need raw argv control.
-
-        The "--invalid-flag-xyz" is passed directly as a CLI flag to auggie,
-        causing the CLI parser to reject it with a non-zero exit code.
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -300,7 +229,6 @@ class TestRateLimitDetection:
     """
 
     def testlooks_like_rate_limit_http_429(self):
-        """Verify HTTP 429 status code is detected."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         assert looks_like_rate_limit("Error 429: Too many requests")
@@ -308,7 +236,6 @@ class TestRateLimitDetection:
         assert looks_like_rate_limit("Status: 429")
 
     def testlooks_like_rate_limit_explicit_messages(self):
-        """Verify explicit rate limit messages are detected."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         rate_limit_outputs = [
@@ -321,10 +248,6 @@ class TestRateLimitDetection:
             assert looks_like_rate_limit(output), f"Should detect: {output}"
 
     def testlooks_like_rate_limit_quota_messages(self):
-        """Verify quota exceeded messages are detected.
-
-        Contract: Only "quota exceeded" pattern is matched, not just "quota".
-        """
         from ingot.integrations.auggie import looks_like_rate_limit
 
         assert looks_like_rate_limit("quota exceeded for today")
@@ -333,14 +256,12 @@ class TestRateLimitDetection:
         assert not looks_like_rate_limit("API quota reached")
 
     def testlooks_like_rate_limit_capacity_messages(self):
-        """Verify capacity-related messages are detected."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         assert looks_like_rate_limit("System at capacity")
         assert looks_like_rate_limit("Capacity limit reached")
 
     def testlooks_like_rate_limit_throttle_variants(self):
-        """Verify throttle message variants are detected."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         assert looks_like_rate_limit("Request throttled")
@@ -348,7 +269,6 @@ class TestRateLimitDetection:
         assert looks_like_rate_limit("You are being throttled")
 
     def testlooks_like_rate_limit_server_errors(self):
-        """Verify server error codes (often rate-limit related) are detected."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         assert looks_like_rate_limit("502 Bad Gateway")
@@ -356,7 +276,6 @@ class TestRateLimitDetection:
         assert looks_like_rate_limit("504 Gateway Timeout")
 
     def testlooks_like_rate_limit_normal_success(self):
-        """Verify normal success messages are NOT detected as rate limits."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         normal_outputs = [
@@ -371,15 +290,6 @@ class TestRateLimitDetection:
             assert not looks_like_rate_limit(output), f"Should NOT detect: {output}"
 
     def test_looks_like_rate_limit_fixed_false_positives(self):
-        """Verify that most former false positives are now correctly rejected.
-
-        Word-boundary matching prevents "PROJ-4290" from matching "429".
-        Removal of 502/503/504 from rate-limit detection means those
-        server errors no longer trigger detect_rate_limit.
-
-        Remaining known limitation: standalone "429" in non-HTTP context
-        (e.g., "line 429") is inherently ambiguous and still matches.
-        """
         from ingot.integrations.auggie import looks_like_rate_limit
 
         # Fixed: 502/503 are no longer detected as rate limits
@@ -398,7 +308,6 @@ class TestRateLimitDetection:
         assert looks_like_rate_limit("Error on line 429 of main.py")
 
     def testlooks_like_rate_limit_true_negatives(self):
-        """Verify messages without rate-limit patterns are NOT detected."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         # These should NOT be detected (no rate-limit patterns)
@@ -414,7 +323,6 @@ class TestRateLimitDetection:
             assert not looks_like_rate_limit(output), f"Should NOT detect: {output}"
 
     def testlooks_like_rate_limit_case_insensitive(self):
-        """Verify detection is case-insensitive."""
         from ingot.integrations.auggie import looks_like_rate_limit
 
         assert looks_like_rate_limit("RATE LIMIT EXCEEDED")
@@ -448,52 +356,24 @@ class TestWorkflowStepBehavior:
         return state
 
     def test_step1_uses_spec_planner_subagent(self, mock_state):
-        """Verify the default planner subagent name.
-
-        Contract: Step 1 (plan creation) uses 'ingot-planner' subagent.
-        """
         assert mock_state.subagent_names["planner"] == "ingot-planner"
 
     def test_step2_uses_spec_tasklist_subagent(self, mock_state):
-        """Verify the default tasklist subagent name.
-
-        Contract: Step 2 (tasklist creation) uses 'ingot-tasklist' subagent.
-        """
         assert mock_state.subagent_names["tasklist"] == "ingot-tasklist"
 
     def test_step2_refiner_uses_spec_tasklist_refiner(self, mock_state):
-        """Verify the tasklist refiner subagent name.
-
-        Contract: Tasklist refinement uses 'ingot-tasklist-refiner' subagent.
-        """
         assert mock_state.subagent_names["tasklist_refiner"] == "ingot-tasklist-refiner"
 
     def test_step3_uses_spec_implementer_subagent(self, mock_state):
-        """Verify the default implementer subagent name.
-
-        Contract: Step 3 (task execution) uses 'ingot-implementer' subagent.
-        """
         assert mock_state.subagent_names["implementer"] == "ingot-implementer"
 
     def test_step3_uses_spec_reviewer_subagent(self, mock_state):
-        """Verify the reviewer subagent name.
-
-        Contract: Task review uses 'ingot-reviewer' subagent.
-        """
         assert mock_state.subagent_names["reviewer"] == "ingot-reviewer"
 
     def test_step4_uses_spec_doc_updater_subagent(self, mock_state):
-        """Verify the doc updater subagent name.
-
-        Contract: Step 4 (documentation) uses 'ingot-doc-updater' subagent.
-        """
         assert mock_state.subagent_names["doc_updater"] == "ingot-doc-updater"
 
     def test_subagent_names_match_constants(self, mock_state):
-        """Verify subagent names match the constants in ingot.workflow.constants.
-
-        Contract: WorkflowState defaults must match INGOT_AGENT_* constants.
-        """
         from ingot.workflow.constants import (
             INGOT_AGENT_DOC_UPDATER,
             INGOT_AGENT_IMPLEMENTER,
@@ -511,10 +391,6 @@ class TestWorkflowStepBehavior:
         assert mock_state.subagent_names["doc_updater"] == INGOT_AGENT_DOC_UPDATER
 
     def test_all_subagent_keys_present(self, mock_state):
-        """Verify all expected subagent keys are present.
-
-        Contract: WorkflowState must have all 7 subagent keys.
-        """
         expected_keys = {
             "planner",
             "tasklist",
@@ -535,10 +411,6 @@ class TestParallelExecutionSemantics:
     """
 
     def test_parallel_tasks_use_independent_clients(self):
-        """Verify parallel tasks create independent AuggieClient instances.
-
-        Contract: Each parallel task creates its own client instance.
-        """
         from ingot.integrations.auggie import AuggieClient
 
         # Create two independent clients (simulating parallel execution)
@@ -549,10 +421,6 @@ class TestParallelExecutionSemantics:
         assert client1 is not client2, "Parallel tasks must use different client instances"
 
     def test_dont_save_session_parameter_available(self):
-        """Verify dont_save_session parameter exists in run_with_callback.
-
-        Contract: run_with_callback must accept dont_save_session parameter.
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -563,11 +431,6 @@ class TestParallelExecutionSemantics:
         ), "run_with_callback must have dont_save_session parameter"
 
     def test_dont_save_session_default_is_false(self):
-        """Verify dont_save_session defaults to False.
-
-        Contract: By default, sessions are saved (for interactive use).
-        Parallel execution explicitly sets dont_save_session=True.
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -577,10 +440,6 @@ class TestParallelExecutionSemantics:
         assert param.default is False, "dont_save_session should default to False"
 
     def test_client_model_isolation(self):
-        """Verify each client can have different model settings.
-
-        Contract: Model settings are instance-specific, not shared.
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client1 = AuggieClient(model="model-a")
@@ -591,10 +450,6 @@ class TestParallelExecutionSemantics:
         assert client1.model != client2.model
 
     def test_agent_parameter_available_in_run_methods(self):
-        """Verify agent parameter exists in all run methods.
-
-        Contract: All run methods must accept agent parameter for subagent dispatch.
-        """
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -613,12 +468,6 @@ class TestParallelExecutionSemantics:
             assert "agent" in sig.parameters, f"{method_name} must have agent parameter"
 
     def test_concurrent_clients_no_interference(self, monkeypatch):
-        """Verify concurrent clients remain independent without invoking the CLI.
-
-        Contract: Parallel tasks must operate on independent client instances.
-        This is an inspect-only test: it monkeypatches run_with_callback to
-        avoid external Auggie calls while verifying per-instance invocation.
-        """
         import concurrent.futures
 
         from ingot.integrations.auggie import AuggieClient

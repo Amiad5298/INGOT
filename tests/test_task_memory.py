@@ -18,10 +18,7 @@ from ingot.workflow.tasks import Task
 
 
 class TestTaskMemory:
-    """Tests for TaskMemory dataclass."""
-
     def test_init_with_defaults(self):
-        """Initializes with default values."""
         memory = TaskMemory(task_name="Test task")
 
         assert memory.task_name == "Test task"
@@ -31,7 +28,6 @@ class TestTaskMemory:
         assert memory.test_commands == []
 
     def test_to_markdown_basic(self):
-        """Formats basic memory as markdown."""
         memory = TaskMemory(
             task_name="Test task",
             files_modified=["file1.py", "file2.py"],
@@ -43,7 +39,6 @@ class TestTaskMemory:
         assert "**Files:** file1.py, file2.py" in markdown
 
     def test_to_markdown_with_patterns(self):
-        """Formats memory with patterns as markdown."""
         memory = TaskMemory(
             task_name="Test task",
             patterns_used=["Python implementation", "Added Python tests"],
@@ -56,7 +51,6 @@ class TestTaskMemory:
         assert "- Added Python tests" in markdown
 
     def test_to_markdown_with_decisions(self):
-        """Formats memory with key decisions as markdown."""
         memory = TaskMemory(
             task_name="Test task",
             key_decisions=["Use async/await", "Add error handling"],
@@ -70,11 +64,8 @@ class TestTaskMemory:
 
 
 class TestGetModifiedFiles:
-    """Tests for _get_modified_files function."""
-
     @patch("subprocess.run")
     def test_returns_modified_files(self, mock_run):
-        """Returns list of modified files from git."""
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="file1.py\nfile2.py\nfile3.ts\n",
@@ -92,7 +83,6 @@ class TestGetModifiedFiles:
 
     @patch("subprocess.run")
     def test_returns_empty_on_error(self, mock_run):
-        """Returns empty list on git error."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git")
 
         files = _get_modified_files()
@@ -101,10 +91,7 @@ class TestGetModifiedFiles:
 
 
 class TestIdentifyPatternsInChanges:
-    """Tests for _identify_patterns_in_changes function."""
-
     def test_identifies_python_pattern(self):
-        """Identifies Python implementation pattern."""
         files = ["src/module.py", "src/utils.py"]
 
         patterns = _identify_patterns_in_changes(files)
@@ -112,7 +99,6 @@ class TestIdentifyPatternsInChanges:
         assert "Python implementation" in patterns
 
     def test_identifies_python_test_pattern(self):
-        """Identifies Python test pattern."""
         files = ["tests/test_module.py", "src/module.py"]
 
         patterns = _identify_patterns_in_changes(files)
@@ -121,7 +107,6 @@ class TestIdentifyPatternsInChanges:
         assert "Added Python tests" in patterns
 
     def test_identifies_typescript_pattern(self):
-        """Identifies TypeScript implementation pattern."""
         files = ["src/component.ts", "src/utils.tsx"]
 
         patterns = _identify_patterns_in_changes(files)
@@ -129,7 +114,6 @@ class TestIdentifyPatternsInChanges:
         assert "TypeScript implementation" in patterns
 
     def test_identifies_typescript_test_pattern(self):
-        """Identifies TypeScript test pattern."""
         files = ["src/component.test.ts", "src/component.ts"]
 
         patterns = _identify_patterns_in_changes(files)
@@ -138,7 +122,6 @@ class TestIdentifyPatternsInChanges:
         assert "Added TypeScript tests" in patterns
 
     def test_identifies_api_pattern(self):
-        """Identifies API endpoint pattern."""
         files = ["src/api/users.py", "src/api/auth.py"]
 
         patterns = _identify_patterns_in_changes(files)
@@ -146,7 +129,6 @@ class TestIdentifyPatternsInChanges:
         assert "API endpoint implementation" in patterns
 
     def test_identifies_database_pattern(self):
-        """Identifies database schema/model pattern."""
         files = ["src/models/user.py", "src/schema/tables.py"]
 
         patterns = _identify_patterns_in_changes(files)
@@ -154,7 +136,6 @@ class TestIdentifyPatternsInChanges:
         assert "Database schema/model" in patterns
 
     def test_identifies_ui_pattern(self):
-        """Identifies UI component pattern."""
         files = ["src/components/Button.tsx", "src/ui/Modal.tsx"]
 
         patterns = _identify_patterns_in_changes(files)
@@ -163,7 +144,6 @@ class TestIdentifyPatternsInChanges:
 
     @patch("subprocess.run")
     def test_identifies_async_pattern_from_diff(self, mock_run):
-        """Identifies async/await pattern from diff content."""
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="+ async def fetch_data():\n+     await client.get()\n",
@@ -175,7 +155,6 @@ class TestIdentifyPatternsInChanges:
 
     @patch("subprocess.run")
     def test_identifies_error_handling_pattern_from_diff(self, mock_run):
-        """Identifies error handling pattern from diff content."""
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="+ try:\n+     result = process()\n+ except Exception:\n+     handle_error()\n",
@@ -187,7 +166,6 @@ class TestIdentifyPatternsInChanges:
 
     @patch("subprocess.run")
     def test_identifies_dataclass_pattern_from_diff(self, mock_run):
-        """Identifies dataclass pattern from diff content."""
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="+ @dataclass\n+ class User:\n+     name: str\n",
@@ -199,7 +177,6 @@ class TestIdentifyPatternsInChanges:
 
     @patch("subprocess.run")
     def test_identifies_test_suite_pattern_from_diff(self, mock_run):
-        """Identifies test suite structure pattern from diff content."""
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="+ def test_user_creation():\n+     pytest.fixture()\n+     assert user.name == 'test'\n",
@@ -211,10 +188,7 @@ class TestIdentifyPatternsInChanges:
 
 
 class TestExtractTestCommands:
-    """Tests for _extract_test_commands function."""
-
     def test_extracts_pytest_command(self):
-        """Extracts pytest command for Python test files."""
         task = Task(name="Write unit tests for user module")
         files = ["tests/test_user.py", "src/user.py"]
 
@@ -223,7 +197,6 @@ class TestExtractTestCommands:
         assert "pytest tests/test_user.py" in commands
 
     def test_extracts_npm_test_command(self):
-        """Extracts npm test command for TypeScript test files."""
         task = Task(name="Write tests for Button component")
         files = ["src/Button.test.ts", "src/Button.ts"]
 
@@ -232,7 +205,6 @@ class TestExtractTestCommands:
         assert "npm test src/Button.test.ts" in commands
 
     def test_returns_empty_for_non_test_task(self):
-        """Returns empty list for non-test tasks."""
         task = Task(name="Implement user authentication")
         files = ["src/auth.py", "src/user.py"]
 
@@ -241,7 +213,6 @@ class TestExtractTestCommands:
         assert commands == []
 
     def test_handles_multiple_test_files(self):
-        """Handles multiple test files."""
         task = Task(name="Write tests for API endpoints")
         files = ["tests/test_users.py", "tests/test_auth.py", "src/api.py"]
 
@@ -253,13 +224,10 @@ class TestExtractTestCommands:
 
 
 class TestCaptureTaskMemory:
-    """Tests for capture_task_memory function."""
-
     @patch("ingot.workflow.task_memory._get_modified_files")
     @patch("ingot.workflow.task_memory._identify_patterns_in_changes")
     @patch("ingot.workflow.task_memory._extract_test_commands")
     def test_captures_task_memory(self, mock_extract, mock_identify, mock_get_files):
-        """Captures task memory with all components."""
         mock_get_files.return_value = ["file1.py", "file2.py"]
         mock_identify.return_value = ["Python implementation"]
         mock_extract.return_value = ["pytest tests/test_file.py"]
@@ -286,7 +254,6 @@ class TestCaptureTaskMemory:
     @patch("ingot.workflow.task_memory._identify_patterns_in_changes")
     @patch("ingot.workflow.task_memory._extract_test_commands")
     def test_adds_memory_to_state(self, mock_extract, mock_identify, mock_get_files):
-        """Adds captured memory to workflow state."""
         mock_get_files.return_value = ["file1.py"]
         mock_identify.return_value = []
         mock_extract.return_value = []
@@ -309,10 +276,7 @@ class TestCaptureTaskMemory:
 
 
 class TestFindRelatedTaskMemories:
-    """Tests for find_related_task_memories function."""
-
     def test_finds_related_by_keyword_overlap(self):
-        """Finds related memories by keyword overlap."""
         task = Task(name="Write unit tests for user authentication")
         memories = [
             TaskMemory(task_name="Implement user authentication"),
@@ -328,7 +292,6 @@ class TestFindRelatedTaskMemories:
         assert "Write integration tests for authentication" in task_names
 
     def test_requires_minimum_keyword_overlap(self):
-        """Requires at least 2 common keywords."""
         task = Task(name="Write tests for user module")
         memories = [
             TaskMemory(task_name="Write documentation"),  # Only 1 keyword: "write"
@@ -341,7 +304,6 @@ class TestFindRelatedTaskMemories:
         assert related[0].task_name == "Write tests for auth"
 
     def test_returns_empty_for_no_memories(self):
-        """Returns empty list when no memories exist."""
         task = Task(name="Test task")
 
         related = find_related_task_memories(task, [])
@@ -349,7 +311,6 @@ class TestFindRelatedTaskMemories:
         assert related == []
 
     def test_case_insensitive_matching(self):
-        """Performs case-insensitive keyword matching."""
         task = Task(name="Write Unit Tests")
         memories = [
             TaskMemory(task_name="write unit tests for API"),
@@ -361,10 +322,7 @@ class TestFindRelatedTaskMemories:
 
 
 class TestBuildPatternContext:
-    """Tests for build_pattern_context function."""
-
     def test_returns_empty_for_no_memories(self):
-        """Returns empty string when no memories exist."""
         task = Task(name="Test task")
         ticket = GenericTicket(
             id="TEST-123",
@@ -381,7 +339,6 @@ class TestBuildPatternContext:
         assert context == ""
 
     def test_returns_general_patterns_when_no_related(self):
-        """Returns general patterns when no related memories found."""
         task = Task(name="Implement new feature")
         ticket = GenericTicket(
             id="TEST-123",
@@ -406,7 +363,6 @@ class TestBuildPatternContext:
         assert "Async/await pattern" in context
 
     def test_returns_related_patterns(self):
-        """Returns patterns from related memories."""
         task = Task(name="Write unit tests for user authentication")
         ticket = GenericTicket(
             id="TEST-123",
@@ -439,7 +395,6 @@ class TestBuildPatternContext:
         assert "Add database schema" not in context
 
     def test_formats_context_as_markdown(self):
-        """Formats context as markdown."""
         task = Task(name="Write tests for user module")
         ticket = GenericTicket(
             id="TEST-123",

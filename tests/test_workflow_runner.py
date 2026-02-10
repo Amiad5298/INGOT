@@ -55,25 +55,13 @@ def mock_config():
     return config
 
 
-# =============================================================================
-# Tests for _setup_branch() - Branch name generation
-# =============================================================================
-
-
 class TestSetupBranchNameGeneration:
-    """Tests for _setup_branch branch name generation."""
-
     @patch("ingot.workflow.runner.prompt_confirm")
     @patch("ingot.workflow.runner.create_branch")
     @patch("ingot.workflow.runner.get_current_branch")
     def test_generates_branch_name_with_summary(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
-        """Generates branch name with summary format: feature/{ticket_id}-{summary}.
-
-        Note: _setup_branch prepends 'feature/' prefix to ticket.branch_slug.
-        The ticket's branch_slug is: {id}-{branch_summary} = 'test-123-test-feature'
-        """
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = True
         mock_create.return_value = True
@@ -90,7 +78,6 @@ class TestSetupBranchNameGeneration:
     def test_generates_fallback_branch_name_without_summary(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket_no_summary
     ):
-        """Generates fallback format feature/{ticket_id}-{title} when no summary available."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = True
         mock_create.return_value = True
@@ -105,19 +92,11 @@ class TestSetupBranchNameGeneration:
         assert workflow_state.branch_name == "feature/test-456-test-feature-no-summary"
 
 
-# =============================================================================
-# Tests for _setup_branch() - Already on feature branch
-# =============================================================================
-
-
 class TestSetupBranchAlreadyOnFeature:
-    """Tests for _setup_branch when already on feature branch."""
-
     @patch("ingot.workflow.runner.get_current_branch")
     def test_stays_on_current_branch_if_already_on_feature_branch(
         self, mock_get_branch, workflow_state, ticket
     ):
-        """Stays on current branch if already on the expected feature branch."""
         # From conftest: branch_summary="test-feature" → slug="test-123-test-feature"
         expected_branch = "feature/test-123-test-feature"
         mock_get_branch.return_value = expected_branch
@@ -129,7 +108,6 @@ class TestSetupBranchAlreadyOnFeature:
 
     @patch("ingot.workflow.runner.get_current_branch")
     def test_updates_state_branch_name_correctly(self, mock_get_branch, workflow_state, ticket):
-        """Updates state.branch_name correctly when already on branch."""
         # From conftest: branch_summary="test-feature" → slug="test-123-test-feature"
         expected_branch = "feature/test-123-test-feature"
         mock_get_branch.return_value = expected_branch
@@ -139,21 +117,13 @@ class TestSetupBranchAlreadyOnFeature:
         assert workflow_state.branch_name == expected_branch
 
 
-# =============================================================================
-# Tests for _setup_branch() - Create new branch
-# =============================================================================
-
-
 class TestSetupBranchCreateNew:
-    """Tests for _setup_branch creating new branch."""
-
     @patch("ingot.workflow.runner.prompt_confirm")
     @patch("ingot.workflow.runner.create_branch")
     @patch("ingot.workflow.runner.get_current_branch")
     def test_creates_new_branch_when_user_confirms(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
-        """Creates new branch when user confirms."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = True
         mock_create.return_value = True
@@ -170,7 +140,6 @@ class TestSetupBranchCreateNew:
     def test_returns_true_on_successful_branch_creation(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
-        """Returns True on successful branch creation."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = True
         mock_create.return_value = True
@@ -185,7 +154,6 @@ class TestSetupBranchCreateNew:
     def test_returns_false_on_branch_creation_failure(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state, ticket
     ):
-        """Returns False on branch creation failure."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = True
         mock_create.return_value = False  # Branch creation fails
@@ -195,20 +163,12 @@ class TestSetupBranchCreateNew:
         assert result is False
 
 
-# =============================================================================
-# Tests for _setup_branch() - User declines
-# =============================================================================
-
-
 class TestSetupBranchUserDeclines:
-    """Tests for _setup_branch when user declines branch creation."""
-
     @patch("ingot.workflow.runner.prompt_confirm")
     @patch("ingot.workflow.runner.get_current_branch")
     def test_stays_on_current_branch_when_user_declines(
         self, mock_get_branch, mock_confirm, workflow_state, ticket
     ):
-        """Stays on current branch when user declines."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = False  # User declines
 
@@ -221,7 +181,6 @@ class TestSetupBranchUserDeclines:
     def test_updates_state_branch_name_to_current_branch(
         self, mock_get_branch, mock_confirm, workflow_state, ticket
     ):
-        """Updates state.branch_name to current branch when user declines."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = False  # User declines
 
@@ -230,17 +189,9 @@ class TestSetupBranchUserDeclines:
         assert workflow_state.branch_name == "main"
 
 
-# =============================================================================
-# Tests for _show_completion()
-# =============================================================================
-
-
 class TestShowCompletion:
-    """Tests for _show_completion function."""
-
     @patch("ingot.workflow.runner.console")
     def test_displays_ticket_id(self, mock_console, workflow_state):
-        """Displays ticket ID."""
         _show_completion(workflow_state)
 
         calls = [str(c) for c in mock_console.print.call_args_list]
@@ -248,7 +199,6 @@ class TestShowCompletion:
 
     @patch("ingot.workflow.runner.console")
     def test_displays_branch_name(self, mock_console, workflow_state):
-        """Displays branch name."""
         workflow_state.branch_name = "feature/test-branch"
 
         _show_completion(workflow_state)
@@ -258,7 +208,6 @@ class TestShowCompletion:
 
     @patch("ingot.workflow.runner.console")
     def test_displays_completed_task_count(self, mock_console, workflow_state):
-        """Displays completed task count."""
         workflow_state.completed_tasks = ["Task 1", "Task 2", "Task 3"]
 
         _show_completion(workflow_state)
@@ -268,7 +217,6 @@ class TestShowCompletion:
 
     @patch("ingot.workflow.runner.console")
     def test_displays_plan_file_if_exists(self, mock_console, workflow_state, tmp_path):
-        """Displays plan file if exists."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         workflow_state.plan_file = plan_path
 
@@ -279,7 +227,6 @@ class TestShowCompletion:
 
     @patch("ingot.workflow.runner.console")
     def test_displays_tasklist_file_if_exists(self, mock_console, workflow_state, tmp_path):
-        """Displays tasklist file if exists."""
         tasklist_path = tmp_path / "specs" / "TEST-123-tasklist.md"
         workflow_state.tasklist_file = tasklist_path
 
@@ -291,7 +238,6 @@ class TestShowCompletion:
     @patch("ingot.workflow.runner.print_info")
     @patch("ingot.workflow.runner.console")
     def test_prints_next_steps(self, mock_console, mock_print_info, workflow_state):
-        """Prints next steps."""
         _show_completion(workflow_state)
 
         calls = [str(c) for c in mock_print_info.call_args_list]
@@ -300,17 +246,9 @@ class TestShowCompletion:
         assert any("tests" in c for c in calls)
 
 
-# =============================================================================
-# Tests for workflow_cleanup() context manager - Normal execution
-# =============================================================================
-
-
 class TestWorkflowCleanupNormal:
-    """Tests for workflow_cleanup context manager normal execution."""
-
     @patch("ingot.workflow.runner.get_current_branch")
     def test_yields_normally_on_success(self, mock_get_branch, workflow_state):
-        """Yields normally and completes without error on success path."""
         mock_get_branch.return_value = "main"
 
         executed = False
@@ -320,21 +258,13 @@ class TestWorkflowCleanupNormal:
         assert executed is True
 
 
-# =============================================================================
-# Tests for workflow_cleanup() context manager - UserCancelledError
-# =============================================================================
-
-
 class TestWorkflowCleanupUserCancelled:
-    """Tests for workflow_cleanup handling UserCancelledError."""
-
     @patch("ingot.workflow.runner._offer_cleanup")
     @patch("ingot.workflow.runner.print_info")
     @patch("ingot.workflow.runner.get_current_branch")
     def test_catches_user_cancelled_error(
         self, mock_get_branch, mock_print_info, mock_offer_cleanup, workflow_state
     ):
-        """Catches UserCancelledError, prints info, calls _offer_cleanup, then re-raises."""
         mock_get_branch.return_value = "main"
 
         with pytest.raises(UserCancelledError):
@@ -345,21 +275,13 @@ class TestWorkflowCleanupUserCancelled:
         mock_offer_cleanup.assert_called_once()
 
 
-# =============================================================================
-# Tests for workflow_cleanup() context manager - IngotError
-# =============================================================================
-
-
 class TestWorkflowCleanupIngotError:
-    """Tests for workflow_cleanup handling IngotError."""
-
     @patch("ingot.workflow.runner._offer_cleanup")
     @patch("ingot.workflow.runner.print_error")
     @patch("ingot.workflow.runner.get_current_branch")
     def test_catches_spec_error(
         self, mock_get_branch, mock_print_error, mock_offer_cleanup, workflow_state
     ):
-        """Catches IngotError, prints error, calls _offer_cleanup, then re-raises."""
         mock_get_branch.return_value = "main"
 
         with pytest.raises(IngotError):
@@ -370,21 +292,13 @@ class TestWorkflowCleanupIngotError:
         mock_offer_cleanup.assert_called_once()
 
 
-# =============================================================================
-# Tests for workflow_cleanup() context manager - Generic Exception
-# =============================================================================
-
-
 class TestWorkflowCleanupGenericException:
-    """Tests for workflow_cleanup handling generic exceptions."""
-
     @patch("ingot.workflow.runner._offer_cleanup")
     @patch("ingot.workflow.runner.print_error")
     @patch("ingot.workflow.runner.get_current_branch")
     def test_catches_generic_exceptions(
         self, mock_get_branch, mock_print_error, mock_offer_cleanup, workflow_state
     ):
-        """Catches generic exceptions, prints error, calls _offer_cleanup, then re-raises."""
         mock_get_branch.return_value = "main"
 
         with pytest.raises(RuntimeError):
@@ -395,21 +309,13 @@ class TestWorkflowCleanupGenericException:
         mock_offer_cleanup.assert_called_once()
 
 
-# =============================================================================
-# Tests for _offer_cleanup() - Checkpoint commits
-# =============================================================================
-
-
 class TestOfferCleanupCheckpointCommits:
-    """Tests for _offer_cleanup checkpoint commits display."""
-
     @patch("ingot.workflow.runner.console")
     @patch("ingot.workflow.runner.print_info")
     @patch("ingot.workflow.runner.print_warning")
     def test_prints_checkpoint_commit_count(
         self, mock_warning, mock_info, mock_console, workflow_state
     ):
-        """Prints checkpoint commit count when state.checkpoint_commits is non-empty."""
         workflow_state.checkpoint_commits = ["abc123", "def456", "ghi789"]
 
         _offer_cleanup(workflow_state, "main")
@@ -418,21 +324,13 @@ class TestOfferCleanupCheckpointCommits:
         assert any("3" in c and "checkpoint" in c.lower() for c in calls)
 
 
-# =============================================================================
-# Tests for _offer_cleanup() - Branch information
-# =============================================================================
-
-
 class TestOfferCleanupBranchInfo:
-    """Tests for _offer_cleanup branch information display."""
-
     @patch("ingot.workflow.runner.console")
     @patch("ingot.workflow.runner.print_info")
     @patch("ingot.workflow.runner.print_warning")
     def test_prints_branch_info_when_different(
         self, mock_warning, mock_info, mock_console, workflow_state
     ):
-        """Prints current branch and original branch info when they differ."""
         workflow_state.branch_name = "feature/test-branch"
 
         _offer_cleanup(workflow_state, "main")
@@ -447,7 +345,6 @@ class TestOfferCleanupBranchInfo:
     def test_does_not_print_branch_info_when_same(
         self, mock_warning, mock_info, mock_console, workflow_state
     ):
-        """Does not print branch info when they are the same."""
         workflow_state.branch_name = "main"
 
         _offer_cleanup(workflow_state, "main")
@@ -457,14 +354,7 @@ class TestOfferCleanupBranchInfo:
         assert not any("On branch" in c for c in calls)
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Initialization
-# =============================================================================
-
-
 class TestRunIngotWorkflowInit:
-    """Tests for run_ingot_workflow initialization."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -489,7 +379,6 @@ class TestRunIngotWorkflowInit:
         ticket,
         mock_config,
     ):
-        """Test that WorkflowState is initialized correctly with all parameters."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False  # No additional context
@@ -519,14 +408,7 @@ class TestRunIngotWorkflowInit:
         assert state.squash_at_end is False
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Dirty state handling
-# =============================================================================
-
-
 class TestRunIngotWorkflowDirtyState:
-    """Tests for run_ingot_workflow dirty state handling."""
-
     @patch("ingot.workflow.runner.handle_dirty_state")
     @patch("ingot.workflow.runner.show_git_dirty_menu")
     @patch("ingot.workflow.runner.is_dirty")
@@ -541,7 +423,6 @@ class TestRunIngotWorkflowDirtyState:
         ticket,
         mock_config,
     ):
-        """Test that dirty state is detected and handled at start."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = True
         mock_menu.return_value = "stash"
@@ -554,14 +435,7 @@ class TestRunIngotWorkflowDirtyState:
         mock_handle.assert_called_once()
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - User context prompt
-# =============================================================================
-
-
 class TestRunIngotWorkflowUserContext:
-    """Tests for run_ingot_workflow user context prompt."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -588,7 +462,6 @@ class TestRunIngotWorkflowUserContext:
         ticket,
         mock_config,
     ):
-        """Test prompts for additional user context and stores it in state."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.side_effect = [True, True]  # Add context, then other prompts
@@ -608,14 +481,7 @@ class TestRunIngotWorkflowUserContext:
         assert state.user_context == "Additional implementation details"
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Branch setup and base commit
-# =============================================================================
-
-
 class TestRunIngotWorkflowBranchSetup:
-    """Tests for run_ingot_workflow branch setup and base commit."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -640,7 +506,6 @@ class TestRunIngotWorkflowBranchSetup:
         ticket,
         mock_config,
     ):
-        """Test records base commit via get_current_commit."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -671,7 +536,6 @@ class TestRunIngotWorkflowBranchSetup:
         ticket,
         mock_config,
     ):
-        """Test returns False when branch setup fails."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -682,14 +546,7 @@ class TestRunIngotWorkflowBranchSetup:
         assert result is False
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Step orchestration
-# =============================================================================
-
-
 class TestRunIngotWorkflowStepOrchestration:
-    """Tests for run_ingot_workflow step orchestration."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -714,7 +571,6 @@ class TestRunIngotWorkflowStepOrchestration:
         ticket,
         mock_config,
     ):
-        """Test calls step_1, step_2, step_3 in sequence."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -750,7 +606,6 @@ class TestRunIngotWorkflowStepOrchestration:
         ticket,
         mock_config,
     ):
-        """Test returns False when step_1 fails."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -785,7 +640,6 @@ class TestRunIngotWorkflowStepOrchestration:
         ticket,
         mock_config,
     ):
-        """Test returns False when step_2 fails."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -823,7 +677,6 @@ class TestRunIngotWorkflowStepOrchestration:
         ticket,
         mock_config,
     ):
-        """Test returns True when all steps succeed."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -838,14 +691,7 @@ class TestRunIngotWorkflowStepOrchestration:
         assert result is True
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Completion
-# =============================================================================
-
-
 class TestRunIngotWorkflowCompletion:
-    """Tests for run_ingot_workflow completion."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -870,7 +716,6 @@ class TestRunIngotWorkflowCompletion:
         ticket,
         mock_config,
     ):
-        """Test shows completion via _show_completion on success."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -885,14 +730,7 @@ class TestRunIngotWorkflowCompletion:
         mock_completion.assert_called_once()
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Step 3 Arguments (use_tui, verbose)
-# =============================================================================
-
-
 class TestRunIngotWorkflowStep3Arguments:
-    """Tests for run_ingot_workflow passing correct arguments to step_3_execute."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -917,7 +755,6 @@ class TestRunIngotWorkflowStep3Arguments:
         ticket,
         mock_config,
     ):
-        """Test that use_tui and verbose are passed correctly to step_3_execute."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -965,7 +802,6 @@ class TestRunIngotWorkflowStep3Arguments:
         ticket,
         mock_config,
     ):
-        """Test that use_tui=False and verbose=False are passed correctly."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -1013,7 +849,6 @@ class TestRunIngotWorkflowStep3Arguments:
         ticket,
         mock_config,
     ):
-        """Test that use_tui=None is passed for auto-detection mode."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -1037,14 +872,7 @@ class TestRunIngotWorkflowStep3Arguments:
         assert call_kwargs["verbose"] is False
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Resume Logic (Step Skipping)
-# =============================================================================
-
-
 class TestRunIngotWorkflowResumeLogic:
-    """Tests for run_ingot_workflow resume logic based on current_step."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -1071,7 +899,6 @@ class TestRunIngotWorkflowResumeLogic:
         ticket,
         mock_config,
     ):
-        """Test that step_1 is skipped when state.current_step = 2."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -1121,7 +948,6 @@ class TestRunIngotWorkflowResumeLogic:
         ticket,
         mock_config,
     ):
-        """Test that step_1 and step_2 are skipped when state.current_step = 3."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -1146,21 +972,13 @@ class TestRunIngotWorkflowResumeLogic:
         mock_step3.assert_called_once()
 
 
-# =============================================================================
-# Tests for _setup_branch() - Branch name with special characters
-# =============================================================================
-
-
 class TestSetupBranchSpecialCharacters:
-    """Tests for _setup_branch with special characters in ticket summary."""
-
     @patch("ingot.workflow.runner.prompt_confirm")
     @patch("ingot.workflow.runner.create_branch")
     @patch("ingot.workflow.runner.get_current_branch")
     def test_branch_name_with_spaces_and_special_chars(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state
     ):
-        """Test branch name generation with spaces and special characters in summary."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = True
         mock_create.return_value = True
@@ -1190,7 +1008,6 @@ class TestSetupBranchSpecialCharacters:
     def test_branch_name_with_multiple_special_chars(
         self, mock_get_branch, mock_create, mock_confirm, workflow_state
     ):
-        """Test branch name with multiple special characters."""
         mock_get_branch.return_value = "main"
         mock_confirm.return_value = True
         mock_create.return_value = True
@@ -1214,14 +1031,7 @@ class TestSetupBranchSpecialCharacters:
         assert workflow_state.branch_name == expected_branch
 
 
-# =============================================================================
-# Tests for run_ingot_workflow() - Step 4 (Documentation Updates)
-# =============================================================================
-
-
 class TestRunIngotWorkflowStep4:
-    """Tests for run_ingot_workflow Step 4 documentation updates."""
-
     @patch("ingot.workflow.runner._show_completion")
     @patch("ingot.workflow.runner.step_4_update_docs")
     @patch("ingot.workflow.runner.step_3_execute")
@@ -1248,7 +1058,6 @@ class TestRunIngotWorkflowStep4:
         ticket,
         mock_config,
     ):
-        """Test that step_4_update_docs is called when auto_update_docs=True."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -1294,7 +1103,6 @@ class TestRunIngotWorkflowStep4:
         ticket,
         mock_config,
     ):
-        """Test that step_4_update_docs is NOT called when auto_update_docs=False."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -1339,7 +1147,6 @@ class TestRunIngotWorkflowStep4:
         ticket,
         mock_config,
     ):
-        """Test that step_4 failure does not fail the overall workflow."""
         mock_get_branch.return_value = "main"
         mock_is_dirty.return_value = False
         mock_confirm.return_value = False
@@ -1363,16 +1170,8 @@ class TestRunIngotWorkflowStep4:
         mock_completion.assert_called_once()
 
 
-# =============================================================================
-# Tests for _detect_context_conflict()
-# =============================================================================
-
-
 class TestDetectContextConflict:
-    """Tests for _detect_context_conflict function."""
-
     def test_returns_false_when_user_context_empty(self, ticket, workflow_state):
-        """Returns (False, '') when user_context is empty."""
         mock_auggie = MagicMock()
 
         result = _detect_context_conflict(ticket, "", mock_auggie, workflow_state)
@@ -1381,7 +1180,6 @@ class TestDetectContextConflict:
         mock_auggie.run_with_callback.assert_not_called()
 
     def test_returns_false_when_user_context_whitespace_only(self, ticket, workflow_state):
-        """Returns (False, '') when user_context is only whitespace."""
         mock_auggie = MagicMock()
 
         result = _detect_context_conflict(ticket, "   \n\t  ", mock_auggie, workflow_state)
@@ -1390,7 +1188,6 @@ class TestDetectContextConflict:
         mock_auggie.run_with_callback.assert_not_called()
 
     def test_returns_false_when_no_ticket_info(self, workflow_state):
-        """Returns (False, '') when ticket has no title or description."""
         empty_ticket = GenericTicket(
             id="TEST-999",
             platform=Platform.JIRA,
@@ -1407,7 +1204,6 @@ class TestDetectContextConflict:
         mock_auggie.run_with_callback.assert_not_called()
 
     def test_calls_auggie_with_correct_prompt(self, ticket, workflow_state):
-        """Calls Auggie with prompt containing ticket info and user context."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,
@@ -1426,7 +1222,6 @@ class TestDetectContextConflict:
         assert "CONFLICT:" in prompt  # expected response format
 
     def test_calls_auggie_with_planner_agent(self, ticket, workflow_state):
-        """Calls Auggie with the planner subagent for conflict detection."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,
@@ -1439,7 +1234,6 @@ class TestDetectContextConflict:
         assert call_kwargs["subagent"] == workflow_state.subagent_names["planner"]
 
     def test_detects_conflict_when_llm_returns_yes(self, ticket, workflow_state):
-        """Returns (True, summary) when LLM detects conflict."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,
@@ -1452,7 +1246,6 @@ class TestDetectContextConflict:
         assert "add X but user says remove X" in result[1]
 
     def test_no_conflict_when_llm_returns_no(self, ticket, workflow_state):
-        """Returns (False, '') when LLM detects no conflict."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,
@@ -1466,7 +1259,6 @@ class TestDetectContextConflict:
         assert result == (False, "")
 
     def test_handles_auggie_failure_gracefully(self, ticket, workflow_state):
-        """Returns (False, '') when Auggie call fails."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (False, "")
 
@@ -1475,7 +1267,6 @@ class TestDetectContextConflict:
         assert result == (False, "")
 
     def test_handles_auggie_exception_gracefully(self, ticket, workflow_state):
-        """Returns (False, '') when Auggie raises exception."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.side_effect = Exception("API error")
 
@@ -1484,7 +1275,6 @@ class TestDetectContextConflict:
         assert result == (False, "")
 
     def test_uses_silent_callback(self, ticket, workflow_state):
-        """Uses a no-op callback to avoid printing to console."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (True, "CONFLICT: NO\nSUMMARY: None.")
 
@@ -1497,7 +1287,6 @@ class TestDetectContextConflict:
         callback("test line")  # Should not raise
 
     def test_uses_dont_save_session(self, ticket, workflow_state):
-        """Uses dont_save_session=True for lightweight call."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (True, "CONFLICT: NO\nSUMMARY: None.")
 
@@ -1507,7 +1296,6 @@ class TestDetectContextConflict:
         assert call_kwargs["dont_save_session"] is True
 
     def test_handles_conflict_yes_without_summary(self, ticket, workflow_state):
-        """Provides default summary when LLM returns YES but no summary."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (True, "CONFLICT: YES")
 
@@ -1517,7 +1305,6 @@ class TestDetectContextConflict:
         assert "conflict detected" in result[1].lower()
 
     def test_handles_lowercase_conflict_response(self, ticket, workflow_state):
-        """Handles lowercase 'conflict: yes' response."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,
@@ -1530,7 +1317,6 @@ class TestDetectContextConflict:
         assert "Scope mismatch" in result[1]
 
     def test_handles_multiline_summary(self, ticket, workflow_state):
-        """Handles multi-line summary in LLM response."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,
@@ -1545,7 +1331,6 @@ class TestDetectContextConflict:
         assert "remove it" in result[1]
 
     def test_handles_whitespace_in_conflict_response(self, ticket, workflow_state):
-        """Handles extra whitespace in CONFLICT: YES response."""
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,

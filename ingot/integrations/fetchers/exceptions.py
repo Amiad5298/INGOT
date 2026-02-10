@@ -58,7 +58,7 @@ class CredentialValidationError(TicketFetchError):
         self.missing_keys = missing_keys
         if message is None:
             message = (
-                f"{platform_name} handler missing required credentials: " f"{sorted(missing_keys)}"
+                f"{platform_name} handler missing required credentials: {sorted(missing_keys)}"
             )
         super().__init__(message)
 

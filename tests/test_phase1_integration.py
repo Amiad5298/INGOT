@@ -43,10 +43,7 @@ from ingot.workflow.constants import (
 
 
 class TestPhase1ImportChain:
-    """Verify all Phase 1 imports work without circular dependencies."""
-
     def test_errors_import_standalone(self):
-        """Error types can be imported without other Phase 1 modules."""
         from ingot.integrations.backends.errors import (
             BackendNotConfiguredError,
         )
@@ -54,31 +51,26 @@ class TestPhase1ImportChain:
         assert BackendNotConfiguredError is not None
 
     def test_base_imports_after_errors(self):
-        """BaseBackend can be imported after errors."""
         from ingot.integrations.backends.base import BaseBackend
 
         assert BaseBackend is not None
 
     def test_auggie_imports_after_base(self):
-        """AuggieBackend can be imported after base."""
         from ingot.integrations.backends.auggie import AuggieBackend
 
         assert AuggieBackend is not None
 
     def test_factory_imports_after_auggie(self):
-        """Factory can be imported after all backends."""
         from ingot.integrations.backends.factory import BackendFactory
 
         assert BackendFactory is not None
 
     def test_resolver_imports_after_factory(self):
-        """Resolver can be imported after factory."""
         from ingot.config.backend_resolver import resolve_backend_platform
 
         assert resolve_backend_platform is not None
 
     def test_package_init_exports_all(self):
-        """Package __init__.py exports all public symbols."""
         from ingot.integrations.backends import (
             AIBackend,
             AuggieBackend,
@@ -106,7 +98,6 @@ class TestPhase1ImportChain:
         )
 
     def test_auggie_backend_extends_base_backend(self):
-        """AuggieBackend is a subclass of BaseBackend."""
         from ingot.integrations.backends.auggie import AuggieBackend
         from ingot.integrations.backends.base import BaseBackend
 
@@ -114,10 +105,7 @@ class TestPhase1ImportChain:
 
 
 class TestFactoryResolverIntegration:
-    """Test that resolve_backend_platform() and BackendFactory.create() integrate correctly."""
-
     def test_resolver_output_accepted_by_factory(self):
-        """AgentPlatform from resolver is valid input to factory."""
         config = MagicMock()
         config.get.return_value = "auggie"
 
@@ -128,7 +116,6 @@ class TestFactoryResolverIntegration:
         assert isinstance(backend, AIBackend)
 
     def test_cli_override_flows_through_to_factory(self):
-        """CLI override affects final backend type."""
         config = MagicMock()
         config.get.return_value = ""  # No config
 
@@ -139,7 +126,6 @@ class TestFactoryResolverIntegration:
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_backend_not_configured_prevents_factory_call(self):
-        """BackendNotConfiguredError prevents reaching factory."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -157,7 +143,6 @@ class TestNoDefaultBackendPolicy:
     """
 
     def test_resolver_raises_when_no_backend(self):
-        """Resolver raises BackendNotConfiguredError, not default to AUGGIE."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -168,17 +153,10 @@ class TestNoDefaultBackendPolicy:
         assert "ingot init" in str(exc_info.value)
 
     def test_factory_defaults_to_auggie_for_empty_string(self):
-        """Factory defaults to AUGGIE for empty string (via parse_ai_backend).
-
-        This is expected behavior - the resolver prevents reaching the factory
-        without explicit configuration, so the factory's default is never used
-        in normal operation.
-        """
         backend = BackendFactory.create("")
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_error_message_is_actionable(self):
-        """BackendNotConfiguredError provides actionable guidance."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -192,10 +170,7 @@ class TestNoDefaultBackendPolicy:
 
 
 class TestErrorPropagation:
-    """Test that errors propagate correctly through Phase 1 components."""
-
     def test_backend_not_configured_from_resolver(self):
-        """BackendNotConfiguredError raised by resolver is catchable."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -210,7 +185,6 @@ class TestErrorPropagation:
             assert isinstance(e, IngotError)
 
     def test_backend_not_installed_from_factory(self, mocker):
-        """BackendNotInstalledError raised by factory is catchable."""
         # Mock the underlying check_auggie_installed function
         # IMPORTANT: Patch in the backends.auggie module where it's imported
         mocker.patch(
@@ -226,7 +200,6 @@ class TestErrorPropagation:
             assert "auggie" in str(e).lower() or "not installed" in str(e).lower()
 
     def test_backend_rate_limit_has_required_attributes(self):
-        """BackendRateLimitError has output and backend_name attributes."""
         error = BackendRateLimitError(
             "Rate limit hit",
             output="429 Too Many Requests",
@@ -236,7 +209,6 @@ class TestErrorPropagation:
         assert error.backend_name == "Auggie"
 
     def test_backend_timeout_has_timeout_seconds_attribute(self):
-        """BackendTimeoutError has timeout_seconds attribute."""
         error = BackendTimeoutError(
             "Execution timed out",
             timeout_seconds=300.0,
@@ -244,7 +216,6 @@ class TestErrorPropagation:
         assert error.timeout_seconds == 300.0
 
     def test_all_errors_extend_spec_error(self):
-        """All backend errors extend IngotError."""
         from ingot.utils.errors import IngotError
 
         # Note: BackendNotInstalledError takes a single message parameter
@@ -259,10 +230,7 @@ class TestErrorPropagation:
 
 
 class TestSubagentConstantsAccessibility:
-    """Verify subagent constants are accessible from ingot.workflow.constants."""
-
     def test_all_subagent_constants_importable(self):
-        """All 6 subagent constants are importable."""
         assert INGOT_AGENT_PLANNER is not None
         assert INGOT_AGENT_TASKLIST is not None
         assert INGOT_AGENT_TASKLIST_REFINER is not None
@@ -271,34 +239,23 @@ class TestSubagentConstantsAccessibility:
         assert INGOT_AGENT_DOC_UPDATER is not None
 
     def test_all_timeout_constants_importable(self):
-        """All 3 timeout constants are importable."""
         assert DEFAULT_EXECUTION_TIMEOUT is not None
         assert FIRST_RUN_TIMEOUT is not None
         assert ONBOARDING_SMOKE_TEST_TIMEOUT is not None
 
     def test_subagent_constants_are_strings(self):
-        """Subagent constants are strings (agent names)."""
         assert isinstance(INGOT_AGENT_PLANNER, str)
         assert isinstance(INGOT_AGENT_TASKLIST, str)
         assert isinstance(INGOT_AGENT_IMPLEMENTER, str)
 
     def test_timeout_constants_are_numeric(self):
-        """Timeout constants are numeric (seconds)."""
         assert isinstance(DEFAULT_EXECUTION_TIMEOUT, int | float)
         assert isinstance(FIRST_RUN_TIMEOUT, int | float)
         assert isinstance(ONBOARDING_SMOKE_TEST_TIMEOUT, int | float)
 
 
 class TestBaselineRegressionChecks:
-    """Verify Phase 1 doesn't break baseline behaviors."""
-
     def test_auggie_backend_run_with_callback_signature_matches_baseline(self):
-        """AuggieBackend.run_with_callback() has same signature as AuggieClient.
-
-        The Backend layer adds timeout_seconds parameter (per spec Final Decision #18:
-        "Timeout enforcement is at the Backend layer, not the Client layer").
-        This is an intentional, documented addition.
-        """
         import inspect
 
         from ingot.integrations.auggie import AuggieClient
@@ -353,7 +310,6 @@ class TestBaselineRegressionChecks:
         ), "Backend should have 'timeout_seconds' parameter per spec Final Decision #18"
 
     def test_auggie_backend_run_print_with_output_return_type(self):
-        """run_print_with_output returns (bool, str) tuple."""
         from ingot.integrations.backends.auggie import AuggieBackend
 
         backend = AuggieBackend()
@@ -370,7 +326,6 @@ class TestBaselineRegressionChecks:
         assert args[1] is str, "Second element should be str"
 
     def test_auggie_backend_rate_limit_detection_matches_baseline(self):
-        """Rate limit detection uses same patterns as baseline AuggieClient."""
         # Import the actual rate limit detection function used by AuggieBackend
         from ingot.integrations.auggie import looks_like_rate_limit
 
@@ -400,7 +355,6 @@ class TestBaselineRegressionChecks:
             ), f"False positive rate limit detection: '{output}' returned {result}"
 
     def test_subagent_names_match_baseline(self):
-        """Subagent constant values match baseline expectations."""
         # These values should not change during refactoring
         assert "planner" in INGOT_AGENT_PLANNER.lower()
         assert "tasklist" in INGOT_AGENT_TASKLIST.lower()
@@ -419,14 +373,7 @@ integration_tests_enabled = os.environ.get("INGOT_INTEGRATION_TESTS") == "1"
     reason="Integration tests require INGOT_INTEGRATION_TESTS=1",
 )
 class TestPhase1IntegrationWithRealCLI:
-    """Integration tests with real CLI (gated)."""
-
     def test_auggie_check_installed_returns_correct_types(self):
-        """check_installed() returns (bool, str) tuple with correct semantics.
-
-        Note: check_auggie_installed() returns (True, "") on success - the message
-        is empty when installed. This is the actual contract per auggie.py:296-297.
-        """
         from ingot.integrations.backends.auggie import AuggieBackend
 
         backend = AuggieBackend()
@@ -445,7 +392,6 @@ class TestPhase1IntegrationWithRealCLI:
             assert message, "Message should be non-empty on failure"
 
     def test_factory_create_with_verify_installed(self):
-        """Factory.create(verify_installed=True) checks CLI."""
         try:
             backend = BackendFactory.create(AgentPlatform.AUGGIE, verify_installed=True)
             # CLI is installed
@@ -455,7 +401,6 @@ class TestPhase1IntegrationWithRealCLI:
             assert "auggie" in str(e).lower()
 
     def test_full_resolution_and_creation_flow(self):
-        """Test complete flow: resolve → create → use backend."""
         config = MagicMock()
         config.get.return_value = "auggie"
 
@@ -472,14 +417,6 @@ class TestPhase1IntegrationWithRealCLI:
         assert callable(backend.check_installed)
 
     def test_run_print_quiet_executes_successfully(self):
-        """run_print_quiet() executes a simple prompt successfully.
-
-        This test satisfies parent spec requirement (line 2054):
-        'Test run_print_quiet() executes successfully'
-
-        Note: run_print_quiet() returns str (NOT tuple[bool, str]).
-        See AIBackend protocol in base.py:170-192.
-        """
         from ingot.integrations.backends.auggie import AuggieBackend
 
         backend = AuggieBackend()

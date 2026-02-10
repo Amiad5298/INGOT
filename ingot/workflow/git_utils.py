@@ -162,8 +162,7 @@ def check_dirty_working_tree(
             )
         else:
             print_warning(
-                "Working tree has uncommitted changes. "
-                "Diffs may include unrelated modifications."
+                "Working tree has uncommitted changes. Diffs may include unrelated modifications."
             )
             return False
 
@@ -365,9 +364,7 @@ def _generate_untracked_file_diff(path: str, max_file_size: int) -> str:
         # Check if binary
         if _is_binary_file(path):
             return (
-                f"diff --git a/{path} b/{path}\n"
-                f"new file mode 100644\n"
-                f"[BINARY FILE ADDED: {path}]\n"
+                f"diff --git a/{path} b/{path}\nnew file mode 100644\n[BINARY FILE ADDED: {path}]\n"
             )
 
         # Read file content

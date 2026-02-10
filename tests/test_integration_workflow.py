@@ -66,8 +66,6 @@ def mock_auggie_client():
 
 
 class TestFullWorkflowWithTaskMemory:
-    """Integration tests for full workflow with task memory."""
-
     @patch("ingot.workflow.task_memory._get_modified_files")
     @patch("ingot.workflow.task_memory._identify_patterns_in_changes")
     def test_task_memory_captured_after_successful_task(
@@ -77,7 +75,6 @@ class TestFullWorkflowWithTaskMemory:
         mock_workflow_state,
         mock_auggie_client,
     ):
-        """Task memory is captured after successful task execution."""
         # Setup mocks
         mock_get_files.return_value = ["src/user.py"]
         mock_identify.return_value = ["Python implementation"]
@@ -109,7 +106,6 @@ class TestFullWorkflowWithTaskMemory:
         mock_is_dirty,
         mock_workflow_state,
     ):
-        """Pattern context from previous tasks is used in subsequent tasks."""
         # Setup: Add a task memory to state
         mock_workflow_state.task_memories = [
             TaskMemory(
@@ -135,8 +131,6 @@ class TestFullWorkflowWithTaskMemory:
 
 
 class TestRetryWithErrorAnalysis:
-    """Integration tests for retry with error analysis."""
-
     @patch("ingot.workflow.step3_execute.is_dirty")
     def test_error_analysis_provides_structured_feedback(
         self,
@@ -144,7 +138,6 @@ class TestRetryWithErrorAnalysis:
         mock_workflow_state,
         mock_auggie_client,
     ):
-        """Error analysis provides structured feedback for retries."""
         mock_is_dirty.return_value = False
 
         # Simulate a Python error
@@ -169,7 +162,6 @@ NameError: name 'User' is not defined
         assert "not defined" in analysis.root_cause.lower()
 
     def test_error_analysis_can_be_formatted_for_prompt(self):
-        """Error analysis can be formatted for prompts."""
         # Error output to analyze
         error_output = """TypeError: expected str, got int"""
 
@@ -186,8 +178,6 @@ NameError: name 'User' is not defined
 
 
 class TestMultipleTasksWithMemory:
-    """Integration tests for multiple tasks with memory accumulation."""
-
     @patch("ingot.workflow.task_memory._get_modified_files")
     @patch("ingot.workflow.task_memory._identify_patterns_in_changes")
     def test_memory_accumulates_across_tasks(
@@ -196,7 +186,6 @@ class TestMultipleTasksWithMemory:
         mock_get_files,
         mock_workflow_state,
     ):
-        """Memory accumulates across multiple tasks."""
         # Task 1
         mock_get_files.return_value = ["src/user.py"]
         mock_identify.return_value = ["Python implementation", "Dataclass pattern"]
@@ -229,8 +218,6 @@ class TestMultipleTasksWithMemory:
 
 
 class TestUserAdditionalContext:
-    """Tests for user additional context feature."""
-
     @pytest.fixture
     def state_with_ticket(self):
         """Create a workflow state with ticket for testing."""
@@ -247,7 +234,6 @@ class TestUserAdditionalContext:
     @patch("ingot.workflow.runner.prompt_confirm")
     @patch("ingot.workflow.runner.prompt_input")
     def test_user_declines_additional_context(self, mock_input, mock_confirm, state_with_ticket):
-        """User declines to add context - no prompt_input called."""
         mock_confirm.return_value = False
 
         # Simulate the logic from runner.py
@@ -268,7 +254,6 @@ class TestUserAdditionalContext:
     @patch("ingot.workflow.runner.prompt_confirm")
     @patch("ingot.workflow.runner.prompt_input")
     def test_user_adds_additional_context(self, mock_input, mock_confirm, state_with_ticket):
-        """User provides additional context - stored in state."""
         mock_confirm.return_value = True
         mock_input.return_value = "Additional details about the feature"
 
@@ -288,7 +273,6 @@ class TestUserAdditionalContext:
     @patch("ingot.workflow.runner.prompt_confirm")
     @patch("ingot.workflow.runner.prompt_input")
     def test_empty_context_handled(self, mock_input, mock_confirm, state_with_ticket):
-        """Empty context input is handled gracefully."""
         mock_confirm.return_value = True
         mock_input.return_value = "   "  # whitespace only
 
@@ -307,8 +291,6 @@ class TestUserAdditionalContext:
 
 
 class TestBuildMinimalPrompt:
-    """Tests for _build_minimal_prompt function."""
-
     @pytest.fixture
     def state_with_ticket(self):
         """Create a workflow state with ticket for testing."""
@@ -323,7 +305,6 @@ class TestBuildMinimalPrompt:
         return WorkflowState(ticket=ticket)
 
     def test_prompt_without_user_context(self, state_with_ticket, tmp_path):
-        """Prompt is built correctly without user context."""
         plan_path = tmp_path / "specs" / "TEST-789-plan.md"
         prompt = _build_minimal_prompt(state_with_ticket, plan_path)
 
@@ -336,7 +317,6 @@ class TestBuildMinimalPrompt:
         assert str(plan_path) in prompt
 
     def test_prompt_with_user_context(self, state_with_ticket, tmp_path):
-        """Prompt includes user context when provided."""
         plan_path = tmp_path / "specs" / "TEST-789-plan.md"
         state_with_ticket.user_context = "Focus on performance optimization"
         prompt = _build_minimal_prompt(state_with_ticket, plan_path)
@@ -350,8 +330,6 @@ class TestBuildMinimalPrompt:
 
 
 class TestWorkflowWithFailFast:
-    """Tests for workflow with fail_fast enabled."""
-
     @pytest.fixture
     def state_with_fail_fast(self, tmp_path):
         """Create a workflow state with fail_fast enabled."""
@@ -380,13 +358,11 @@ class TestWorkflowWithFailFast:
         return state
 
     def test_fail_fast_stops_on_first_failure(self, state_with_fail_fast):
-        """With fail_fast enabled, workflow stops on first task failure."""
         assert state_with_fail_fast.fail_fast is True
         # The fail_fast behavior is tested at the runner level
         # This test verifies the state is correctly configured
 
     def test_fail_fast_default_is_false(self):
-        """fail_fast defaults to False."""
         ticket = GenericTicket(
             id="TEST-DEFAULT",
             platform=Platform.JIRA,
@@ -400,8 +376,6 @@ class TestWorkflowWithFailFast:
 
 
 class TestWorkflowWithSquashAtEnd:
-    """Tests for workflow with squash_at_end option."""
-
     @pytest.fixture
     def state_with_squash(self, tmp_path):
         """Create a workflow state with squash_at_end enabled."""
@@ -418,7 +392,6 @@ class TestWorkflowWithSquashAtEnd:
         return state
 
     def test_squash_at_end_defaults_to_true(self):
-        """squash_at_end defaults to True."""
         ticket = GenericTicket(
             id="TEST",
             platform=Platform.JIRA,
@@ -431,14 +404,11 @@ class TestWorkflowWithSquashAtEnd:
         assert state.squash_at_end is True
 
     def test_squash_at_end_can_be_disabled(self, state_with_squash):
-        """squash_at_end can be disabled."""
         state_with_squash.squash_at_end = False
         assert state_with_squash.squash_at_end is False
 
 
 class TestAuggieClientFailures:
-    """Tests for handling Auggie client failures."""
-
     @patch("ingot.workflow.task_memory._get_modified_files")
     @patch("ingot.workflow.task_memory._identify_patterns_in_changes")
     def test_handles_auggie_failure_gracefully(
@@ -448,7 +418,6 @@ class TestAuggieClientFailures:
         mock_workflow_state,
         mock_auggie_client,
     ):
-        """Handles Auggie client failure gracefully."""
         # Setup
         mock_get_files.return_value = []
         mock_identify.return_value = []
@@ -467,19 +436,13 @@ class TestAuggieClientFailures:
 
 
 class TestGitCommandFailures:
-    """Tests for handling git command failures."""
-
     def test_state_tracks_base_commit(self, mock_workflow_state):
-        """State tracks base commit correctly."""
         mock_workflow_state.base_commit = "abc123"
         assert mock_workflow_state.base_commit == "abc123"
 
 
 class TestFileSystemErrors:
-    """Tests for handling file system errors."""
-
     def test_handles_missing_plan_file(self, tmp_path):
-        """Handles missing plan file gracefully."""
         ticket = GenericTicket(
             id="TEST-MISSING",
             platform=Platform.JIRA,
@@ -495,7 +458,6 @@ class TestFileSystemErrors:
         assert not plan_path.exists()
 
     def test_handles_missing_tasklist_file(self, tmp_path):
-        """Handles missing tasklist file gracefully."""
         ticket = GenericTicket(
             id="TEST-MISSING",
             platform=Platform.JIRA,
@@ -511,8 +473,6 @@ class TestFileSystemErrors:
 
 
 class TestWorkflowResumption:
-    """Tests for workflow resumption from different steps."""
-
     @pytest.fixture
     def resumable_state(self, tmp_path):
         """Create a state that can be resumed."""
@@ -540,7 +500,6 @@ class TestWorkflowResumption:
         return state
 
     def test_resume_from_step_2(self, resumable_state):
-        """Can resume workflow from step 2."""
         resumable_state.current_step = 2
 
         # Verify state is configured for step 2
@@ -548,7 +507,6 @@ class TestWorkflowResumption:
         assert resumable_state.plan_file.exists()
 
     def test_resume_from_step_3(self, resumable_state):
-        """Can resume workflow from step 3."""
         resumable_state.current_step = 3
         resumable_state.completed_tasks = ["Completed task"]
 
@@ -558,14 +516,12 @@ class TestWorkflowResumption:
         assert len(resumable_state.completed_tasks) == 1
 
     def test_preserves_completed_tasks_on_resume(self, resumable_state):
-        """Preserves completed tasks when resuming."""
         resumable_state.completed_tasks = ["Task A", "Task B"]
         resumable_state.current_step = 3
 
         assert resumable_state.completed_tasks == ["Task A", "Task B"]
 
     def test_preserves_checkpoint_commits_on_resume(self, resumable_state):
-        """Preserves checkpoint commits when resuming."""
         resumable_state.checkpoint_commits = ["abc123", "def456"]
         resumable_state.current_step = 3
 
@@ -573,8 +529,6 @@ class TestWorkflowResumption:
 
 
 class TestEndToEndWorkflowScenarios:
-    """End-to-end workflow scenario tests."""
-
     @pytest.fixture
     def complete_state(self, tmp_path):
         """Create a complete workflow state for testing."""
@@ -606,7 +560,6 @@ class TestEndToEndWorkflowScenarios:
         return state
 
     def test_complete_workflow_state_configuration(self, complete_state):
-        """Complete workflow state has all necessary configuration."""
         assert complete_state.ticket.id == "TEST-E2E"
         assert complete_state.branch_name == "feature/TEST-E2E-e2e-test"
         assert complete_state.base_commit == "abc123"
@@ -616,7 +569,6 @@ class TestEndToEndWorkflowScenarios:
         assert complete_state.tasklist_file.exists()
 
     def test_workflow_progresses_through_steps(self, complete_state):
-        """Workflow state progresses through steps 1-3."""
         # Step 1
         complete_state.current_step = 1
         assert complete_state.current_step == 1
@@ -630,7 +582,6 @@ class TestEndToEndWorkflowScenarios:
         assert complete_state.current_step == 3
 
     def test_workflow_tracks_task_completion(self, complete_state):
-        """Workflow tracks task completion correctly."""
         complete_state.mark_task_complete("Task 1")
         complete_state.mark_task_complete("Task 2")
 
@@ -639,7 +590,6 @@ class TestEndToEndWorkflowScenarios:
         assert len(complete_state.completed_tasks) == 2
 
     def test_workflow_tracks_checkpoints(self, complete_state):
-        """Workflow tracks checkpoint commits correctly."""
         complete_state.checkpoint_commits.append("commit1")
         complete_state.checkpoint_commits.append("commit2")
 
@@ -655,7 +605,6 @@ class TestEndToEndWorkflowScenarios:
         mock_get_files,
         complete_state,
     ):
-        """Workflow accumulates task memories across tasks."""
         from ingot.workflow.task_memory import capture_task_memory
         from ingot.workflow.tasks import Task
 

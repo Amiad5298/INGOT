@@ -90,7 +90,7 @@ class AzureDevOpsHandler(PlatformHandler):
         # Architecture: api-version moved to params dict for cleaner URL construction
         # and easier version management
         endpoint = (
-            f"https://dev.azure.com/{organization}/{project}/" f"_apis/wit/workitems/{work_item_id}"
+            f"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{work_item_id}"
         )
         headers = {"Accept": "application/json"}
         params = {"api-version": self.API_VERSION}

@@ -28,11 +28,7 @@ from ingot.workflow.state import WorkflowState
 
 
 def _get_log_base_dir() -> Path:
-    """Get the base directory for run logs.
-
-    Returns:
-        Path to the log base directory.
-    """
+    """Get the base directory for run logs."""
     env_dir = os.environ.get("INGOT_LOG_DIR")
     if env_dir:
         return Path(env_dir)
@@ -42,12 +38,8 @@ def _get_log_base_dir() -> Path:
 def _create_plan_log_dir(safe_ticket_id: str) -> Path:
     """Create a timestamped log directory for plan generation.
 
-    Args:
-        safe_ticket_id: Filesystem-safe ticket identifier (use ticket.safe_filename_stem).
-            MUST be sanitized - raw ticket IDs may contain unsafe chars like '/'.
-
-    Returns:
-        Path to the created log directory.
+    safe_ticket_id MUST be sanitized (use ticket.safe_filename_stem) -
+    raw ticket IDs may contain unsafe chars like '/'.
     """
     base_dir = _get_log_base_dir()
     plan_dir = base_dir / safe_ticket_id / "plan_generation"
@@ -65,16 +57,7 @@ def _generate_plan_with_tui(
     plan_path: Path,
     backend: AIBackend,
 ) -> bool:
-    """Generate plan with TUI progress display using subagent.
-
-    Args:
-        state: Current workflow state.
-        plan_path: Path where the plan will be saved.
-        backend: AI backend instance for agent interactions.
-
-    Returns:
-        True if plan generation succeeded.
-    """
+    """Generate plan with TUI progress display using subagent."""
     from ingot.ui.tui import TaskRunnerUI
 
     # Create log directory and log path (use safe_filename_stem for paths)
@@ -112,18 +95,11 @@ def _build_minimal_prompt(state: WorkflowState, plan_path: Path) -> str:
     """Build minimal prompt for plan generation.
 
     The subagent has detailed instructions - we just pass context.
-
-    Args:
-        state: Current workflow state.
-        plan_path: Path where plan should be saved.
-
-    Returns:
-        Minimal prompt string with ticket context.
     """
     prompt = f"""Create implementation plan for: {state.ticket.id}
 
-Ticket: {state.ticket.title or state.ticket.branch_summary or 'Not available'}
-Description: {state.ticket.description or 'Not available'}"""
+Ticket: {state.ticket.title or state.ticket.branch_summary or "Not available"}
+Description: {state.ticket.description or "Not available"}"""
 
     # Add user context if provided
     if state.user_context:
@@ -151,13 +127,6 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
 
     Note: Ticket information is already fetched in the workflow runner
     before this step is called.
-
-    Args:
-        state: Current workflow state
-        backend: AI backend instance for agent interactions
-
-    Returns:
-        True if plan was created successfully
     """
     print_header("Step 1: Create Implementation Plan")
 
@@ -217,14 +186,6 @@ def _run_clarification(state: WorkflowState, backend: AIBackend, plan_path: Path
 
     This happens AFTER the plan is created. The AI reviews the plan and asks
     clarifying questions, then updates the plan with a Q&A section.
-
-    Args:
-        state: Current workflow state
-        backend: AI backend instance for running clarification
-        plan_path: Path to the created plan file
-
-    Returns:
-        True to continue, False to abort
     """
     print_header("Step 1.5: Clarification Phase (Optional)")
     print_info("The AI can review the plan and ask clarification questions about:")
@@ -309,20 +270,15 @@ If the plan is complete and clear, simply respond with 'No clarifications needed
 
 
 def _save_plan_from_output(plan_path: Path, state: WorkflowState) -> None:
-    """Save plan from Auggie output if file wasn't created.
-
-    Args:
-        plan_path: Path to save plan
-        state: Current workflow state
-    """
+    """Save plan from Auggie output if file wasn't created."""
     # Create a basic plan template if Auggie didn't create the file
     template = f"""# Implementation Plan: {state.ticket.id}
 
 ## Summary
-{state.ticket.title or 'Implementation task'}
+{state.ticket.title or "Implementation task"}
 
 ## Description
-{state.ticket.description or 'See Jira ticket for details.'}
+{state.ticket.description or "See Jira ticket for details."}
 
 ## Implementation Steps
 1. Review requirements
@@ -343,11 +299,7 @@ Plan generated automatically. Please review and update as needed.
 
 
 def _display_plan_summary(plan_path: Path) -> None:
-    """Display summary of the plan.
-
-    Args:
-        plan_path: Path to plan file
-    """
+    """Display summary of the plan."""
     content = plan_path.read_text()
     lines = content.splitlines()
 

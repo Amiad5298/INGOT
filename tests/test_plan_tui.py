@@ -19,10 +19,7 @@ from ingot.ui.tui import TaskRunnerUI
 
 
 class TestTaskRunnerUISingleOperationMode:
-    """Tests for TaskRunnerUI in single-operation mode (replaces StreamingOperationUI)."""
-
     def test_creates_with_defaults(self):
-        """TaskRunnerUI can be created with default values in single-operation mode."""
         ui = TaskRunnerUI(single_operation_mode=True)
         assert ui.status_message == "Processing..."
         assert ui.ticket_id == ""
@@ -30,7 +27,6 @@ class TestTaskRunnerUISingleOperationMode:
         assert ui.single_operation_mode is True
 
     def test_creates_with_custom_values(self):
-        """TaskRunnerUI can be created with custom values in single-operation mode."""
         ui = TaskRunnerUI(
             status_message="Generating plan...",
             ticket_id="TEST-123",
@@ -42,7 +38,6 @@ class TestTaskRunnerUISingleOperationMode:
         assert ui.verbose_mode is True
 
     def test_internal_state_initialized(self):
-        """Internal state is properly initialized."""
         ui = TaskRunnerUI(single_operation_mode=True)
         assert ui._log_buffer is None
         assert ui._log_path is None
@@ -53,17 +48,13 @@ class TestTaskRunnerUISingleOperationMode:
 
 
 class TestTaskRunnerUISetLogPath:
-    """Tests for set_log_path method in single-operation mode."""
-
     def test_sets_log_path(self, tmp_path: Path):
-        """set_log_path sets the log path."""
         ui = TaskRunnerUI(single_operation_mode=True)
         log_path = tmp_path / "test.log"
         ui.set_log_path(log_path)
         assert ui._log_path == log_path
 
     def test_creates_log_buffer(self, tmp_path: Path):
-        """set_log_path creates a TaskLogBuffer."""
         ui = TaskRunnerUI(single_operation_mode=True)
         log_path = tmp_path / "test.log"
         ui.set_log_path(log_path)
@@ -72,10 +63,7 @@ class TestTaskRunnerUISetLogPath:
 
 
 class TestTaskRunnerUIHandleOutputLine:
-    """Tests for handle_output_line method in single-operation mode."""
-
     def test_writes_to_log_buffer(self, tmp_path: Path):
-        """handle_output_line writes lines to log buffer."""
         ui = TaskRunnerUI(single_operation_mode=True)
         ui.set_log_path(tmp_path / "test.log")
 
@@ -86,7 +74,6 @@ class TestTaskRunnerUIHandleOutputLine:
         ui._log_buffer.close()
 
     def test_updates_liveness_indicator(self, tmp_path: Path):
-        """handle_output_line updates the latest output line."""
         ui = TaskRunnerUI(single_operation_mode=True)
         ui.set_log_path(tmp_path / "test.log")
 
@@ -99,7 +86,6 @@ class TestTaskRunnerUIHandleOutputLine:
         ui._log_buffer.close()
 
     def test_ignores_empty_lines_for_liveness(self, tmp_path: Path):
-        """handle_output_line ignores empty lines for liveness indicator."""
         ui = TaskRunnerUI(single_operation_mode=True)
         ui.set_log_path(tmp_path / "test.log")
 
@@ -112,7 +98,6 @@ class TestTaskRunnerUIHandleOutputLine:
         ui._log_buffer.close()
 
     def test_handles_no_log_buffer(self):
-        """handle_output_line works without log buffer."""
         ui = TaskRunnerUI(single_operation_mode=True)
         # Should not raise
         ui.handle_output_line("Test line")
@@ -120,16 +105,12 @@ class TestTaskRunnerUIHandleOutputLine:
 
 
 class TestTaskRunnerUITruncateLine:
-    """Tests for _truncate_line method in single-operation mode."""
-
     def test_returns_short_lines_unchanged(self):
-        """Short lines are returned unchanged."""
         ui = TaskRunnerUI(single_operation_mode=True)
         short = "Hello world"
         assert ui._truncate_line(short) == short
 
     def test_truncates_long_lines(self):
-        """Long lines are truncated with ellipsis."""
         ui = TaskRunnerUI(single_operation_mode=True)
         long_line = "A" * 100
         result = ui._truncate_line(long_line, max_width=50)
@@ -137,7 +118,6 @@ class TestTaskRunnerUITruncateLine:
         assert result.endswith("…")
 
     def test_exact_width_unchanged(self):
-        """Lines at exact max width are unchanged."""
         ui = TaskRunnerUI(single_operation_mode=True)
         exact = "A" * 70
         result = ui._truncate_line(exact, max_width=70)
@@ -145,17 +125,13 @@ class TestTaskRunnerUITruncateLine:
 
 
 class TestTaskRunnerUIFormatElapsedTime:
-    """Tests for _format_elapsed_time method in single-operation mode."""
-
     def test_formats_seconds_only(self):
-        """Formats short times as seconds only."""
         ui = TaskRunnerUI(single_operation_mode=True)
         ui._start_time = time.time() - 45
         result = ui._format_elapsed_time()
         assert result == "45s"
 
     def test_formats_minutes_and_seconds(self):
-        """Formats longer times with minutes."""
         ui = TaskRunnerUI(single_operation_mode=True)
         ui._start_time = time.time() - 125  # 2m 5s
         result = ui._format_elapsed_time()
@@ -163,10 +139,7 @@ class TestTaskRunnerUIFormatElapsedTime:
 
 
 class TestTaskRunnerUIVerboseMode:
-    """Tests for verbose mode toggle in single-operation mode."""
-
     def test_toggle_verbose_mode(self):
-        """_toggle_verbose_mode toggles verbose_mode flag."""
         ui = TaskRunnerUI(single_operation_mode=True)
         assert ui.verbose_mode is False
 
@@ -178,10 +151,7 @@ class TestTaskRunnerUIVerboseMode:
 
 
 class TestTaskRunnerUIQuitRequest:
-    """Tests for quit/cancel request handling in single-operation mode."""
-
     def test_handle_quit_sets_flag(self):
-        """_handle_quit sets quit_requested flag."""
         ui = TaskRunnerUI(single_operation_mode=True)
         assert ui.check_quit_requested() is False
 
@@ -190,14 +160,11 @@ class TestTaskRunnerUIQuitRequest:
 
 
 class TestTaskRunnerUIContextManager:
-    """Tests for context manager protocol in single-operation mode."""
-
     @patch("ingot.ui.tui.Live")
     @patch.object(TaskRunnerUI, "_input_loop")
     def test_context_manager_starts_and_stops(
         self, mock_input_loop, mock_live_class, tmp_path: Path
     ):
-        """Context manager starts and stops TUI."""
         mock_live = MagicMock()
         mock_live_class.return_value = mock_live
 
@@ -216,7 +183,6 @@ class TestTaskRunnerUIContextManager:
     def test_context_manager_closes_log_buffer(
         self, mock_input_loop, mock_live_class, tmp_path: Path
     ):
-        """Context manager closes log buffer on exit."""
         mock_live_class.return_value = MagicMock()
 
         ui = TaskRunnerUI(single_operation_mode=True)
@@ -239,7 +205,6 @@ class TestTaskRunnerUIContextManager:
     @patch("ingot.ui.tui.Live")
     @patch.object(TaskRunnerUI, "_input_loop")
     def test_context_manager_returns_self(self, mock_input_loop, mock_live_class):
-        """Context manager returns self on entry."""
         mock_live_class.return_value = MagicMock()
 
         ui = TaskRunnerUI(single_operation_mode=True)
@@ -249,10 +214,7 @@ class TestTaskRunnerUIContextManager:
 
 
 class TestTaskRunnerUIRendering:
-    """Tests for rendering methods in single-operation mode."""
-
     def test_render_layout_returns_group(self, tmp_path: Path):
-        """_render_layout returns a Rich Group."""
         from rich.console import Group
 
         ui = TaskRunnerUI(status_message="Test", ticket_id="TEST-1", single_operation_mode=True)
@@ -263,7 +225,6 @@ class TestTaskRunnerUIRendering:
         assert isinstance(result, Group)
 
     def test_render_status_bar_shows_shortcuts(self):
-        """_render_single_op_status_bar shows keyboard shortcuts."""
         from rich.text import Text
 
         ui = TaskRunnerUI(single_operation_mode=True)
@@ -276,7 +237,6 @@ class TestTaskRunnerUIRendering:
         assert "[q]" in plain_text
 
     def test_render_normal_panel_shows_status(self, tmp_path: Path):
-        """_render_single_op_normal_panel shows status message."""
         from rich.panel import Panel
         from rich.spinner import Spinner
 
@@ -290,7 +250,6 @@ class TestTaskRunnerUIRendering:
         assert isinstance(result, Panel)
 
     def test_render_verbose_panel_shows_log_output(self, tmp_path: Path):
-        """_render_single_op_verbose_panel shows log output."""
         from rich.panel import Panel
 
         ui = TaskRunnerUI(status_message="Generating plan...", single_operation_mode=True)
@@ -306,10 +265,7 @@ class TestTaskRunnerUIRendering:
 
 
 class TestTaskRunnerUIPrintSummary:
-    """Tests for print_summary method in single-operation mode."""
-
     def test_print_summary_success(self, tmp_path: Path, capsys):
-        """print_summary shows success message."""
         ui = TaskRunnerUI(single_operation_mode=True)
         ui._start_time = time.time() - 30
         ui.set_log_path(tmp_path / "test.log")
@@ -320,7 +276,6 @@ class TestTaskRunnerUIPrintSummary:
         # We're mainly testing that it doesn't raise
 
     def test_print_summary_failure(self, tmp_path: Path, capsys):
-        """print_summary shows failure message."""
         ui = TaskRunnerUI(single_operation_mode=True)
         ui._start_time = time.time() - 60
         ui.set_log_path(tmp_path / "test.log")
@@ -332,10 +287,7 @@ class TestTaskRunnerUIPrintSummary:
 
 
 class TestTaskRunnerUIKeyboardHandling:
-    """Tests for keyboard handling in single-operation mode."""
-
     def test_handle_key_v_toggles_verbose(self):
-        """Pressing 'v' toggles verbose mode."""
         from ingot.ui.keyboard import Key
 
         ui = TaskRunnerUI(single_operation_mode=True)
@@ -345,7 +297,6 @@ class TestTaskRunnerUIKeyboardHandling:
         assert ui.verbose_mode is True
 
     def test_handle_key_q_sets_quit(self):
-        """Pressing 'q' sets quit_requested."""
         from ingot.ui.keyboard import Key
 
         ui = TaskRunnerUI(single_operation_mode=True)
@@ -356,29 +307,17 @@ class TestTaskRunnerUIKeyboardHandling:
 
 
 class TestConstants:
-    """Tests for module constants."""
-
     def test_refresh_rate_is_positive(self):
-        """REFRESH_RATE is a positive number."""
         assert REFRESH_RATE > 0
 
     def test_default_verbose_lines_is_positive(self):
-        """DEFAULT_VERBOSE_LINES is a positive number."""
         assert DEFAULT_VERBOSE_LINES > 0
 
     def test_max_liveness_width_is_positive(self):
-        """MAX_LIVENESS_WIDTH is a positive number."""
         assert MAX_LIVENESS_WIDTH > 0
 
 
-# =============================================================================
-# Integration Tests for Step 1 TUI Mode
-# =============================================================================
-
-
 class TestStep1TUIIntegration:
-    """Integration tests for step 1 with TUI mode."""
-
     @pytest.fixture
     def workflow_state(self, tmp_path: Path):
         """Create a workflow state for testing."""
@@ -411,7 +350,6 @@ class TestStep1TUIIntegration:
         tmp_path: Path,
         monkeypatch,
     ):
-        """Step 1 uses TUI when _should_use_tui returns True."""
         from ingot.workflow.step1_plan import _generate_plan_with_tui
 
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
@@ -443,7 +381,6 @@ class TestStep1TUIIntegration:
         tmp_path: Path,
         monkeypatch,
     ):
-        """TUI returns False when user requests quit."""
         from ingot.workflow.step1_plan import _generate_plan_with_tui
 
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
@@ -465,7 +402,6 @@ class TestStep1TUIIntegration:
         assert result is False
 
     def test_creates_log_directory(self, tmp_path: Path, monkeypatch):
-        """Log directory is created for plan generation."""
         from ingot.workflow.step1_plan import _create_plan_log_dir
 
         # Set log base dir to tmp_path
@@ -480,7 +416,6 @@ class TestStep1TUIIntegration:
         assert "plan_generation" in str(log_dir)
 
     def test_get_log_base_dir_uses_env_var(self, tmp_path: Path, monkeypatch):
-        """Log base dir uses INGOT_LOG_DIR env var."""
         from ingot.workflow.step1_plan import _get_log_base_dir
 
         custom_dir = tmp_path / "custom_logs"
@@ -490,7 +425,6 @@ class TestStep1TUIIntegration:
         assert result == custom_dir
 
     def test_get_log_base_dir_default(self, monkeypatch):
-        """Log base dir defaults to .ingot/runs."""
         from ingot.workflow.step1_plan import _get_log_base_dir
 
         monkeypatch.delenv("INGOT_LOG_DIR", raising=False)

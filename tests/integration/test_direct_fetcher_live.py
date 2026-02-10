@@ -71,7 +71,6 @@ class TestJiraIntegration:
         reason="Jira credentials not configured (need FALLBACK_JIRA_URL)",
     )
     async def test_fetch_jira_issue(self, fetcher):
-        """Fetch a real Jira issue and verify response structure."""
         # Use the test issue ID from environment or default
         issue_key = os.getenv("TEST_JIRA_ISSUE", "TEST-1")
 
@@ -88,7 +87,6 @@ class TestJiraIntegration:
         reason="Jira credentials not configured",
     )
     async def test_jira_fetch_returns_required_fields(self, fetcher):
-        """Verify Jira response includes fields needed for GenericTicket."""
         issue_key = os.getenv("TEST_JIRA_ISSUE", "TEST-1")
 
         result = await fetcher.fetch(issue_key, "jira")
@@ -113,7 +111,6 @@ class TestGitHubIntegration:
         reason="GitHub credentials not configured (need FALLBACK_GITHUB_TOKEN)",
     )
     async def test_fetch_github_issue(self, fetcher):
-        """Fetch a known public GitHub issue."""
         # Use a known public issue that should always exist
         ticket_id = os.getenv("TEST_GITHUB_ISSUE", "octocat/Hello-World#1")
 
@@ -130,7 +127,6 @@ class TestGitHubIntegration:
         reason="GitHub credentials not configured",
     )
     async def test_github_fetch_returns_required_fields(self, fetcher):
-        """Verify GitHub response includes fields needed for GenericTicket."""
         ticket_id = os.getenv("TEST_GITHUB_ISSUE", "octocat/Hello-World#1")
 
         result = await fetcher.fetch(ticket_id, "github")
@@ -155,7 +151,6 @@ class TestAzureDevOpsIntegration:
         reason="Azure DevOps credentials not configured",
     )
     async def test_fetch_azure_devops_work_item(self, fetcher):
-        """Fetch a real Azure DevOps work item."""
         # Format: project/work_item_id
         work_item = os.getenv("TEST_AZURE_DEVOPS_ITEM", "TestProject/1")
 
@@ -180,7 +175,6 @@ class TestTrelloIntegration:
         reason="Trello credentials not configured (need FALLBACK_TRELLO_API_KEY)",
     )
     async def test_fetch_trello_card(self, fetcher):
-        """Fetch a real Trello card."""
         # Trello card ID (the alphanumeric ID)
         card_id = os.getenv("TEST_TRELLO_CARD", "test-card-id")
 
@@ -193,11 +187,8 @@ class TestTrelloIntegration:
 
 
 class TestCredentialValidation:
-    """Tests for credential validation without making API calls."""
-
     @pytest.mark.live
     async def test_supports_platform_reflects_configuration(self, fetcher):
-        """Verify supports_platform matches credential availability."""
         # If Jira credentials exist, should support Jira
         if has_jira_credentials():
             assert fetcher.supports_platform(Platform.JIRA)
@@ -212,7 +203,6 @@ class TestCredentialValidation:
 
     @pytest.mark.live
     async def test_fetch_without_credentials_raises_error(self, fetcher):
-        """Attempting to fetch without credentials should raise error."""
         # Find a platform without credentials configured
         unconfigured_platforms = []
         if not has_jira_credentials():

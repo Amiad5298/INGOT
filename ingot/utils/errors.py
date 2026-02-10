@@ -30,30 +30,18 @@ class IngotError(Exception):
     All custom exceptions in this application should inherit from this class.
     Each exception type has an associated exit code for proper error reporting.
 
-    Attributes:
-        exit_code: The exit code to use when this exception causes program termination
-        message: The error message
     """
 
     _default_exit_code: ClassVar[ExitCode] = ExitCode.GENERAL_ERROR
 
     def __init__(self, message: str, exit_code: ExitCode | None = None) -> None:
-        """Initialize the exception.
-
-        Args:
-            message: Error message describing what went wrong
-            exit_code: Optional override for the default exit code
-        """
+        """Initialize the exception."""
         super().__init__(message)
         self._exit_code = exit_code
 
     @property
     def exit_code(self) -> ExitCode:
-        """Get the exit code for this exception.
-
-        Returns:
-            The instance exit code if set, otherwise the class default exit code.
-        """
+        """Get the exit code for this exception."""
         if self._exit_code is not None:
             return self._exit_code
         return self.__class__._default_exit_code
@@ -79,8 +67,6 @@ class PlatformNotConfiguredError(IngotError):
     - Platform API credentials are missing or invalid
     - Platform integration check fails
 
-    Attributes:
-        platform: The platform that is not configured (optional)
     """
 
     _default_exit_code: ClassVar[ExitCode] = ExitCode.PLATFORM_NOT_CONFIGURED
@@ -93,11 +79,8 @@ class PlatformNotConfiguredError(IngotError):
     ) -> None:
         """Initialize the exception.
 
-        Args:
-            message: Error message describing what went wrong
-            platform: Optional platform name for context. The platform prefix
-                [Platform] is added automatically if not already present.
-            exit_code: Optional override for the default exit code
+        The [Platform] prefix is added automatically to the message
+        if not already present.
         """
         self.platform = platform
         if platform:

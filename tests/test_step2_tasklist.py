@@ -67,10 +67,7 @@ def mock_backend():
 
 
 class TestExtractTasklistFromOutput:
-    """Tests for _extract_tasklist_from_output function."""
-
     def test_extracts_simple_tasks(self):
-        """Extracts tasks from simple checkbox format."""
         output = """Here is the task list:
 - [ ] Create module file
 - [ ] Implement core function
@@ -85,7 +82,6 @@ class TestExtractTasklistFromOutput:
         assert "- [ ] Add unit tests" in result
 
     def test_extracts_tasks_with_preamble(self):
-        """Extracts tasks even with preamble text."""
         output = """I'll create a task list based on the plan.
 
 Here are the tasks:
@@ -104,7 +100,6 @@ Let me know if you need any changes!
         assert tasks[0].name == "Set up project structure"
 
     def test_handles_indented_tasks(self):
-        """Handles indented (nested) tasks."""
         output = """- [ ] Main task
   - [ ] Subtask 1
   - [ ] Subtask 2
@@ -116,7 +111,6 @@ Let me know if you need any changes!
         assert "  - [ ] Subtask 1" in result
 
     def test_handles_completed_tasks(self):
-        """Handles tasks marked as complete."""
         output = """- [x] Completed task
 - [ ] Pending task
 - [X] Also completed
@@ -130,7 +124,6 @@ Let me know if you need any changes!
         assert "- [x] Also completed" in result
 
     def test_returns_none_for_no_tasks(self):
-        """Returns None when no checkbox tasks found."""
         output = """This output has no checkbox tasks.
 Just some regular text.
 """
@@ -139,7 +132,6 @@ Just some regular text.
         assert result is None
 
     def test_handles_asterisk_bullets(self):
-        """Handles asterisk bullet points."""
         output = """* [ ] Task with asterisk
 * [ ] Another asterisk task
 """
@@ -150,11 +142,6 @@ Just some regular text.
         assert len(tasks) == 2
 
     def test_preserves_subtask_bullets(self):
-        """Preserves non-checkbox bullet points as subtasks.
-
-        Regression test: The post-processor was stripping subtask bullets,
-        resulting in loss of task details like unit test requirements.
-        """
         output = """# Task List: RED-176578
 
 ## Fundamental Tasks (Sequential)
@@ -182,7 +169,6 @@ Just some regular text.
         assert "- Add unit tests in `DasResponseConverterTest`" in result
 
     def test_preserves_section_headers(self):
-        """Preserves section headers like ## Fundamental Tasks."""
         output = """# Task List: TEST-123
 
 ## Fundamental Tasks (Sequential)
@@ -198,7 +184,6 @@ Just some regular text.
         assert "## Independent Tasks (Parallel)" in result
 
     def test_preserves_files_metadata_comments(self):
-        """Preserves <!-- files: ... --> metadata comments."""
         output = """# Task List: TEST-123
 
 <!-- category: fundamental, order: 1 -->
@@ -212,17 +197,6 @@ Just some regular text.
         assert "<!-- files: src/main/java/DasService.java -->" in result
 
     def test_skips_duplicate_tasklist_header(self):
-        """Skips duplicate '# Task List:' header from AI output.
-
-        Regression test for bug where post-processing agent output would result
-        in duplicate headers like:
-            # Task List: RED-176578
-
-            # Task List: RED-176578
-
-        The extraction function adds its own header, so it should skip any
-        '# Task List:' lines from the AI output to avoid duplication.
-        """
         output = """# Task List: RED-176578
 
 ## Fundamental Tasks (Sequential)
@@ -254,13 +228,6 @@ Just some regular text.
         assert "- [ ] **Unit tests for DasServiceImpl**" in result
 
     def test_extracts_tasks_from_add_tasks_tool_output(self):
-        """Extracts tasks from Augment add_tasks tool output format.
-
-        Reproduction test for bug where FUNDAMENTAL/INDEPENDENT prefixes
-        in task names were not being converted to category metadata.
-        The add_tasks tool outputs tasks in this format:
-        [ ] UUID:xxx NAME:CATEGORY: Task Name DESCRIPTION:...
-        """
         # This is the exact format from the bug report log
         output = """🔧 Tool call: add_tasks
    tasks: [{"name":"FUNDAMENTAL: Core Domain Models","description":"Create models","state":"NOT_STARTED"}]
@@ -320,11 +287,6 @@ Task list updated successfully. Created: 13, Updated: 1, Deleted: 0.
             ), f"Task name should not start with 'INDEPENDENT:': {task.name}"
 
     def test_extracts_category_from_add_tasks_format(self):
-        """Extracts category metadata from add_tasks tool format.
-
-        Tests the strict parser with proper UUID:... NAME:CATEGORY: ... DESCRIPTION:... format.
-        This is the only supported format for category extraction (no legacy prefix support).
-        """
         output = """Here is the task list:
 [ ] UUID:abc1 NAME:FUNDAMENTAL: Setup database schema DESCRIPTION:Setup the DB
 [ ] UUID:abc2 NAME:FUNDAMENTAL: Create base models DESCRIPTION:Create models
@@ -362,10 +324,6 @@ class TestStrictParser:
     """
 
     def test_handles_description_in_task_name(self):
-        """Task name containing 'DESCRIPTION' is parsed correctly.
-
-        Regression test: old regex would cut off at first DESCRIPTION: occurrence.
-        """
         raw = "UUID:abc123 NAME:INDEPENDENT: Fix DESCRIPTION field bug DESCRIPTION:Fix the bug"
         category_meta, task_name = _parse_add_tasks_line(raw)
 
@@ -373,7 +331,6 @@ class TestStrictParser:
         assert task_name == "Fix DESCRIPTION field bug"
 
     def test_handles_name_in_task_name(self):
-        """Task name containing 'NAME' is parsed correctly."""
         raw = "UUID:xyz789 NAME:FUNDAMENTAL: Update NAME validation logic DESCRIPTION:Improve it"
         category_meta, task_name = _parse_add_tasks_line(raw)
 
@@ -381,10 +338,6 @@ class TestStrictParser:
         assert task_name == "Update NAME validation logic"
 
     def test_no_false_positive_on_lowercase_fundamental(self):
-        """Sentence-case 'Fundamental' does NOT trigger category extraction.
-
-        Regression test: old regex used re.IGNORECASE which caused false positives.
-        """
         raw = "UUID:test123 NAME:Fundamental analysis of the market DESCRIPTION:Research task"
         category_meta, task_name = _parse_add_tasks_line(raw)
 
@@ -393,7 +346,6 @@ class TestStrictParser:
         assert task_name == "Fundamental analysis of the market"
 
     def test_no_false_positive_on_lowercase_independent(self):
-        """Sentence-case 'Independent' does NOT trigger category extraction."""
         raw = "UUID:test456 NAME:Independent study required DESCRIPTION:Self-study"
         category_meta, task_name = _parse_add_tasks_line(raw)
 
@@ -402,7 +354,6 @@ class TestStrictParser:
         assert task_name == "Independent study required"
 
     def test_simple_task_without_category(self):
-        """Task without category prefix is parsed correctly."""
         raw = "UUID:simple1 NAME:Simple task name DESCRIPTION:A simple description"
         category_meta, task_name = _parse_add_tasks_line(raw)
 
@@ -410,7 +361,6 @@ class TestStrictParser:
         assert task_name == "Simple task name"
 
     def test_non_add_tasks_format_passthrough(self):
-        """Non-add_tasks format lines pass through unchanged."""
         raw = "Just a regular task name"
         category_meta, task_name = _parse_add_tasks_line(raw)
 
@@ -418,10 +368,6 @@ class TestStrictParser:
         assert task_name == "Just a regular task name"
 
     def test_extract_with_tricky_description_name(self):
-        """Full integration test with tricky task containing DESCRIPTION in name.
-
-        Proves the regex handles: NAME:CATEGORY: ... DESCRIPTION ... DESCRIPTION:...
-        """
         output = """Here is the task list:
 [ ] UUID:tricky1 NAME:INDEPENDENT: Fix DESCRIPTION field bug DESCRIPTION:This fixes the bug
 [ ] UUID:tricky2 NAME:FUNDAMENTAL: Add NAME column to DB DESCRIPTION:Database update
@@ -448,15 +394,12 @@ class TestStrictParser:
 
 
 class TestGenerateTasklist:
-    """Tests for _generate_tasklist function."""
-
     def test_persists_ai_output_to_file(
         self,
         workflow_state,
         tmp_path,
         mock_backend,
     ):
-        """AI output is persisted to file even if AI doesn't write it."""
         # Setup
         tasklist_path = tmp_path / "specs" / "TEST-123-tasklist.md"
         plan_path = workflow_state.plan_file
@@ -492,7 +435,6 @@ class TestGenerateTasklist:
         tmp_path,
         mock_backend,
     ):
-        """Uses state.subagent_names tasklist agent for task list generation."""
         # Setup
         ticket = GenericTicket(
             id="TEST-456",
@@ -526,7 +468,6 @@ class TestGenerateTasklist:
         tmp_path,
         mock_backend,
     ):
-        """Falls back to default template when AI output has no checkbox tasks."""
         ticket = GenericTicket(
             id="TEST-789",
             platform=Platform.JIRA,
@@ -562,7 +503,6 @@ class TestGenerateTasklist:
         tmp_path,
         mock_backend,
     ):
-        """User context appears in prompt when state.user_context is set."""
         ticket = GenericTicket(
             id="TEST-CTX",
             platform=Platform.JIRA,
@@ -593,7 +533,6 @@ class TestGenerateTasklist:
         tmp_path,
         mock_backend,
     ):
-        """User context section absent when state.user_context is empty."""
         ticket = GenericTicket(
             id="TEST-NOCTX",
             platform=Platform.JIRA,
@@ -623,7 +562,6 @@ class TestGenerateTasklist:
         tmp_path,
         mock_backend,
     ):
-        """User context section absent when state.user_context is whitespace only."""
         ticket = GenericTicket(
             id="TEST-WS",
             platform=Platform.JIRA,
@@ -650,8 +588,6 @@ class TestGenerateTasklist:
 
 
 class TestStep2CreateTasklist:
-    """Tests for step_2_create_tasklist function."""
-
     @patch("ingot.workflow.step2_tasklist.show_task_review_menu")
     @patch("ingot.workflow.step2_tasklist._edit_tasklist")
     @patch("ingot.workflow.step2_tasklist._generate_tasklist")
@@ -663,14 +599,6 @@ class TestStep2CreateTasklist:
         tmp_path,
         monkeypatch,
     ):
-        """EDIT choice does not regenerate/overwrite the task list.
-
-        Test A: Verifies:
-        - _generate_tasklist is called exactly once
-        - After EDIT, the edited content is preserved (not overwritten)
-        - APPROVE after EDIT approves the edited content
-        - state.current_step is set to 3 and state.tasklist_file is set
-        """
         # Change to tmp_path so that state.specs_dir resolves correctly
         monkeypatch.chdir(tmp_path)
 
@@ -756,7 +684,6 @@ class TestStep2CreateTasklist:
         tmp_path,
         monkeypatch,
     ):
-        """REGENERATE choice calls _generate_tasklist again."""
         monkeypatch.chdir(tmp_path)
 
         ticket = GenericTicket(
@@ -802,7 +729,6 @@ class TestStep2CreateTasklist:
         tmp_path,
         monkeypatch,
     ):
-        """ABORT choice returns False."""
         monkeypatch.chdir(tmp_path)
 
         ticket = GenericTicket(
@@ -835,7 +761,6 @@ class TestStep2CreateTasklist:
         tmp_path,
         monkeypatch,
     ):
-        """Returns False when plan file does not exist."""
         monkeypatch.chdir(tmp_path)
 
         ticket = GenericTicket(
@@ -861,10 +786,7 @@ class TestStep2CreateTasklist:
 
 
 class TestDisplayTasklist:
-    """Tests for _display_tasklist function."""
-
     def test_displays_task_list(self, tmp_path, capsys):
-        """Displays task list content and task count."""
         tasklist_path = tmp_path / "tasklist.md"
         tasklist_path.write_text(
             """# Task List: TEST-123
@@ -885,7 +807,6 @@ class TestDisplayTasklist:
             assert any("Total tasks: 3" in str(c) for c in calls)
 
     def test_displays_empty_task_list(self, tmp_path):
-        """Displays empty task list with zero count."""
         tasklist_path = tmp_path / "tasklist.md"
         tasklist_path.write_text("# Task List: TEST-123\n\nNo tasks yet.\n")
 
@@ -897,12 +818,9 @@ class TestDisplayTasklist:
 
 
 class TestEditTasklist:
-    """Tests for _edit_tasklist function."""
-
     @patch("subprocess.run")
     @patch.dict("os.environ", {"EDITOR": "nano"}, clear=False)
     def test_opens_editor_from_environment(self, mock_run, tmp_path):
-        """Opens the editor specified in EDITOR environment variable."""
         tasklist_path = tmp_path / "tasklist.md"
         tasklist_path.write_text("- [ ] Task\n")
 
@@ -913,7 +831,6 @@ class TestEditTasklist:
     @patch("subprocess.run")
     @patch.dict("os.environ", {}, clear=True)
     def test_defaults_to_vim(self, mock_run, tmp_path):
-        """Defaults to vim when EDITOR is not set."""
         tasklist_path = tmp_path / "tasklist.md"
         tasklist_path.write_text("- [ ] Task\n")
 
@@ -925,7 +842,6 @@ class TestEditTasklist:
     @patch("subprocess.run")
     @patch.dict("os.environ", {"EDITOR": "nonexistent_editor"}, clear=False)
     def test_handles_editor_not_found(self, mock_run, mock_prompt, tmp_path):
-        """Handles case when editor is not found."""
         tasklist_path = tmp_path / "tasklist.md"
         tasklist_path.write_text("- [ ] Task\n")
 
@@ -939,7 +855,6 @@ class TestEditTasklist:
     @patch("subprocess.run")
     @patch.dict("os.environ", {"EDITOR": "vim"}, clear=False)
     def test_handles_editor_error(self, mock_run, tmp_path):
-        """Handles case when editor exits with error."""
         import subprocess as sp
 
         tasklist_path = tmp_path / "tasklist.md"
@@ -952,10 +867,7 @@ class TestEditTasklist:
 
 
 class TestCreateDefaultTasklist:
-    """Tests for _create_default_tasklist function."""
-
     def test_creates_default_template(self, tmp_path):
-        """Creates default task list with template content."""
         tasklist_path = tmp_path / "tasklist.md"
         ticket = GenericTicket(
             id="TEST-DEFAULT",
@@ -977,7 +889,6 @@ class TestCreateDefaultTasklist:
         assert "[Documentation updates]" in content
 
     def test_includes_ticket_id_in_header(self, tmp_path):
-        """Includes ticket ID in the task list header."""
         tasklist_path = tmp_path / "tasklist.md"
         ticket = GenericTicket(
             id="PROJ-999",
@@ -995,7 +906,6 @@ class TestCreateDefaultTasklist:
         assert "PROJ-999" in content
 
     def test_creates_parent_directory_if_needed(self, tmp_path):
-        """Creates parent directories if they don't exist."""
         tasklist_path = tmp_path / "nested" / "dir" / "tasklist.md"
         ticket = GenericTicket(
             id="TEST-NESTED",
@@ -1015,10 +925,7 @@ class TestCreateDefaultTasklist:
 
 
 class TestGenerateTasklistRetry:
-    """Tests for _generate_tasklist retry behavior."""
-
     def test_returns_false_on_auggie_failure(self, tmp_path, mock_backend):
-        """Returns False when backend command fails."""
         ticket = GenericTicket(
             id="TEST-FAIL",
             platform=Platform.JIRA,
@@ -1043,10 +950,7 @@ class TestGenerateTasklistRetry:
 
 
 class TestFundamentalSectionKeywordDetection:
-    """Tests for _fundamental_section_has_test_keywords optimization function."""
-
     def test_positive_match_keyword_in_fundamental_section(self):
-        """Keyword exists in Fundamental Tasks section - should return True."""
         content = """# Task List: TEST-123
 
 ## Fundamental Tasks (Sequential)
@@ -1069,11 +973,6 @@ class TestFundamentalSectionKeywordDetection:
         assert result is True
 
     def test_negative_match_keyword_only_in_independent_section(self):
-        """Keyword exists ONLY in Independent Tasks section - should return False.
-
-        This tests the optimization: if there are no test keywords in Fundamental,
-        we can skip the AI refiner call entirely.
-        """
         content = """# Task List: TEST-123
 
 ## Fundamental Tasks (Sequential)
@@ -1097,11 +996,6 @@ class TestFundamentalSectionKeywordDetection:
         assert result is False
 
     def test_ambiguous_keyword_verify_triggers_match(self):
-        """Common verb 'verify' in Fundamental section triggers match - should return True.
-
-        'verify' is in the keyword list and should be detected even though it's
-        commonly used in non-test contexts.
-        """
         content = """# Task List: TEST-123
 
 ## Fundamental Tasks (Sequential)

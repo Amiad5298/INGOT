@@ -70,70 +70,56 @@ def mock_config_manager_jira_only():
 
 
 class TestAuggieMediatedFetcherInstantiation:
-    """Tests for AuggieMediatedFetcher initialization."""
-
     def test_init_with_backend_only(self, mock_backend):
-        """Can initialize with just AIBackend."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher._backend is mock_backend
         assert fetcher._config is None
 
     def test_init_with_config_manager(self, mock_backend, mock_config_manager):
-        """Can initialize with AIBackend and ConfigManager."""
         fetcher = AuggieMediatedFetcher(mock_backend, mock_config_manager)
 
         assert fetcher._backend is mock_backend
         assert fetcher._config is mock_config_manager
 
     def test_name_property(self, mock_backend):
-        """Name property returns 'Auggie MCP Fetcher'."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher.name == "Auggie MCP Fetcher"
 
 
 class TestAuggieMediatedFetcherPlatformSupport:
-    """Tests for supports_platform method."""
-
     def test_supports_platform_jira(self, mock_backend):
-        """Jira is supported without config."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
 
     def test_supports_platform_linear(self, mock_backend):
-        """Linear is supported without config."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.LINEAR) is True
 
     def test_supports_platform_github(self, mock_backend):
-        """GitHub is supported without config."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.GITHUB) is True
 
     def test_supports_platform_azure_devops_unsupported(self, mock_backend):
-        """Azure DevOps is not supported."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.AZURE_DEVOPS) is False
 
     def test_supports_platform_trello_unsupported(self, mock_backend):
-        """Trello is not supported."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.TRELLO) is False
 
     def test_supports_platform_monday_unsupported(self, mock_backend):
-        """Monday is not supported."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.MONDAY) is False
 
     def test_supports_platform_with_config_enabled(self, mock_backend, mock_config_manager):
-        """Respects AgentConfig when platform is enabled."""
         fetcher = AuggieMediatedFetcher(mock_backend, mock_config_manager)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
@@ -143,7 +129,6 @@ class TestAuggieMediatedFetcherPlatformSupport:
     def test_supports_platform_with_config_disabled(
         self, mock_backend, mock_config_manager_jira_only
     ):
-        """Respects AgentConfig when platform is disabled."""
         fetcher = AuggieMediatedFetcher(mock_backend, mock_config_manager_jira_only)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
@@ -151,7 +136,6 @@ class TestAuggieMediatedFetcherPlatformSupport:
         assert fetcher.supports_platform(Platform.GITHUB) is False
 
     def test_supports_platform_no_config_defaults_true(self, mock_backend):
-        """Without config, supported platforms default to True."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         # All platforms in SUPPORTED_PLATFORMS should return True
@@ -160,10 +144,7 @@ class TestAuggieMediatedFetcherPlatformSupport:
 
 
 class TestAuggieMediatedFetcherPromptTemplates:
-    """Tests for _get_prompt_template method."""
-
     def test_get_prompt_template_jira(self, mock_backend):
-        """Returns Jira template with {ticket_id} placeholder."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         template = fetcher._get_prompt_template(Platform.JIRA)
@@ -173,7 +154,6 @@ class TestAuggieMediatedFetcherPromptTemplates:
         assert "JSON" in template
 
     def test_get_prompt_template_linear(self, mock_backend):
-        """Returns Linear template with {ticket_id} placeholder."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         template = fetcher._get_prompt_template(Platform.LINEAR)
@@ -183,7 +163,6 @@ class TestAuggieMediatedFetcherPromptTemplates:
         assert "JSON" in template
 
     def test_get_prompt_template_github(self, mock_backend):
-        """Returns GitHub template with {ticket_id} placeholder."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         template = fetcher._get_prompt_template(Platform.GITHUB)
@@ -193,7 +172,6 @@ class TestAuggieMediatedFetcherPromptTemplates:
         assert "JSON" in template
 
     def test_get_prompt_template_unsupported_raises(self, mock_backend):
-        """Raises AgentIntegrationError for unsupported platform."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         with pytest.raises(AgentIntegrationError) as exc_info:
@@ -203,7 +181,6 @@ class TestAuggieMediatedFetcherPromptTemplates:
         assert "AZURE_DEVOPS" in str(exc_info.value)
 
     def test_all_supported_platforms_have_templates(self, mock_backend):
-        """All platforms in SUPPORTED_PLATFORMS have templates."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         for platform in SUPPORTED_PLATFORMS:
@@ -213,11 +190,8 @@ class TestAuggieMediatedFetcherPromptTemplates:
 
 
 class TestAuggieMediatedFetcherExecuteFetchPrompt:
-    """Tests for _execute_fetch_prompt method."""
-
     @pytest.mark.asyncio
     async def test_execute_fetch_prompt_success(self, mock_backend):
-        """Returns stdout on successful execution."""
         mock_backend.run_print_quiet.return_value = '{"key": "TEST-1"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -228,7 +202,6 @@ class TestAuggieMediatedFetcherExecuteFetchPrompt:
 
     @pytest.mark.asyncio
     async def test_execute_fetch_prompt_empty_response_raises(self, mock_backend):
-        """Raises AgentFetchError on empty response."""
         mock_backend.run_print_quiet.return_value = ""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -239,7 +212,6 @@ class TestAuggieMediatedFetcherExecuteFetchPrompt:
 
     @pytest.mark.asyncio
     async def test_execute_fetch_prompt_exception_wrapped(self, mock_backend):
-        """Wraps exceptions in AgentFetchError."""
         mock_backend.run_print_quiet.side_effect = RuntimeError("CLI failed")
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -251,11 +223,8 @@ class TestAuggieMediatedFetcherExecuteFetchPrompt:
 
 
 class TestAuggieMediatedFetcherFetchRaw:
-    """Integration tests for fetch_raw method."""
-
     @pytest.mark.asyncio
     async def test_fetch_raw_jira_success(self, mock_backend):
-        """Full flow with mocked backend returning JSON for Jira."""
         mock_backend.run_print_quiet.return_value = (
             '{"key": "PROJ-123", "summary": "Test issue", "status": "Open"}'
         )
@@ -267,7 +236,6 @@ class TestAuggieMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_linear_success(self, mock_backend):
-        """Full flow with mocked backend returning JSON for Linear."""
         mock_backend.run_print_quiet.return_value = (
             '{"identifier": "TEAM-42", "title": "Linear issue"}'
         )
@@ -279,7 +247,6 @@ class TestAuggieMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_github_success(self, mock_backend):
-        """Full flow with mocked backend returning JSON for GitHub."""
         mock_backend.run_print_quiet.return_value = (
             '{"number": 123, "title": "GitHub issue", "state": "open"}'
         )
@@ -291,7 +258,6 @@ class TestAuggieMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_unsupported_platform_raises(self, mock_backend):
-        """Raises PlatformNotSupportedError for unsupported platform."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         with pytest.raises(PlatformNotSupportedError) as exc_info:
@@ -302,7 +268,6 @@ class TestAuggieMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_parses_json_from_markdown_block(self, mock_backend):
-        """Parses JSON from markdown code block in response."""
         mock_backend.run_print_quiet.return_value = """Here is the ticket:
 
 ```json
@@ -318,7 +283,6 @@ Let me know if you need more info."""
 
     @pytest.mark.asyncio
     async def test_fetch_raw_prompt_contains_ticket_id(self, mock_backend):
-        """Prompt sent to backend contains the ticket ID."""
         mock_backend.run_print_quiet.return_value = '{"key": "ABC-999", "summary": "Test issue"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -329,20 +293,15 @@ Let me know if you need more info."""
 
 
 class TestPlatformPromptTemplatesConstant:
-    """Tests for PLATFORM_PROMPT_TEMPLATES constant."""
-
     def test_templates_exist_for_all_supported_platforms(self):
-        """All SUPPORTED_PLATFORMS have corresponding templates."""
         for platform in SUPPORTED_PLATFORMS:
             assert platform in PLATFORM_PROMPT_TEMPLATES
 
     def test_templates_have_ticket_id_placeholder(self):
-        """All templates have {ticket_id} placeholder."""
         for platform, template in PLATFORM_PROMPT_TEMPLATES.items():
             assert "{ticket_id}" in template, f"Template for {platform} missing {{ticket_id}}"
 
     def test_templates_request_json_only(self):
-        """All templates instruct to return only JSON."""
         for platform, template in PLATFORM_PROMPT_TEMPLATES.items():
             assert "JSON" in template, f"Template for {platform} should mention JSON"
             assert (
@@ -351,11 +310,8 @@ class TestPlatformPromptTemplatesConstant:
 
 
 class TestAuggieMediatedFetcherFetchMethod:
-    """Tests for fetch() method with string platform parameter."""
-
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_jira(self, mock_backend):
-        """Can fetch using platform string 'jira'."""
         mock_backend.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test issue"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -365,7 +321,6 @@ class TestAuggieMediatedFetcherFetchMethod:
 
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_linear(self, mock_backend):
-        """Can fetch using platform string 'linear'."""
         mock_backend.run_print_quiet.return_value = (
             '{"identifier": "TEAM-42", "title": "Linear issue"}'
         )
@@ -377,7 +332,6 @@ class TestAuggieMediatedFetcherFetchMethod:
 
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_github(self, mock_backend):
-        """Can fetch using platform string 'github'."""
         mock_backend.run_print_quiet.return_value = '{"number": 123, "title": "GitHub issue"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -387,7 +341,6 @@ class TestAuggieMediatedFetcherFetchMethod:
 
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_case_insensitive(self, mock_backend):
-        """Platform string is case-insensitive."""
         mock_backend.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -400,7 +353,6 @@ class TestAuggieMediatedFetcherFetchMethod:
 
     @pytest.mark.asyncio
     async def test_fetch_with_invalid_platform_string_raises(self, mock_backend):
-        """Raises AgentIntegrationError for unknown platform string."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         with pytest.raises(AgentIntegrationError) as exc_info:
@@ -411,7 +363,6 @@ class TestAuggieMediatedFetcherFetchMethod:
 
     @pytest.mark.asyncio
     async def test_fetch_with_timeout_override(self, mock_backend):
-        """Can override timeout in fetch() call without mutating instance state."""
         mock_backend.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test"}'
         fetcher = AuggieMediatedFetcher(mock_backend, timeout_seconds=30.0)
 
@@ -424,7 +375,6 @@ class TestAuggieMediatedFetcherFetchMethod:
 
     @pytest.mark.asyncio
     async def test_fetch_with_unsupported_platform_enum_raises(self, mock_backend):
-        """Raises AgentIntegrationError for known but unsupported platform enum."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         with pytest.raises(AgentIntegrationError) as exc_info:
@@ -435,25 +385,19 @@ class TestAuggieMediatedFetcherFetchMethod:
 
 
 class TestAuggieMediatedFetcherTimeout:
-    """Tests for timeout functionality."""
-
     def test_timeout_default_value(self, mock_backend):
-        """Default timeout is DEFAULT_TIMEOUT_SECONDS."""
         fetcher = AuggieMediatedFetcher(mock_backend)
 
         assert fetcher._timeout_seconds == DEFAULT_TIMEOUT_SECONDS
         assert fetcher._timeout_seconds == 60.0
 
     def test_timeout_custom_value_in_init(self, mock_backend):
-        """Can set custom timeout in __init__."""
         fetcher = AuggieMediatedFetcher(mock_backend, timeout_seconds=120.0)
 
         assert fetcher._timeout_seconds == 120.0
 
     @pytest.mark.asyncio
     async def test_timeout_raises_agent_fetch_error(self, mock_backend):
-        """Raises AgentFetchError when timeout expires."""
-
         # Use a short but reliable sleep time to avoid flakiness
         def blocking_call(*args, **kwargs):
             time.sleep(1)  # 1 second sleep
@@ -471,11 +415,8 @@ class TestAuggieMediatedFetcherTimeout:
 
 
 class TestAuggieMediatedFetcherValidation:
-    """Tests for response validation."""
-
     @pytest.mark.asyncio
     async def test_validation_passes_with_required_fields_jira(self, mock_backend):
-        """Validation passes when all required Jira fields present."""
         mock_backend.run_print_quiet.return_value = (
             '{"key": "PROJ-123", "summary": "Test", "status": "Open"}'
         )
@@ -488,7 +429,6 @@ class TestAuggieMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_passes_with_required_fields_linear(self, mock_backend):
-        """Validation passes when all required Linear fields present."""
         mock_backend.run_print_quiet.return_value = (
             '{"identifier": "TEAM-42", "title": "Linear issue"}'
         )
@@ -501,7 +441,6 @@ class TestAuggieMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_passes_with_required_fields_github(self, mock_backend):
-        """Validation passes when all required GitHub fields present."""
         mock_backend.run_print_quiet.return_value = '{"number": 123, "title": "GitHub issue"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -512,7 +451,6 @@ class TestAuggieMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_fails_missing_jira_key(self, mock_backend):
-        """Raises AgentResponseParseError when Jira 'key' missing."""
         mock_backend.run_print_quiet.return_value = '{"summary": "Test issue"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -524,7 +462,6 @@ class TestAuggieMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_fails_missing_jira_summary(self, mock_backend):
-        """Raises AgentResponseParseError when Jira 'summary' missing."""
         mock_backend.run_print_quiet.return_value = '{"key": "PROJ-123"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -536,7 +473,6 @@ class TestAuggieMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_fails_missing_linear_identifier(self, mock_backend):
-        """Raises AgentResponseParseError when Linear 'identifier' missing."""
         mock_backend.run_print_quiet.return_value = '{"title": "Linear issue"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -548,7 +484,6 @@ class TestAuggieMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_fails_missing_github_number(self, mock_backend):
-        """Raises AgentResponseParseError when GitHub 'number' missing."""
         mock_backend.run_print_quiet.return_value = '{"title": "GitHub issue"}'
         fetcher = AuggieMediatedFetcher(mock_backend)
 
@@ -559,7 +494,6 @@ class TestAuggieMediatedFetcherValidation:
         assert "number" in str(exc_info.value)
 
     def test_required_fields_defined_for_all_supported_platforms(self):
-        """REQUIRED_FIELDS has entries for all SUPPORTED_PLATFORMS."""
         for platform in SUPPORTED_PLATFORMS:
             assert platform in REQUIRED_FIELDS, f"Missing REQUIRED_FIELDS for {platform}"
             assert len(REQUIRED_FIELDS[platform]) > 0, f"Empty REQUIRED_FIELDS for {platform}"

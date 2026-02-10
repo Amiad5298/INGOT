@@ -109,16 +109,12 @@ def temp_git_repo(tmp_path: Path, monkeypatch):
 
 
 class TestCaptureBaseline:
-    """Tests for capture_baseline function."""
-
     def test_captures_current_head(self, temp_git_repo):
-        """Captures the current HEAD commit SHA."""
         expected_head = temp_git_repo.get_head()
         baseline = capture_baseline()
         assert baseline == expected_head
 
     def test_captures_after_new_commit(self, temp_git_repo):
-        """Captures updated HEAD after a new commit."""
         old_head = temp_git_repo.get_head()
         new_sha = temp_git_repo.commit_file("new.txt", "content", "Add new file")
         baseline = capture_baseline()
@@ -128,15 +124,11 @@ class TestCaptureBaseline:
 
 
 class TestCheckDirtyWorkingTree:
-    """Tests for check_dirty_working_tree function."""
-
     def test_clean_tree_returns_true(self, temp_git_repo):
-        """Returns True when working tree is clean."""
         result = check_dirty_working_tree(policy=DirtyTreePolicy.FAIL_FAST)
         assert result is True
 
     def test_dirty_tree_raises_with_fail_fast(self, temp_git_repo):
-        """Raises DirtyWorkingTreeError when tree is dirty and policy is FAIL_FAST."""
         temp_git_repo.create_file("dirty.txt", "uncommitted")
 
         with pytest.raises(DirtyWorkingTreeError) as exc_info:
@@ -146,7 +138,6 @@ class TestCheckDirtyWorkingTree:
         assert "dirty.txt" in str(exc_info.value)
 
     def test_dirty_tree_warns_with_continue(self, temp_git_repo, capsys):
-        """Returns False and warns when tree is dirty and policy is WARN_AND_CONTINUE."""
         temp_git_repo.create_file("dirty.txt", "uncommitted")
 
         result = check_dirty_working_tree(policy=DirtyTreePolicy.WARN_AND_CONTINUE)
@@ -154,7 +145,6 @@ class TestCheckDirtyWorkingTree:
         assert result is False
 
     def test_staged_changes_detected(self, temp_git_repo):
-        """Detects staged changes as dirty."""
         temp_git_repo.create_file("staged.txt", "content")
         subprocess.run(["git", "add", "staged.txt"], check=True, capture_output=True)
 
@@ -171,7 +161,6 @@ class TestWorkflowArtifactFiltering:
     """
 
     def test_is_workflow_artifact_spec_dir(self):
-        """Recognizes .ingot/ directory as workflow artifact."""
         from ingot.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact(".ingot/") is True
@@ -179,7 +168,6 @@ class TestWorkflowArtifactFiltering:
         assert _is_workflow_artifact(".ingot") is True
 
     def test_is_workflow_artifact_augment_dir(self):
-        """Recognizes .augment/ directory as workflow artifact."""
         from ingot.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact(".augment/") is True
@@ -187,7 +175,6 @@ class TestWorkflowArtifactFiltering:
         assert _is_workflow_artifact(".augment") is True
 
     def test_is_workflow_artifact_specs_dir(self):
-        """Recognizes specs/ directory as workflow artifact."""
         from ingot.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact("specs/") is True
@@ -195,13 +182,11 @@ class TestWorkflowArtifactFiltering:
         assert _is_workflow_artifact("specs") is True
 
     def test_is_workflow_artifact_ds_store(self):
-        """Recognizes .DS_Store as workflow artifact."""
         from ingot.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact(".DS_Store") is True
 
     def test_is_workflow_artifact_non_artifact(self):
-        """Correctly identifies non-artifact paths."""
         from ingot.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact("src/main.py") is False
@@ -210,7 +195,6 @@ class TestWorkflowArtifactFiltering:
         assert _is_workflow_artifact("config.yaml") is False
 
     def test_untracked_spec_dir_ignored(self, temp_git_repo):
-        """Untracked .ingot/ files do not trigger dirty tree error."""
         spec_dir = temp_git_repo.path / ".ingot" / "runs"
         spec_dir.mkdir(parents=True)
         (spec_dir / "log.txt").write_text("log content")
@@ -220,7 +204,6 @@ class TestWorkflowArtifactFiltering:
         assert result is True
 
     def test_untracked_augment_dir_ignored(self, temp_git_repo):
-        """Untracked .augment/ files do not trigger dirty tree error."""
         augment_dir = temp_git_repo.path / ".augment" / "agents"
         augment_dir.mkdir(parents=True)
         (augment_dir / "ingot-planner.md").write_text("agent content")
@@ -230,7 +213,6 @@ class TestWorkflowArtifactFiltering:
         assert result is True
 
     def test_untracked_specs_dir_ignored(self, temp_git_repo):
-        """Untracked specs/ files do not trigger dirty tree error."""
         specs_dir = temp_git_repo.path / "specs"
         specs_dir.mkdir(parents=True)
         (specs_dir / "TICKET-123-plan.md").write_text("plan content")
@@ -241,7 +223,6 @@ class TestWorkflowArtifactFiltering:
         assert result is True
 
     def test_untracked_ds_store_ignored(self, temp_git_repo):
-        """Untracked .DS_Store does not trigger dirty tree error."""
         (temp_git_repo.path / ".DS_Store").write_text("ds store content")
 
         # Should not raise - .DS_Store is excluded
@@ -249,7 +230,6 @@ class TestWorkflowArtifactFiltering:
         assert result is True
 
     def test_mixed_artifacts_and_real_changes_detected(self, temp_git_repo):
-        """Real changes are detected even when artifacts are present."""
         # Create workflow artifacts (should be ignored)
         specs_dir = temp_git_repo.path / "specs"
         specs_dir.mkdir(parents=True)
@@ -272,7 +252,6 @@ class TestWorkflowArtifactFiltering:
         assert ".augment/" not in error_msg
 
     def test_only_artifacts_present_is_clean(self, temp_git_repo):
-        """Tree with only workflow artifacts is considered clean."""
         # Create multiple workflow artifacts
         (temp_git_repo.path / ".DS_Store").write_text("ds")
 
@@ -293,7 +272,6 @@ class TestWorkflowArtifactFiltering:
         assert result is True
 
     def test_staged_artifact_ignored(self, temp_git_repo):
-        """Staged workflow artifacts do not trigger dirty tree error."""
         specs_dir = temp_git_repo.path / "specs"
         specs_dir.mkdir(parents=True)
         (specs_dir / "plan.md").write_text("plan content")
@@ -306,13 +284,11 @@ class TestWorkflowArtifactFiltering:
         assert result is True
 
     def test_is_workflow_artifact_gitignore(self):
-        """Recognizes .gitignore as workflow artifact (modified by ensure_gitignore_configured)."""
         from ingot.workflow.git_utils import _is_workflow_artifact
 
         assert _is_workflow_artifact(".gitignore") is True
 
     def test_workflow_artifact_paths_constant_exported(self):
-        """WORKFLOW_ARTIFACT_PATHS constant is exported."""
         from ingot.workflow.git_utils import WORKFLOW_ARTIFACT_PATHS
 
         assert ".ingot/" in WORKFLOW_ARTIFACT_PATHS
@@ -323,10 +299,7 @@ class TestWorkflowArtifactFiltering:
 
 
 class TestGetDiffFromBaseline:
-    """Tests for get_diff_from_baseline function."""
-
     def test_shows_changes_since_baseline(self, temp_git_repo):
-        """Shows committed changes since baseline."""
         baseline = capture_baseline()
         temp_git_repo.commit_file("new_file.py", "def hello():\n    pass\n", "Add function")
 
@@ -337,7 +310,6 @@ class TestGetDiffFromBaseline:
         assert "def hello():" in diff_output
 
     def test_empty_diff_when_no_changes(self, temp_git_repo):
-        """Returns empty diff when no changes since baseline."""
         baseline = capture_baseline()
 
         diff_output, git_error = get_diff_from_baseline(baseline)
@@ -346,7 +318,6 @@ class TestGetDiffFromBaseline:
         assert diff_output.strip() == ""
 
     def test_excludes_pre_baseline_changes(self, temp_git_repo):
-        """Pre-baseline changes are not included in diff."""
         # Create a file BEFORE baseline
         temp_git_repo.commit_file("before_baseline.txt", "old content", "Old commit")
         baseline = capture_baseline()
@@ -362,10 +333,7 @@ class TestGetDiffFromBaseline:
 
 
 class TestGetWorkingTreeDiffFromBaseline:
-    """Tests for get_working_tree_diff_from_baseline function."""
-
     def test_includes_uncommitted_changes_to_tracked_files(self, temp_git_repo):
-        """Includes uncommitted changes to tracked files in diff."""
         # Create and commit a file first (so it's tracked)
         temp_git_repo.commit_file("tracked.txt", "original content", "Add tracked file")
         baseline = capture_baseline()
@@ -380,7 +348,6 @@ class TestGetWorkingTreeDiffFromBaseline:
         assert "modified content" in diff_output
 
     def test_includes_staged_new_files(self, temp_git_repo):
-        """Includes staged new files in diff."""
         baseline = capture_baseline()
 
         # Create and stage a new file
@@ -394,7 +361,6 @@ class TestGetWorkingTreeDiffFromBaseline:
         assert "new_content = True" in diff_output
 
     def test_includes_both_committed_and_staged(self, temp_git_repo):
-        """Includes both committed and staged changes."""
         baseline = capture_baseline()
         temp_git_repo.commit_file("committed.py", "committed = True", "Commit file")
 
@@ -410,10 +376,7 @@ class TestGetWorkingTreeDiffFromBaseline:
 
 
 class TestSmartDiffFromBaseline:
-    """Tests for get_smart_diff_from_baseline function."""
-
     def test_returns_full_diff_for_small_changes(self, temp_git_repo):
-        """Returns full diff when changes are small."""
         baseline = capture_baseline()
         temp_git_repo.commit_file("small.txt", "small change", "Small commit")
 
@@ -425,7 +388,6 @@ class TestSmartDiffFromBaseline:
         assert "small change" in diff_output
 
     def test_returns_stat_only_for_large_changes(self, temp_git_repo):
-        """Returns stat-only when changes exceed thresholds."""
         baseline = capture_baseline()
 
         # Create many files to exceed max_files threshold
@@ -440,7 +402,6 @@ class TestSmartDiffFromBaseline:
         assert "files changed" in diff_output
 
     def test_excludes_dirty_tree_from_committed_diff(self, temp_git_repo):
-        """Excludes uncommitted changes when include_working_tree=False."""
         # Create dirty state BEFORE baseline
         temp_git_repo.create_file("pre_dirty.txt", "dirty before")
         subprocess.run(["git", "add", "pre_dirty.txt"], check=True, capture_output=True)
@@ -464,10 +425,7 @@ class TestSmartDiffFromBaseline:
 
 
 class TestFilterBinaryFiles:
-    """Tests for filter_binary_files_from_diff function."""
-
     def test_filters_binary_file_markers(self):
-        """Replaces binary file markers with readable placeholders."""
         diff_with_binary = """diff --git a/image.png b/image.png
 Binary files a/image.png and b/image.png differ
 diff --git a/text.txt b/text.txt
@@ -485,7 +443,6 @@ diff --git a/text.txt b/text.txt
         assert "+new" in result
 
     def test_handles_multiple_binary_files(self):
-        """Handles multiple binary files in diff."""
         diff_output = """Binary files a/a.bin and b/a.bin differ
 Binary files a/b.bin and b/b.bin differ
 """
@@ -495,46 +452,35 @@ Binary files a/b.bin and b/b.bin differ
         assert "[BINARY FILE CHANGED: b.bin]" in result
 
     def test_no_change_when_no_binary_files(self):
-        """Returns unchanged output when no binary files."""
         diff_output = "+++ b/file.txt\n-old\n+new"
         result = filter_binary_files_from_diff(diff_output)
         assert result == diff_output
 
 
 class TestStatParsing:
-    """Tests for stat parsing functions."""
-
     def test_parse_stat_total_lines(self):
-        """Parses total lines from stat output."""
         stat_output = " 5 files changed, 100 insertions(+), 50 deletions(-)"
         assert parse_stat_total_lines(stat_output) == 150
 
     def test_parse_stat_total_lines_insertions_only(self):
-        """Parses insertions-only stat output."""
         stat_output = " 1 file changed, 25 insertions(+)"
         assert parse_stat_total_lines(stat_output) == 25
 
     def test_parse_stat_total_lines_deletions_only(self):
-        """Parses deletions-only stat output."""
         stat_output = " 1 file changed, 10 deletions(-)"
         assert parse_stat_total_lines(stat_output) == 10
 
     def test_parse_stat_file_count(self):
-        """Parses file count from stat output."""
         stat_output = " 5 files changed, 100 insertions(+), 50 deletions(-)"
         assert parse_stat_file_count(stat_output) == 5
 
     def test_parse_stat_single_file(self):
-        """Parses single file stat output."""
         stat_output = " 1 file changed, 10 insertions(+)"
         assert parse_stat_file_count(stat_output) == 1
 
 
 class TestUntrackedFiles:
-    """Tests for untracked file handling in diffs."""
-
     def test_get_untracked_files_returns_list(self, temp_git_repo):
-        """Returns list of untracked files."""
         from ingot.workflow.git_utils import get_untracked_files
 
         # Create untracked files
@@ -548,7 +494,6 @@ class TestUntrackedFiles:
         assert len(untracked) == 2
 
     def test_get_untracked_files_empty_when_all_tracked(self, temp_git_repo):
-        """Returns empty list when no untracked files."""
         from ingot.workflow.git_utils import get_untracked_files
 
         # All files are tracked (initial commit has README.md)
@@ -556,7 +501,6 @@ class TestUntrackedFiles:
         assert untracked == []
 
     def test_get_untracked_files_excludes_gitignored(self, temp_git_repo):
-        """Excludes files matching .gitignore patterns."""
         from ingot.workflow.git_utils import get_untracked_files
 
         # Create .gitignore
@@ -574,7 +518,6 @@ class TestUntrackedFiles:
         assert "debug.log" not in untracked
 
     def test_untracked_files_diff_generates_unified_format(self, temp_git_repo):
-        """Generates unified diff format for untracked files."""
         from ingot.workflow.git_utils import get_untracked_files_diff
 
         temp_git_repo.create_file("new_file.py", "def hello():\n    pass\n")
@@ -587,7 +530,6 @@ class TestUntrackedFiles:
         assert "+    pass" in diff
 
     def test_untracked_files_diff_stat_only(self, temp_git_repo):
-        """Generates stat-like output for untracked files."""
         from ingot.workflow.git_utils import get_untracked_files_diff
 
         temp_git_repo.create_file("file1.txt", "content")
@@ -601,7 +543,6 @@ class TestUntrackedFiles:
         assert "2 untracked file(s)" in diff
 
     def test_untracked_binary_file_marked(self, temp_git_repo):
-        """Binary untracked files are marked with placeholder."""
         from ingot.workflow.git_utils import get_untracked_files_diff
 
         # Create a binary file (contains null bytes)
@@ -613,7 +554,6 @@ class TestUntrackedFiles:
         assert "[BINARY FILE ADDED: image.bin]" in diff
 
     def test_working_tree_diff_includes_untracked(self, temp_git_repo):
-        """Working tree diff includes untracked files by default."""
         baseline = capture_baseline()
 
         # Create an untracked file
@@ -626,7 +566,6 @@ class TestUntrackedFiles:
         assert "+x = 1" in diff_output
 
     def test_working_tree_diff_excludes_untracked_when_disabled(self, temp_git_repo):
-        """Working tree diff excludes untracked files when disabled."""
         baseline = capture_baseline()
 
         # Create an untracked file
@@ -640,7 +579,6 @@ class TestUntrackedFiles:
         assert "new_untracked.py" not in diff_output
 
     def test_smart_diff_includes_untracked(self, temp_git_repo):
-        """Smart diff includes untracked files by default."""
         baseline = capture_baseline()
 
         # Create an untracked file
@@ -654,7 +592,6 @@ class TestUntrackedFiles:
         assert "+smart content" in diff_output
 
     def test_smart_diff_excludes_untracked_when_disabled(self, temp_git_repo):
-        """Smart diff excludes untracked files when disabled."""
         baseline = capture_baseline()
 
         # Create an untracked file

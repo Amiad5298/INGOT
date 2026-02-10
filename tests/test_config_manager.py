@@ -18,10 +18,7 @@ from ingot.config.manager import ConfigManager
 
 
 class TestConfigManagerLoad:
-    """Tests for ConfigManager.load method."""
-
     def test_load_missing_file(self, tmp_path):
-        """Returns defaults when config file doesn't exist."""
         config_path = tmp_path / "missing-config"
         manager = ConfigManager(config_path)
 
@@ -31,7 +28,6 @@ class TestConfigManagerLoad:
         assert settings.auto_open_files is True
 
     def test_load_valid_file(self, temp_config_file):
-        """Parses KEY=VALUE and KEY="VALUE" formats."""
         manager = ConfigManager(temp_config_file)
 
         settings = manager.load()
@@ -41,7 +37,6 @@ class TestConfigManagerLoad:
         assert settings.implementation_model == "claude-3-sonnet"
 
     def test_load_ignores_comments(self, tmp_path):
-        """Skips lines starting with #."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """# This is a comment
@@ -58,7 +53,6 @@ PLANNING_MODEL="test2"
         assert settings.planning_model == "test2"
 
     def test_load_ignores_empty_lines(self, tmp_path):
-        """Skips empty lines."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """DEFAULT_MODEL="test"
@@ -75,7 +69,6 @@ PLANNING_MODEL="test2"
         assert settings.planning_model == "test2"
 
     def test_load_parses_boolean_true(self, tmp_path):
-        """Parses boolean true values."""
         config_file = tmp_path / "config"
         config_file.write_text('AUTO_OPEN_FILES="true"\n')
         manager = ConfigManager(config_file)
@@ -85,7 +78,6 @@ PLANNING_MODEL="test2"
         assert settings.auto_open_files is True
 
     def test_load_parses_boolean_false(self, tmp_path):
-        """Parses boolean false values."""
         config_file = tmp_path / "config"
         config_file.write_text('AUTO_OPEN_FILES="false"\n')
         manager = ConfigManager(config_file)
@@ -95,7 +87,6 @@ PLANNING_MODEL="test2"
         assert settings.auto_open_files is False
 
     def test_load_parses_integer(self, tmp_path):
-        """Parses integer values."""
         config_file = tmp_path / "config"
         config_file.write_text('JIRA_CHECK_TIMESTAMP="1234567890"\n')
         manager = ConfigManager(config_file)
@@ -105,7 +96,6 @@ PLANNING_MODEL="test2"
         assert settings.jira_check_timestamp == 1234567890
 
     def test_load_handles_unquoted_values(self, tmp_path):
-        """Handles values without quotes."""
         config_file = tmp_path / "config"
         config_file.write_text("DEFAULT_MODEL=test-model\n")
         manager = ConfigManager(config_file)
@@ -115,7 +105,6 @@ PLANNING_MODEL="test2"
         assert settings.default_model == "test-model"
 
     def test_load_handles_single_quotes(self, tmp_path):
-        """Handles single-quoted values."""
         config_file = tmp_path / "config"
         config_file.write_text("DEFAULT_MODEL='test-model'\n")
         manager = ConfigManager(config_file)
@@ -125,7 +114,6 @@ PLANNING_MODEL="test2"
         assert settings.default_model == "test-model"
 
     def test_load_extracts_model_id_from_full_format(self, tmp_path):
-        """Extracts model ID from 'Name [id]' format for model keys."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """DEFAULT_MODEL="Claude Opus 4.5 [opus4.5]"
@@ -142,7 +130,6 @@ IMPLEMENTATION_MODEL="Sonnet 4.5 [sonnet4.5]"
         assert settings.implementation_model == "sonnet4.5"
 
     def test_load_keeps_model_id_format_unchanged(self, tmp_path):
-        """Keeps model ID format unchanged if already in ID-only format."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """DEFAULT_MODEL="opus4.5"
@@ -158,10 +145,7 @@ PLANNING_MODEL="haiku4.5"
 
 
 class TestConfigManagerSave:
-    """Tests for ConfigManager.save method."""
-
     def test_save_validates_key(self, tmp_path):
-        """Raises ValueError for invalid key names."""
         config_path = tmp_path / "config"
         manager = ConfigManager(config_path)
 
@@ -169,7 +153,6 @@ class TestConfigManagerSave:
             manager.save("invalid-key", "value")
 
     def test_save_validates_key_starting_with_number(self, tmp_path):
-        """Raises ValueError for keys starting with number."""
         config_path = tmp_path / "config"
         manager = ConfigManager(config_path)
 
@@ -177,7 +160,6 @@ class TestConfigManagerSave:
             manager.save("123KEY", "value")
 
     def test_save_creates_file(self, tmp_path):
-        """Creates config file if it doesn't exist."""
         config_path = tmp_path / "config"
         manager = ConfigManager(config_path)
 
@@ -187,7 +169,6 @@ class TestConfigManagerSave:
         assert 'TEST_KEY="test_value"' in config_path.read_text()
 
     def test_save_updates_existing_key(self, tmp_path):
-        """Updates existing key in file."""
         config_path = tmp_path / "config"
         config_path.write_text('TEST_KEY="old_value"\n')
         manager = ConfigManager(config_path)
@@ -200,7 +181,6 @@ class TestConfigManagerSave:
         assert "old_value" not in content
 
     def test_save_preserves_comments(self, tmp_path):
-        """Keeps comments when saving."""
         config_path = tmp_path / "config"
         config_path.write_text('# Comment\nTEST_KEY="value"\n')
         manager = ConfigManager(config_path)
@@ -212,7 +192,6 @@ class TestConfigManagerSave:
         assert "# Comment" in content
 
     def test_save_file_permissions(self, tmp_path):
-        """Config file has mode 600."""
         config_path = tmp_path / "config"
         manager = ConfigManager(config_path)
 
@@ -223,10 +202,7 @@ class TestConfigManagerSave:
 
 
 class TestConfigManagerGet:
-    """Tests for ConfigManager.get method."""
-
     def test_get_returns_value(self, temp_config_file):
-        """Returns value for existing key."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
@@ -235,7 +211,6 @@ class TestConfigManagerGet:
         assert value == "claude-3"
 
     def test_get_returns_default(self, tmp_path):
-        """Returns default when key not found."""
         config_path = tmp_path / "config"
         config_path.write_text("")
         manager = ConfigManager(config_path)
@@ -246,7 +221,6 @@ class TestConfigManagerGet:
         assert value == "default_value"
 
     def test_get_returns_empty_string_default(self, tmp_path):
-        """Returns empty string when no default provided."""
         config_path = tmp_path / "config"
         config_path.write_text("")
         manager = ConfigManager(config_path)
@@ -258,13 +232,10 @@ class TestConfigManagerGet:
 
 
 class TestConfigManagerShow:
-    """Tests for ConfigManager.show method."""
-
     @patch("ingot.config.manager.print_header")
     @patch("ingot.config.manager.print_info")
     @patch("ingot.config.manager.console")
     def test_show_missing_file(self, mock_console, mock_info, mock_header, tmp_path):
-        """Shows message when config file doesn't exist."""
         config_path = tmp_path / "missing"
         manager = ConfigManager(config_path)
 
@@ -277,7 +248,6 @@ class TestConfigManagerShow:
     @patch("ingot.config.manager.print_info")
     @patch("ingot.config.manager.console")
     def test_show_displays_settings(self, mock_console, mock_info, mock_header, temp_config_file):
-        """Shows all settings including platform status from config file."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
@@ -298,7 +268,6 @@ class TestConfigManagerShow:
     def test_show_displays_platform_status_table(
         self, mock_console, mock_info, mock_header, temp_config_file
     ):
-        """Shows platform configuration status table."""
         # Skip if Rich is not installed
         Table = pytest.importorskip("rich.table").Table
 
@@ -317,10 +286,7 @@ class TestConfigManagerShow:
 
 
 class TestPlatformStatusHelpers:
-    """Tests for platform status helper methods."""
-
     def test_get_agent_integrations_uses_agent_config(self, temp_config_file):
-        """Returns integration status from AgentConfig."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
@@ -338,11 +304,8 @@ class TestPlatformStatusHelpers:
         assert integrations["azure_devops"] is False
 
     def test_get_agent_integrations_respects_explicit_config(self, tmp_path):
-        """Respects explicit AGENT_INTEGRATION_* config keys."""
         config_file = tmp_path / ".ingot-config"
-        config_file.write_text(
-            'AGENT_INTEGRATION_JIRA="false"\n' 'AGENT_INTEGRATION_MONDAY="true"\n'
-        )
+        config_file.write_text('AGENT_INTEGRATION_JIRA="false"\nAGENT_INTEGRATION_MONDAY="true"\n')
         manager = ConfigManager(config_file)
         manager.load()
 
@@ -353,12 +316,6 @@ class TestPlatformStatusHelpers:
         assert integrations["monday"] is True
 
     def test_get_agent_integrations_no_defaults_for_non_auggie(self, tmp_path):
-        """Non-Auggie platform with no explicit integrations returns all False.
-
-        This prevents falsely reporting agent support when AI_BACKEND is
-        set to manual, cursor, or other non-Auggie platforms without explicit
-        AGENT_INTEGRATION_* keys.
-        """
         config_file = tmp_path / ".ingot-config"
         config_file.write_text('AI_BACKEND="manual"\n')
         manager = ConfigManager(config_file)
@@ -373,9 +330,8 @@ class TestPlatformStatusHelpers:
         assert all(v is False for v in integrations.values())
 
     def test_get_agent_integrations_non_auggie_with_explicit_config(self, tmp_path):
-        """Non-Auggie platform respects explicit integration config."""
         config_file = tmp_path / ".ingot-config"
-        config_file.write_text('AI_BACKEND="cursor"\n' 'AGENT_INTEGRATION_JIRA="true"\n')
+        config_file.write_text('AI_BACKEND="cursor"\nAGENT_INTEGRATION_JIRA="true"\n')
         manager = ConfigManager(config_file)
         manager.load()
 
@@ -388,7 +344,6 @@ class TestPlatformStatusHelpers:
 
     @patch("ingot.integrations.auth.AuthenticationManager")
     def test_get_fallback_status_checks_all_platforms(self, mock_auth_class, temp_config_file):
-        """Checks fallback status for all known platforms."""
         # Configure mock to return False for all platforms
         mock_auth = mock_auth_class.return_value
         mock_auth.has_fallback_configured.return_value = False
@@ -411,7 +366,6 @@ class TestPlatformStatusHelpers:
     def test_get_fallback_status_with_configured_credentials(
         self, mock_auth_class, temp_config_file
     ):
-        """Returns True for platforms with configured fallback credentials."""
         from ingot.integrations.providers import Platform
 
         # Configure mock to return True only for Jira
@@ -432,7 +386,6 @@ class TestPlatformStatusHelpers:
         assert status["github"] is False
 
     def test_get_platform_ready_status_logic(self, temp_config_file):
-        """Platform is ready if agent OR fallback is configured."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
@@ -451,7 +404,6 @@ class TestPlatformStatusHelpers:
     def test_show_platform_status_error_handling(
         self, mock_console, mock_info, mock_header, temp_config_file
     ):
-        """Gracefully handles errors when displaying platform status."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
@@ -469,7 +421,6 @@ class TestPlatformStatusHelpers:
         assert any("Test error" in str(call) for call in print_calls)
 
     def test_platform_display_order_is_consistent(self, temp_config_file):
-        """Platform table displays in consistent alphabetical order."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
@@ -494,7 +445,6 @@ class TestPlatformStatusHelpers:
     def test_show_platform_status_plain_text_fallback(
         self, mock_console, mock_info, mock_header, temp_config_file, capsys
     ):
-        """Falls back to plain-text output when Rich table fails."""
         manager = ConfigManager(temp_config_file)
         manager.load()
 
@@ -515,7 +465,6 @@ class TestPlatformStatusHelpers:
     def test_show_platform_status_fallback_when_rich_import_fails(
         self, mock_info, mock_header, temp_config_file, capsys
     ):
-        """Falls back to plain-text output when Rich cannot be imported (ImportError)."""
         import sys
         from types import ModuleType
 
@@ -544,10 +493,7 @@ class TestPlatformStatusHelpers:
 
 
 class TestCascadingConfigHierarchy:
-    """Tests for cascading configuration hierarchy."""
-
     def test_global_config_loaded(self, tmp_path):
-        """Global config values are loaded."""
         # Create global config
         global_config = tmp_path / ".ingot-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
@@ -558,7 +504,6 @@ class TestCascadingConfigHierarchy:
         assert settings.default_model == "global-model"
 
     def test_local_overrides_global(self, tmp_path, monkeypatch):
-        """Local config overrides global config."""
         # Create global config
         global_config = tmp_path / ".ingot-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
@@ -582,7 +527,6 @@ class TestCascadingConfigHierarchy:
         assert settings.default_model == "local-model"
 
     def test_environment_overrides_all(self, tmp_path, monkeypatch):
-        """Environment variables override local and global config."""
         # Create global config
         global_config = tmp_path / ".ingot-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
@@ -604,7 +548,6 @@ class TestCascadingConfigHierarchy:
         assert settings.default_model == "env-model"
 
     def test_multiple_keys_from_different_sources(self, tmp_path, monkeypatch):
-        """Different keys can come from different sources."""
         # Global has multiple keys
         global_config = tmp_path / ".ingot-config"
         global_config.write_text(
@@ -634,10 +577,7 @@ DEFAULT_PLATFORM="jira"
 
 
 class TestFindLocalConfig:
-    """Tests for _find_local_config method."""
-
     def test_finds_config_in_cwd(self, tmp_path, monkeypatch):
-        """Finds .ingot in current directory."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         local_config = project_dir / ".ingot"
@@ -651,7 +591,6 @@ class TestFindLocalConfig:
         assert found == local_config
 
     def test_finds_config_in_parent(self, tmp_path, monkeypatch):
-        """Finds .ingot in parent directory."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         sub_dir = project_dir / "src" / "module"
@@ -667,7 +606,6 @@ class TestFindLocalConfig:
         assert found == local_config
 
     def test_stops_at_git_root(self, tmp_path, monkeypatch):
-        """Stops traversing at .git directory."""
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         project = workspace / "project"
@@ -684,7 +622,6 @@ class TestFindLocalConfig:
         assert found is None
 
     def test_returns_none_if_not_found(self, tmp_path, monkeypatch):
-        """Returns None when no .ingot exists."""
         project = tmp_path / "empty-project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -696,7 +633,6 @@ class TestFindLocalConfig:
         assert found is None
 
     def test_ignores_spec_directory(self, tmp_path, monkeypatch):
-        """Ignores .ingot if it is a directory, not a file."""
         project = tmp_path / "project"
         project.mkdir()
         # Create .ingot as a directory instead of a file
@@ -712,10 +648,7 @@ class TestFindLocalConfig:
 
 
 class TestLoadEnvironment:
-    """Tests for _load_environment method."""
-
     def test_loads_known_keys_only(self, tmp_path, monkeypatch):
-        """Only loads environment variables for known config keys."""
         config_path = tmp_path / "config"
         config_path.write_text("")
         monkeypatch.setenv("DEFAULT_MODEL", "env-model")
@@ -728,7 +661,6 @@ class TestLoadEnvironment:
         assert "UNKNOWN_RANDOM_VAR" not in manager._raw_values
 
     def test_empty_env_values_are_loaded(self, tmp_path, monkeypatch):
-        """Empty environment values are still loaded."""
         config_path = tmp_path / "config"
         config_path.write_text('DEFAULT_MODEL="file-model"\n')
         monkeypatch.setenv("DEFAULT_MODEL", "")
@@ -740,24 +672,19 @@ class TestLoadEnvironment:
 
 
 class TestConfigManagerPathAccessors:
-    """Tests for config path attributes."""
-
     def test_global_config_path_attribute(self, tmp_path):
-        """global_config_path is set from constructor."""
         config_path = tmp_path / "config"
         manager = ConfigManager(config_path)
 
         assert manager.global_config_path == config_path
 
     def test_local_config_path_none_before_load(self, tmp_path):
-        """local_config_path is None before load."""
         config_path = tmp_path / "config"
         manager = ConfigManager(config_path)
 
         assert manager.local_config_path is None
 
     def test_local_config_path_set_after_load(self, tmp_path, monkeypatch):
-        """local_config_path is set after load finds local config."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         local_config = project_dir / ".ingot"
@@ -772,10 +699,7 @@ class TestConfigManagerPathAccessors:
 
 
 class TestConfigManagerIdempotency:
-    """Tests for ConfigManager.load() idempotency."""
-
     def test_load_resets_settings_on_each_call(self, tmp_path):
-        """Each load() call starts with fresh defaults."""
         config_path = tmp_path / "config"
         config_path.write_text('DEFAULT_MODEL="first-model"\n')
 
@@ -791,7 +715,6 @@ class TestConfigManagerIdempotency:
         assert settings2.default_model == "second-model"
 
     def test_load_resets_local_config_path(self, tmp_path, monkeypatch):
-        """Each load() resets local_config_path."""
         # First load with local config
         project1 = tmp_path / "project1"
         project1.mkdir()
@@ -814,7 +737,6 @@ class TestConfigManagerIdempotency:
         assert manager.local_config_path is None
 
     def test_load_clears_raw_values(self, tmp_path):
-        """Each load() clears _raw_values from previous load."""
         config_path = tmp_path / "config"
         config_path.write_text('KEY1="value1"\nKEY2="value2"\n')
 
@@ -831,10 +753,7 @@ class TestConfigManagerIdempotency:
 
 
 class TestConfigManagerSaveScope:
-    """Tests for ConfigManager.save() scope parameter."""
-
     def test_save_to_global_by_default(self, tmp_path):
-        """save() writes to global config by default."""
         global_config = tmp_path / "global-config"
         manager = ConfigManager(global_config)
 
@@ -844,7 +763,6 @@ class TestConfigManagerSaveScope:
         assert 'TEST_KEY="test_value"' in global_config.read_text()
 
     def test_save_to_local_scope(self, tmp_path, monkeypatch):
-        """save() with scope='local' writes to local config."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -860,14 +778,12 @@ class TestConfigManagerSaveScope:
         assert 'LOCAL_KEY="local_value"' in local_config.read_text()
 
     def test_save_invalid_scope_raises(self, tmp_path):
-        """Invalid scope raises ValueError."""
         manager = ConfigManager(tmp_path / "config")
 
         with pytest.raises(ValueError, match="Invalid scope"):
             manager.save("KEY", "value", scope="invalid")
 
     def test_save_warns_when_local_overrides_global(self, tmp_path, monkeypatch):
-        """save() returns warning when local config overrides saved value."""
         project = tmp_path / "project"
         project.mkdir()
         local_config = project / ".ingot"
@@ -886,7 +802,6 @@ class TestConfigManagerSaveScope:
         assert "local" in warning.lower()
 
     def test_save_warns_when_env_overrides(self, tmp_path, monkeypatch):
-        """save() returns warning when env var overrides saved value."""
         monkeypatch.setenv("ENV_KEY", "env-value")
 
         global_config = tmp_path / "global-config"
@@ -900,7 +815,6 @@ class TestConfigManagerSaveScope:
         assert "environment" in warning.lower()
 
     def test_save_no_warning_when_not_overridden(self, tmp_path):
-        """save() returns None when value is not overridden."""
         global_config = tmp_path / "global-config"
         manager = ConfigManager(global_config)
         manager.load()
@@ -910,7 +824,6 @@ class TestConfigManagerSaveScope:
         assert warning is None
 
     def test_save_to_local_creates_file(self, tmp_path, monkeypatch):
-        """save() with scope='local' creates .ingot if it doesn't exist."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -935,12 +848,6 @@ class TestConfigManagerSavePrecedence:
     """
 
     def test_global_save_when_local_overrides(self, tmp_path, monkeypatch):
-        """Global save preserves local override in memory.
-
-        Verifies that when saving to global config while local config
-        overrides the same key, the in-memory settings still reflect
-        the local (higher priority) value.
-        """
         # Setup: global has one value, local has a different value
         global_config = tmp_path / ".ingot-config"
         global_config.write_text('DEFAULT_MODEL="global-model"\n')
@@ -974,12 +881,6 @@ class TestConfigManagerSavePrecedence:
         assert manager.get("DEFAULT_MODEL") == "local-model"
 
     def test_global_save_when_env_overrides(self, tmp_path, monkeypatch):
-        """Global save preserves env override in memory.
-
-        Verifies that when saving to global config while an environment
-        variable overrides the same key, the in-memory settings still
-        reflect the env (highest priority) value.
-        """
         # Setup: set environment variable
         monkeypatch.setenv("DEFAULT_MODEL", "env-model")
 
@@ -1006,12 +907,6 @@ class TestConfigManagerSavePrecedence:
         assert manager.get("DEFAULT_MODEL") == "env-model"
 
     def test_local_save_when_env_overrides(self, tmp_path, monkeypatch):
-        """Local save preserves env override in memory.
-
-        Verifies that when saving to local config while an environment
-        variable overrides the same key, the in-memory settings still
-        reflect the env (highest priority) value.
-        """
         # Setup: set environment variable
         monkeypatch.setenv("DEFAULT_MODEL", "env-model")
 
@@ -1045,11 +940,6 @@ class TestConfigManagerSavePrecedence:
         assert manager.get("DEFAULT_MODEL") == "env-model"
 
     def test_global_save_without_override_updates_memory(self, tmp_path):
-        """Global save updates memory when no higher priority overrides.
-
-        Verifies that when saving to global config without any local
-        or env overrides, the in-memory settings are updated.
-        """
         global_config = tmp_path / ".ingot-config"
         manager = ConfigManager(global_config)
         manager.load()
@@ -1071,11 +961,6 @@ class TestConfigManagerSavePrecedence:
         assert manager.get("DEFAULT_MODEL") == "new-global"
 
     def test_local_save_without_env_updates_memory(self, tmp_path, monkeypatch):
-        """Local save updates memory when no env override exists.
-
-        Verifies that when saving to local config without env override,
-        the in-memory settings are updated.
-        """
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -1106,7 +991,6 @@ class TestConfigManagerSavePrecedence:
         assert manager.get("DEFAULT_MODEL") == "new-local"
 
     def test_local_config_path_correct_after_save(self, tmp_path, monkeypatch):
-        """local_config_path is correctly set after save creates local file."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -1126,10 +1010,7 @@ class TestConfigManagerSavePrecedence:
 
 
 class TestConfigManagerSensitiveValueMasking:
-    """Tests for sensitive value masking in logs."""
-
     def test_is_sensitive_key_detects_token(self):
-        """Keys containing TOKEN are detected as sensitive."""
         from ingot.utils.env_utils import is_sensitive_key
 
         assert is_sensitive_key("JIRA_TOKEN") is True
@@ -1137,7 +1018,6 @@ class TestConfigManagerSensitiveValueMasking:
         assert is_sensitive_key("MY_API_TOKEN") is True
 
     def test_is_sensitive_key_detects_key(self):
-        """Keys containing KEY are detected as sensitive."""
         from ingot.utils.env_utils import is_sensitive_key
 
         assert is_sensitive_key("API_KEY") is True
@@ -1145,28 +1025,24 @@ class TestConfigManagerSensitiveValueMasking:
         assert is_sensitive_key("ENCRYPTION_KEY") is True
 
     def test_is_sensitive_key_detects_secret(self):
-        """Keys containing SECRET are detected as sensitive."""
         from ingot.utils.env_utils import is_sensitive_key
 
         assert is_sensitive_key("CLIENT_SECRET") is True
         assert is_sensitive_key("secret_value") is True
 
     def test_is_sensitive_key_detects_password(self):
-        """Keys containing PASSWORD are detected as sensitive."""
         from ingot.utils.env_utils import is_sensitive_key
 
         assert is_sensitive_key("DB_PASSWORD") is True
         assert is_sensitive_key("password") is True
 
     def test_is_sensitive_key_detects_pat(self):
-        """Keys containing PAT are detected as sensitive."""
         from ingot.utils.env_utils import is_sensitive_key
 
         assert is_sensitive_key("GITHUB_PAT") is True
         assert is_sensitive_key("pat_token") is True
 
     def test_is_sensitive_key_non_sensitive(self):
-        """Non-sensitive keys are not flagged."""
         from ingot.utils.env_utils import is_sensitive_key
 
         assert is_sensitive_key("DEFAULT_MODEL") is False
@@ -1174,7 +1050,6 @@ class TestConfigManagerSensitiveValueMasking:
         assert is_sensitive_key("JIRA_PROJECT") is False
 
     def test_save_does_not_log_sensitive_values(self, tmp_path, monkeypatch, caplog):
-        """Sensitive values are not logged in plaintext."""
         import logging
 
         project = tmp_path / "project"
@@ -1199,35 +1074,27 @@ class TestConfigManagerSensitiveValueMasking:
 
 
 class TestConfigManagerQuoteEscaping:
-    """Tests for quote and special character escaping in config values."""
-
     def test_escape_value_for_storage_handles_quotes(self):
-        """Double quotes are escaped for storage."""
         result = ConfigManager._escape_value_for_storage('value with "quotes"')
         assert result == 'value with \\"quotes\\"'
 
     def test_escape_value_for_storage_handles_backslashes(self):
-        """Backslashes are escaped for storage."""
         result = ConfigManager._escape_value_for_storage("path\\to\\file")
         assert result == "path\\\\to\\\\file"
 
     def test_escape_value_for_storage_handles_both(self):
-        """Both quotes and backslashes are escaped correctly."""
         result = ConfigManager._escape_value_for_storage('say \\"hello\\"')
         assert result == 'say \\\\\\"hello\\\\\\"'
 
     def test_unescape_value_reverses_quotes(self):
-        """Escaped quotes are unescaped correctly."""
         result = ConfigManager._unescape_value('value with \\"quotes\\"')
         assert result == 'value with "quotes"'
 
     def test_unescape_value_reverses_backslashes(self):
-        """Escaped backslashes are unescaped correctly."""
         result = ConfigManager._unescape_value("path\\\\to\\\\file")
         assert result == "path\\to\\file"
 
     def test_round_trip_with_quotes(self, tmp_path, monkeypatch):
-        """Values with quotes survive save/load round-trip."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -1248,7 +1115,6 @@ class TestConfigManagerQuoteEscaping:
         assert manager2.get("TEST_VALUE") == original_value
 
     def test_round_trip_with_backslashes(self, tmp_path, monkeypatch):
-        """Values with backslashes survive save/load round-trip."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -1269,7 +1135,6 @@ class TestConfigManagerQuoteEscaping:
         assert manager2.get("TEST_PATH") == original_value
 
     def test_round_trip_with_special_characters(self, tmp_path, monkeypatch):
-        """Values with various special characters survive save/load round-trip."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -1290,7 +1155,6 @@ class TestConfigManagerQuoteEscaping:
         assert manager2.get("COMPLEX_VALUE") == original_value
 
     def test_single_quoted_values_not_unescaped(self, tmp_path, monkeypatch):
-        """Single-quoted values in config file are not unescaped (literal treatment)."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -1310,7 +1174,6 @@ class TestConfigManagerQuoteEscaping:
         assert manager.get("SINGLE_QUOTED") == "path\\\\with\\\\backslashes"
 
     def test_double_quoted_values_are_unescaped(self, tmp_path, monkeypatch):
-        """Double-quoted values in config file are properly unescaped."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").mkdir()
@@ -1331,10 +1194,7 @@ class TestConfigManagerQuoteEscaping:
 
 
 class TestConfigManagerRepoRootDetection:
-    """Tests for local config creation at repository root."""
-
     def test_save_local_creates_at_repo_root_from_nested_dir(self, tmp_path, monkeypatch):
-        """Local config is created at repo root when saving from nested directory."""
         # Setup: repo with nested directory structure
         repo_root = tmp_path / "my-repo"
         repo_root.mkdir()
@@ -1358,7 +1218,6 @@ class TestConfigManagerRepoRootDetection:
         assert manager.local_config_path == expected_path
 
     def test_save_local_falls_back_to_cwd_without_git(self, tmp_path, monkeypatch):
-        """Local config is created in cwd when no .git directory exists."""
         # Setup: directory without .git
         project = tmp_path / "no-git-project"
         project.mkdir()
@@ -1377,10 +1236,7 @@ class TestConfigManagerRepoRootDetection:
 
 
 class TestFetchConfigEnums:
-    """Tests for FetchStrategy and AgentPlatform enums."""
-
     def test_fetch_strategy_values(self):
-        """FetchStrategy enum has correct values."""
         from ingot.config.fetch_config import FetchStrategy
 
         assert FetchStrategy.AGENT.value == "agent"
@@ -1388,7 +1244,6 @@ class TestFetchConfigEnums:
         assert FetchStrategy.AUTO.value == "auto"
 
     def test_fetch_strategy_from_string(self):
-        """FetchStrategy can be created from string value."""
         from ingot.config.fetch_config import FetchStrategy
 
         assert FetchStrategy("agent") == FetchStrategy.AGENT
@@ -1396,14 +1251,12 @@ class TestFetchConfigEnums:
         assert FetchStrategy("auto") == FetchStrategy.AUTO
 
     def test_fetch_strategy_invalid_value(self):
-        """FetchStrategy raises ValueError for invalid value."""
         from ingot.config.fetch_config import FetchStrategy
 
         with pytest.raises(ValueError):
             FetchStrategy("invalid")
 
     def test_ai_backend_values(self):
-        """AI backend enum has correct values."""
         from ingot.config.fetch_config import AgentPlatform
 
         assert AgentPlatform.AUGGIE.value == "auggie"
@@ -1413,7 +1266,6 @@ class TestFetchConfigEnums:
         assert AgentPlatform.MANUAL.value == "manual"
 
     def test_ai_backend_from_string(self):
-        """AI backend enum can be created from string value."""
         from ingot.config.fetch_config import AgentPlatform
 
         assert AgentPlatform("auggie") == AgentPlatform.AUGGIE
@@ -1421,7 +1273,6 @@ class TestFetchConfigEnums:
         assert AgentPlatform("cursor") == AgentPlatform.CURSOR
 
     def test_ai_backend_invalid_value(self):
-        """AI backend enum raises ValueError for invalid value."""
         from ingot.config.fetch_config import AgentPlatform
 
         with pytest.raises(ValueError):
@@ -1429,10 +1280,7 @@ class TestFetchConfigEnums:
 
 
 class TestFetchConfigDataclasses:
-    """Tests for fetch config dataclasses."""
-
     def test_agent_config_defaults(self):
-        """AgentConfig has correct defaults."""
         from ingot.config.fetch_config import AgentConfig, AgentPlatform
 
         config = AgentConfig()
@@ -1440,7 +1288,6 @@ class TestFetchConfigDataclasses:
         assert config.integrations is None  # None means no explicit config
 
     def test_agent_config_supports_platform(self):
-        """AgentConfig.supports_platform() works correctly."""
         from ingot.config.fetch_config import AgentConfig
 
         config = AgentConfig(integrations={"jira": True, "linear": True, "github": False})
@@ -1451,7 +1298,6 @@ class TestFetchConfigDataclasses:
         assert config.supports_platform("unknown") is False
 
     def test_fetch_strategy_config_defaults(self):
-        """FetchStrategyConfig has correct defaults."""
         from ingot.config.fetch_config import FetchStrategy, FetchStrategyConfig
 
         config = FetchStrategyConfig()
@@ -1459,7 +1305,6 @@ class TestFetchConfigDataclasses:
         assert config.per_platform == {}
 
     def test_fetch_strategy_config_get_strategy_default(self):
-        """FetchStrategyConfig.get_strategy() returns default for unknown platforms."""
         from ingot.config.fetch_config import FetchStrategy, FetchStrategyConfig
 
         config = FetchStrategyConfig(default=FetchStrategy.AGENT)
@@ -1467,7 +1312,6 @@ class TestFetchConfigDataclasses:
         assert config.get_strategy("unknown") == FetchStrategy.AGENT
 
     def test_fetch_strategy_config_get_strategy_override(self):
-        """FetchStrategyConfig.get_strategy() returns per-platform override."""
         from ingot.config.fetch_config import FetchStrategy, FetchStrategyConfig
 
         config = FetchStrategyConfig(
@@ -1482,7 +1326,6 @@ class TestFetchConfigDataclasses:
         assert config.get_strategy("linear") == FetchStrategy.AUTO  # Falls back to default
 
     def test_fetch_performance_config_defaults(self):
-        """FetchPerformanceConfig has correct defaults."""
         from ingot.config.fetch_config import FetchPerformanceConfig
 
         config = FetchPerformanceConfig()
@@ -1492,7 +1335,6 @@ class TestFetchConfigDataclasses:
         assert config.retry_delay_seconds == 1.0
 
     def test_fetch_performance_config_custom_values(self):
-        """FetchPerformanceConfig accepts custom values."""
         from ingot.config.fetch_config import FetchPerformanceConfig
 
         config = FetchPerformanceConfig(
@@ -1508,10 +1350,7 @@ class TestFetchConfigDataclasses:
 
 
 class TestEnvVarExpansion:
-    """Tests for expand_env_vars function from ingot.utils.env_utils."""
-
     def test_expand_env_vars_string(self, monkeypatch):
-        """Expands ${VAR} in strings."""
         from ingot.utils.env_utils import expand_env_vars
 
         monkeypatch.setenv("TEST_VAR", "expanded_value")
@@ -1520,14 +1359,12 @@ class TestEnvVarExpansion:
         assert result == "prefix_expanded_value_suffix"
 
     def test_expand_env_vars_missing_var(self):
-        """Preserves ${VAR} when variable not set (strict=False)."""
         from ingot.utils.env_utils import expand_env_vars
 
         result = expand_env_vars("${MISSING_VAR}", strict=False)
         assert result == "${MISSING_VAR}"
 
     def test_expand_env_vars_dict(self, monkeypatch):
-        """Recursively expands in dicts."""
         from ingot.utils.env_utils import expand_env_vars
 
         monkeypatch.setenv("VAR1", "value1")
@@ -1537,7 +1374,6 @@ class TestEnvVarExpansion:
         assert result == {"key1": "value1", "key2": "value2"}
 
     def test_expand_env_vars_list(self, monkeypatch):
-        """Recursively expands in lists."""
         from ingot.utils.env_utils import expand_env_vars
 
         monkeypatch.setenv("ITEM", "expanded")
@@ -1546,7 +1382,6 @@ class TestEnvVarExpansion:
         assert result == ["expanded", "static"]
 
     def test_expand_env_vars_nested(self, monkeypatch):
-        """Recursively expands in nested structures."""
         from ingot.utils.env_utils import expand_env_vars
 
         monkeypatch.setenv("NESTED", "deep_value")
@@ -1555,7 +1390,6 @@ class TestEnvVarExpansion:
         assert result == {"outer": {"inner": "deep_value"}}
 
     def test_expand_env_vars_non_string(self):
-        """Returns non-string/dict/list values unchanged."""
         from ingot.utils.env_utils import expand_env_vars
 
         assert expand_env_vars(42) == 42
@@ -1564,10 +1398,7 @@ class TestEnvVarExpansion:
 
 
 class TestConfigManagerGetAgentConfig:
-    """Tests for get_agent_config method."""
-
     def test_get_agent_config_defaults(self, tmp_path):
-        """Returns defaults when no config set."""
         from ingot.config.fetch_config import AgentPlatform
 
         config_path = tmp_path / "config"
@@ -1580,7 +1411,6 @@ class TestConfigManagerGetAgentConfig:
         assert config.integrations is None  # None means no explicit config
 
     def test_get_agent_config_custom_platform(self, tmp_path):
-        """Parses AI_BACKEND from config."""
         from ingot.config.fetch_config import AgentPlatform
 
         config_path = tmp_path / "config"
@@ -1592,7 +1422,6 @@ class TestConfigManagerGetAgentConfig:
         assert config.platform == AgentPlatform.CURSOR
 
     def test_get_agent_config_invalid_platform_raises(self, tmp_path):
-        """Raises ConfigValidationError for invalid platform value."""
         from ingot.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
@@ -1609,7 +1438,6 @@ class TestConfigManagerGetAgentConfig:
         assert "cursor" in str(exc_info.value).lower()
 
     def test_get_agent_config_integrations(self, tmp_path):
-        """Parses AGENT_INTEGRATION_* keys."""
         config_path = tmp_path / "config"
         config_path.write_text(
             """AGENT_INTEGRATION_JIRA=true
@@ -1629,10 +1457,7 @@ AGENT_INTEGRATION_AZURE_DEVOPS=1
 
 
 class TestConfigManagerGetFetchStrategyConfig:
-    """Tests for get_fetch_strategy_config method."""
-
     def test_get_fetch_strategy_config_defaults(self, tmp_path):
-        """Returns defaults when no config set."""
         from ingot.config.fetch_config import FetchStrategy
 
         config_path = tmp_path / "config"
@@ -1645,7 +1470,6 @@ class TestConfigManagerGetFetchStrategyConfig:
         assert config.per_platform == {}
 
     def test_get_fetch_strategy_config_custom_default(self, tmp_path):
-        """Parses FETCH_STRATEGY_DEFAULT from config."""
         from ingot.config.fetch_config import FetchStrategy
 
         config_path = tmp_path / "config"
@@ -1657,7 +1481,6 @@ class TestConfigManagerGetFetchStrategyConfig:
         assert config.default == FetchStrategy.AGENT
 
     def test_get_fetch_strategy_config_per_platform(self, tmp_path):
-        """Parses FETCH_STRATEGY_* keys for per-platform overrides."""
         from ingot.config.fetch_config import FetchStrategy
 
         config_path = tmp_path / "config"
@@ -1678,7 +1501,6 @@ FETCH_STRATEGY_JIRA=agent
         assert config.per_platform["jira"] == FetchStrategy.AGENT
 
     def test_get_fetch_strategy_config_invalid_override_raises(self, tmp_path):
-        """Invalid per-platform override value raises ConfigValidationError."""
         from ingot.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
@@ -1700,7 +1522,6 @@ FETCH_STRATEGY_INVALID=not_a_strategy
         assert "FETCH_STRATEGY_INVALID" in str(exc_info.value)
 
     def test_get_fetch_strategy_config_invalid_default_raises(self, tmp_path):
-        """Invalid FETCH_STRATEGY_DEFAULT value raises ConfigValidationError."""
         from ingot.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
@@ -1720,10 +1541,7 @@ FETCH_STRATEGY_INVALID=not_a_strategy
 
 
 class TestConfigManagerGetFetchPerformanceConfig:
-    """Tests for get_fetch_performance_config method."""
-
     def test_get_fetch_performance_config_defaults(self, tmp_path):
-        """Returns defaults when no config set."""
         config_path = tmp_path / "config"
         config_path.write_text("")
         manager = ConfigManager(config_path)
@@ -1736,7 +1554,6 @@ class TestConfigManagerGetFetchPerformanceConfig:
         assert config.retry_delay_seconds == 1.0
 
     def test_get_fetch_performance_config_custom_values(self, tmp_path):
-        """Parses performance settings from config."""
         config_path = tmp_path / "config"
         config_path.write_text(
             """FETCH_CACHE_DURATION_HOURS=48
@@ -1755,7 +1572,6 @@ FETCH_RETRY_DELAY_SECONDS=2.5
         assert config.retry_delay_seconds == 2.5
 
     def test_get_fetch_performance_config_invalid_values_use_defaults(self, tmp_path):
-        """Invalid values are ignored, keeping defaults."""
         config_path = tmp_path / "config"
         config_path.write_text(
             """FETCH_CACHE_DURATION_HOURS=not_a_number
@@ -1770,7 +1586,6 @@ FETCH_TIMEOUT_SECONDS=60
         assert config.timeout_seconds == 60  # Valid value used
 
     def test_get_fetch_performance_config_negative_values_use_defaults(self, tmp_path):
-        """Negative values are rejected, keeping defaults."""
         config_path = tmp_path / "config"
         config_path.write_text(
             """FETCH_CACHE_DURATION_HOURS=-1
@@ -1789,7 +1604,6 @@ FETCH_RETRY_DELAY_SECONDS=-2.5
         assert config.retry_delay_seconds == 1.0  # Default kept (negative rejected)
 
     def test_get_fetch_performance_config_zero_values(self, tmp_path):
-        """Zero is valid for some fields but not timeout."""
         config_path = tmp_path / "config"
         config_path.write_text(
             """FETCH_CACHE_DURATION_HOURS=0
@@ -1809,10 +1623,7 @@ FETCH_RETRY_DELAY_SECONDS=0
 
 
 class TestConfigManagerGetFallbackCredentials:
-    """Tests for get_fallback_credentials method."""
-
     def test_get_fallback_credentials_none_when_missing(self, tmp_path):
-        """Returns None when no credentials configured."""
         config_path = tmp_path / "config"
         config_path.write_text("")
         manager = ConfigManager(config_path)
@@ -1822,7 +1633,6 @@ class TestConfigManagerGetFallbackCredentials:
         assert creds is None
 
     def test_get_fallback_credentials_returns_dict(self, tmp_path):
-        """Returns dict of credentials for platform."""
         config_path = tmp_path / "config"
         config_path.write_text(
             """FALLBACK_AZURE_DEVOPS_ORGANIZATION=myorg
@@ -1840,7 +1650,6 @@ FALLBACK_AZURE_DEVOPS_PAT=secret123
         assert creds["pat"] == "secret123"
 
     def test_get_fallback_credentials_case_insensitive_platform(self, tmp_path):
-        """Platform name is case insensitive."""
         config_path = tmp_path / "config"
         config_path.write_text("FALLBACK_JIRA_TOKEN=token123\n")
         manager = ConfigManager(config_path)
@@ -1851,7 +1660,6 @@ FALLBACK_AZURE_DEVOPS_PAT=secret123
         assert creds["token"] == "token123"
 
     def test_get_fallback_credentials_expands_env_vars(self, tmp_path, monkeypatch):
-        """Expands ${VAR} in credential values."""
         monkeypatch.setenv("SECRET_PAT", "actual_secret_value")
         config_path = tmp_path / "config"
         config_path.write_text("FALLBACK_AZURE_DEVOPS_PAT=${SECRET_PAT}\n")
@@ -1863,7 +1671,6 @@ FALLBACK_AZURE_DEVOPS_PAT=secret123
         assert creds["pat"] == "actual_secret_value"
 
     def test_get_fallback_credentials_preserves_unset_env_vars(self, tmp_path):
-        """Preserves ${VAR} when env var not set."""
         config_path = tmp_path / "config"
         config_path.write_text("FALLBACK_TEST_TOKEN=${UNSET_VAR}\n")
         manager = ConfigManager(config_path)
@@ -1875,10 +1682,7 @@ FALLBACK_AZURE_DEVOPS_PAT=secret123
 
 
 class TestFetchConfigEndToEnd:
-    """End-to-end tests for fetch configuration loading."""
-
     def test_full_fetch_config_from_file(self, tmp_path, monkeypatch):
-        """Loads complete fetch configuration from file."""
         from ingot.config.fetch_config import AgentPlatform, FetchStrategy
 
         monkeypatch.setenv("MY_PAT", "secret_pat_value")
@@ -1933,10 +1737,7 @@ FALLBACK_AZURE_DEVOPS_PAT=${MY_PAT}
 
 
 class TestEnvVarExpansionStrict:
-    """Tests for strict mode environment variable expansion."""
-
     def test_expand_env_vars_strict_mode_raises_on_missing(self, monkeypatch):
-        """Strict mode raises EnvVarExpansionError for missing env vars."""
         from ingot.utils.env_utils import EnvVarExpansionError, expand_env_vars_strict
 
         with pytest.raises(EnvVarExpansionError) as exc_info:
@@ -1947,7 +1748,6 @@ class TestEnvVarExpansionStrict:
         assert "test_field" in str(exc_info.value)
 
     def test_expand_env_vars_strict_mode_succeeds_when_set(self, monkeypatch):
-        """Strict mode expands when env var is set."""
         from ingot.utils.env_utils import expand_env_vars_strict
 
         monkeypatch.setenv("MY_SECRET", "secret_value")
@@ -1956,7 +1756,6 @@ class TestEnvVarExpansionStrict:
         assert result == "token=secret_value"
 
     def test_expand_env_vars_nested_dict(self, monkeypatch):
-        """Expands env vars in nested dict structures."""
         from ingot.utils.env_utils import expand_env_vars
 
         monkeypatch.setenv("NESTED_VAR", "nested_value")
@@ -1966,7 +1765,6 @@ class TestEnvVarExpansionStrict:
         assert result["level1"]["level2"]["value"] == "nested_value"
 
     def test_expand_env_vars_nested_list(self, monkeypatch):
-        """Expands env vars in list structures."""
         from ingot.utils.env_utils import expand_env_vars
 
         monkeypatch.setenv("LIST_VAR", "list_value")
@@ -1977,10 +1775,7 @@ class TestEnvVarExpansionStrict:
 
 
 class TestValidationFailures:
-    """Tests for configuration validation failures."""
-
     def test_validate_strategy_agent_without_integration(self, tmp_path):
-        """Agent strategy fails validation when agent lacks integration."""
         from ingot.config.fetch_config import (
             AgentConfig,
             AgentPlatform,
@@ -2007,7 +1802,6 @@ class TestValidationFailures:
         assert "jira" in str(exc_info.value).lower()
 
     def test_validate_strategy_direct_without_credentials(self, tmp_path):
-        """Direct strategy fails validation when no credentials exist."""
         from ingot.config.fetch_config import (
             AgentConfig,
             AgentPlatform,
@@ -2031,7 +1825,6 @@ class TestValidationFailures:
         assert "credentials" in str(exc_info.value).lower()
 
     def test_validate_strategy_auto_without_either(self, tmp_path):
-        """Auto strategy fails validation when neither integration nor creds exist."""
         from ingot.config.fetch_config import (
             AgentConfig,
             AgentPlatform,
@@ -2055,7 +1848,6 @@ class TestValidationFailures:
         assert "trello" in str(exc_info.value).lower()
 
     def test_validate_credentials_missing_required_fields(self):
-        """Credential validation fails when required fields are missing."""
         from ingot.config.fetch_config import ConfigValidationError, validate_credentials
 
         # Jira requires url, email, token
@@ -2067,7 +1859,6 @@ class TestValidationFailures:
         assert "email" in str(exc_info.value) or "token" in str(exc_info.value)
 
     def test_validate_credentials_unexpanded_env_var(self):
-        """Credential validation warns about unexpanded env vars."""
         from ingot.config.fetch_config import validate_credentials
 
         creds = {
@@ -2081,10 +1872,7 @@ class TestValidationFailures:
 
 
 class TestPerformanceGuardrails:
-    """Tests for performance config upper bounds."""
-
     def test_performance_config_clamps_to_max(self):
-        """Performance config clamps values to upper bounds."""
         from ingot.config.fetch_config import (
             MAX_CACHE_DURATION_HOURS,
             MAX_RETRIES,
@@ -2106,7 +1894,6 @@ class TestPerformanceGuardrails:
         assert config.retry_delay_seconds == MAX_RETRY_DELAY_SECONDS
 
     def test_performance_config_accepts_valid_values(self):
-        """Performance config accepts values within bounds."""
         from ingot.config.fetch_config import FetchPerformanceConfig
 
         config = FetchPerformanceConfig(
@@ -2122,7 +1909,6 @@ class TestPerformanceGuardrails:
         assert config.retry_delay_seconds == 2.5
 
     def test_performance_config_clamps_to_lower_bounds(self):
-        """Performance config clamps negative/zero values to lower bounds."""
         from ingot.config.fetch_config import FetchPerformanceConfig
 
         config = FetchPerformanceConfig(
@@ -2138,7 +1924,6 @@ class TestPerformanceGuardrails:
         assert config.retry_delay_seconds == 0.0
 
     def test_performance_config_zero_timeout_clamps_to_one(self):
-        """Zero timeout is clamped to 1 (must be positive for HTTP)."""
         from ingot.config.fetch_config import FetchPerformanceConfig
 
         config = FetchPerformanceConfig(timeout_seconds=-100)
@@ -2149,7 +1934,6 @@ class TestNoSecretLeakage:
     """Tests to ensure secrets are never logged."""
 
     def test_sensitive_key_detection(self):
-        """Sensitive key patterns are correctly detected."""
         from ingot.utils.env_utils import is_sensitive_key
 
         assert is_sensitive_key("JIRA_TOKEN") is True
@@ -2162,7 +1946,6 @@ class TestNoSecretLeakage:
         assert is_sensitive_key("AI_BACKEND") is False
 
     def test_fallback_credentials_not_in_settings(self, tmp_path):
-        """Fallback credentials are not exposed in settings attributes."""
         config_path = tmp_path / "config"
         config_path.write_text(
             """FALLBACK_JIRA_TOKEN=super_secret
@@ -2183,10 +1966,7 @@ FALLBACK_AZURE_DEVOPS_PAT=another_secret
 
 
 class TestPlatformOverrideValidation:
-    """Tests for per-platform override validation."""
-
     def test_unknown_platform_warning(self):
-        """Unknown platforms in per_platform generate warnings."""
         from ingot.config.fetch_config import FetchStrategy, FetchStrategyConfig
 
         config = FetchStrategyConfig(
@@ -2202,7 +1982,6 @@ class TestPlatformOverrideValidation:
         assert "unknown_platform" in warnings[0]
 
     def test_unknown_platform_strict_raises(self):
-        """Unknown platforms in strict mode raise ConfigValidationError."""
         from ingot.config.fetch_config import (
             ConfigValidationError,
             FetchStrategy,
@@ -2219,10 +1998,7 @@ class TestPlatformOverrideValidation:
 
 
 class TestValidateFetchConfig:
-    """Tests for ConfigManager.validate_fetch_config method."""
-
     def test_validate_fetch_config_with_working_setup(self, tmp_path, monkeypatch):
-        """Valid configuration passes full validation."""
         monkeypatch.setenv("JIRA_TOKEN", "test_token")
 
         config_path = tmp_path / "config"
@@ -2244,7 +2020,6 @@ FALLBACK_JIRA_TOKEN=${JIRA_TOKEN}
         assert not any("jira" in e.lower() and "missing" in e.lower() for e in errors)
 
     def test_validate_fetch_config_collects_all_errors(self, tmp_path):
-        """Non-strict mode collects all validation errors."""
         config_path = tmp_path / "config"
         # Configure active platforms with agent strategy but no integrations
         # This triggers validation errors for those platforms
@@ -2263,7 +2038,6 @@ FETCH_STRATEGY_LINEAR=agent
         assert len(errors) > 0
 
     def test_validate_fetch_config_strict_raises_on_invalid_ai_backend(self, tmp_path):
-        """strict=True raises ConfigValidationError for invalid AI backend."""
         from ingot.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
@@ -2275,7 +2049,6 @@ FETCH_STRATEGY_LINEAR=agent
             manager.validate_fetch_config(strict=True)
 
     def test_validate_fetch_config_nonstrict_collects_invalid_ai_backend(self, tmp_path):
-        """strict=False collects error for invalid AI backend without raising."""
         config_path = tmp_path / "config"
         config_path.write_text("AI_BACKEND=invalid_platform\n")
         manager = ConfigManager(config_path)
@@ -2289,7 +2062,6 @@ FETCH_STRATEGY_LINEAR=agent
         assert any("invalid ai backend" in e.lower() for e in errors)
 
     def test_validate_fetch_config_strict_raises_on_invalid_strategy(self, tmp_path):
-        """strict=True raises ConfigValidationError for invalid fetch strategy."""
         from ingot.config.fetch_config import ConfigValidationError
 
         config_path = tmp_path / "config"
@@ -2301,7 +2073,6 @@ FETCH_STRATEGY_LINEAR=agent
             manager.validate_fetch_config(strict=True)
 
     def test_validate_fetch_config_nonstrict_collects_invalid_strategy(self, tmp_path):
-        """strict=False collects error for invalid fetch strategy without raising."""
         config_path = tmp_path / "config"
         config_path.write_text("FETCH_STRATEGY_DEFAULT=invalid_strategy\n")
         manager = ConfigManager(config_path)
@@ -2315,7 +2086,6 @@ FETCH_STRATEGY_LINEAR=agent
         assert any("invalid fetch strategy" in e.lower() for e in errors)
 
     def test_validate_fetch_config_nonstrict_collects_multiple_errors(self, tmp_path):
-        """strict=False collects all errors without raising."""
         config_path = tmp_path / "config"
         # Multiple invalid values
         config_path.write_text(
@@ -2338,10 +2108,7 @@ FETCH_STRATEGY_JIRA=also_invalid
 
 
 class TestAzureDevOpsCredentialAlias:
-    """Tests for Azure DevOps credential key aliasing."""
-
     def test_org_alias_mapped_to_organization(self, tmp_path):
-        """The 'org' credential key is mapped to 'organization' for Azure DevOps."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_AZURE_DEVOPS_ORG=my-org
@@ -2362,7 +2129,6 @@ FALLBACK_AZURE_DEVOPS_PAT=secret
         assert creds["pat"] == "secret"
 
     def test_token_alias_mapped_to_pat(self, tmp_path):
-        """The 'token' credential key is mapped to 'pat' for Azure DevOps."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_AZURE_DEVOPS_ORGANIZATION=my-org
@@ -2381,7 +2147,6 @@ FALLBACK_AZURE_DEVOPS_TOKEN=secret-token
         assert "token" not in creds
 
     def test_organization_key_works_directly(self, tmp_path):
-        """The 'organization' key works directly without aliasing."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_AZURE_DEVOPS_ORGANIZATION=direct-org
@@ -2397,7 +2162,6 @@ FALLBACK_AZURE_DEVOPS_PAT=secret
         assert creds["pat"] == "secret"
 
     def test_jira_base_url_alias_mapped_to_url(self, tmp_path):
-        """The 'base_url' credential key is mapped to 'url' for Jira."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_JIRA_BASE_URL=https://jira.example.com
@@ -2417,7 +2181,6 @@ FALLBACK_JIRA_TOKEN=secret
         assert creds["token"] == "secret"
 
     def test_jira_url_key_works_directly(self, tmp_path):
-        """The 'url' key works directly without aliasing for Jira."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_JIRA_URL=https://jira.example.com
@@ -2432,7 +2195,6 @@ FALLBACK_JIRA_TOKEN=secret
         assert creds["token"] == "secret"
 
     def test_trello_api_token_alias_mapped_to_token(self, tmp_path):
-        """The 'api_token' credential key is mapped to 'token' for Trello."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_TRELLO_API_KEY=my-api-key
@@ -2451,7 +2213,6 @@ FALLBACK_TRELLO_API_TOKEN=my-token
         assert creds["api_key"] == "my-api-key"
 
     def test_trello_token_key_works_directly(self, tmp_path):
-        """The 'token' key works directly without aliasing for Trello."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_TRELLO_API_KEY=my-api-key
@@ -2467,10 +2228,7 @@ FALLBACK_TRELLO_TOKEN=my-token
 
 
 class TestScopedPlatformValidation:
-    """Tests for scoped platform validation."""
-
     def test_get_active_platforms_from_per_platform(self, tmp_path):
-        """Active platforms are detected from per_platform overrides."""
         config_file = tmp_path / "config"
         config_file.write_text('FETCH_STRATEGY_AZURE_DEVOPS="direct"\n')
         manager = ConfigManager(config_file)
@@ -2480,7 +2238,6 @@ class TestScopedPlatformValidation:
         assert "azure_devops" in active
 
     def test_get_active_platforms_from_integrations(self, tmp_path):
-        """Active platforms are detected from agent integrations."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """AGENT_INTEGRATION_JIRA=true
@@ -2495,7 +2252,6 @@ AGENT_INTEGRATION_LINEAR=true
         assert "linear" in active
 
     def test_get_active_platforms_from_fallback_credentials(self, tmp_path):
-        """Active platforms are detected from fallback credentials."""
         config_file = tmp_path / "config"
         config_file.write_text(
             """FALLBACK_GITHUB_TOKEN=secret
@@ -2510,7 +2266,6 @@ FALLBACK_AZURE_DEVOPS_ORG=my-org
         assert "azure_devops" in active
 
     def test_validate_only_active_platforms(self, tmp_path):
-        """Validation only checks active platforms, not all known platforms."""
         config_file = tmp_path / "config"
         # Configure only Jira with agent strategy (requires integration)
         config_file.write_text(
@@ -2530,7 +2285,6 @@ FETCH_STRATEGY_JIRA=agent
         assert "github" not in error_text.lower()
 
     def test_validate_unconfigured_platforms_not_checked(self, tmp_path):
-        """Platforms without any configuration are not validated."""
         config_file = tmp_path / "config"
         # Empty config - no platforms active
         config_file.write_text("")
@@ -2543,10 +2297,7 @@ FETCH_STRATEGY_JIRA=agent
 
 
 class TestFailFastMissingEnvVars:
-    """Tests for fail-fast behavior when credentials have missing env vars."""
-
     def test_direct_strategy_strict_env_expansion(self, tmp_path, monkeypatch):
-        """DIRECT strategy validates env vars strictly for credentials."""
         # Ensure the env var is NOT set
         monkeypatch.delenv("MISSING_TOKEN", raising=False)
 
@@ -2566,7 +2317,6 @@ FALLBACK_AZURE_DEVOPS_PAT=${MISSING_TOKEN}
         assert "missing" in error_text or "environment variable" in error_text
 
     def test_direct_strategy_with_valid_env_vars(self, tmp_path, monkeypatch):
-        """DIRECT strategy passes when env vars are properly set."""
         monkeypatch.setenv("AZURE_PAT", "valid_token")
 
         config_file = tmp_path / "config"
@@ -2586,7 +2336,6 @@ FALLBACK_AZURE_DEVOPS_PAT=${AZURE_PAT}
         assert "environment variable" not in error_text
 
     def test_auto_strategy_without_agent_strict_env_expansion(self, tmp_path, monkeypatch):
-        """AUTO strategy without agent support validates env vars strictly."""
         # Ensure the env var is NOT set
         monkeypatch.delenv("TRELLO_KEY", raising=False)
 
@@ -2608,7 +2357,6 @@ FALLBACK_TRELLO_TOKEN=some_token
         assert "missing" in error_text or "trello_key" in error_text
 
     def test_auto_strategy_with_agent_non_strict_env_expansion(self, tmp_path, monkeypatch):
-        """AUTO strategy with agent support allows unexpanded env vars (agent is fallback)."""
         # Ensure the env var is NOT set
         monkeypatch.delenv("JIRA_TOKEN", raising=False)
 
@@ -2633,7 +2381,6 @@ FALLBACK_JIRA_TOKEN=${JIRA_TOKEN}
         assert "environment variable" not in error_text or "unexpanded" in error_text
 
     def test_agent_strategy_ignores_credential_env_vars(self, tmp_path, monkeypatch):
-        """AGENT strategy doesn't require env var expansion for credentials."""
         # Ensure the env var is NOT set
         monkeypatch.delenv("MISSING_TOKEN", raising=False)
 

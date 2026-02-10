@@ -33,14 +33,7 @@ def parallel_tui():
 
 
 class TestParallelTuiStress:
-    """Stress tests for parallel TUI thread safety."""
-
     def test_concurrent_post_event_with_drain(self, parallel_tui, tmp_path):
-        """Multiple threads posting events concurrently while main thread drains.
-
-        Verifies that no events are lost and all events are processed correctly
-        when 8 worker threads post events simultaneously.
-        """
         num_workers = 8
         lines_per_worker = 50
         task_names = [f"Task {i}" for i in range(num_workers)]
@@ -101,11 +94,6 @@ class TestParallelTuiStress:
                 record.log_buffer.close()
 
     def test_event_ordering_invariants(self, parallel_tui, tmp_path):
-        """Verify TASK_STARTED arrives before TASK_OUTPUT and TASK_FINISHED.
-
-        Posts events from 6 workers and verifies that event processing
-        maintains the correct ordering per task.
-        """
         num_workers = 6
         task_names = [f"Task {i}" for i in range(num_workers)]
         parallel_tui.initialize_records(task_names)
@@ -168,10 +156,6 @@ class TestParallelTuiStress:
             assert record.status == TaskRunStatus.SUCCESS
 
     def test_log_buffer_integrity_under_high_concurrency(self, parallel_tui, tmp_path):
-        """Verify log buffer files contain correct content under concurrent writes.
-
-        Each worker writes unique lines; we verify file content matches expectations.
-        """
         num_workers = 8
         lines_per_worker = 100
         task_names = [f"Task {i}" for i in range(num_workers)]
@@ -227,7 +211,6 @@ class TestParallelTuiStress:
                 ), f"Missing {expected_marker} in task {i} log file"
 
     def test_parallel_task_completion_tracking(self, parallel_tui, tmp_path):
-        """Verify _running_task_indices is correctly maintained under concurrent completion."""
         num_workers = 10
         task_names = [f"Task {i}" for i in range(num_workers)]
         parallel_tui.initialize_records(task_names)
@@ -274,11 +257,6 @@ class TestParallelTuiStress:
                 assert record.status == TaskRunStatus.FAILED
 
     def test_no_events_lost_under_contention(self, parallel_tui, tmp_path):
-        """Verify exact event count: no duplicates, no drops.
-
-        Posts a known number of events from multiple threads and verifies
-        that exactly that many events are processed.
-        """
         num_workers = 5
         events_per_worker = 200
         task_names = [f"Task {i}" for i in range(num_workers)]

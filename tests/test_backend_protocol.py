@@ -8,70 +8,50 @@ from ingot.integrations.backends.base import AIBackend
 
 
 class TestAIBackendProtocol:
-    """Tests for AIBackend protocol definition."""
-
     def test_aibackend_is_protocol(self):
-        """AIBackend is a Protocol class."""
         assert issubclass(AIBackend, Protocol)
 
     def test_aibackend_is_runtime_checkable(self):
-        """AIBackend can be used with isinstance checks."""
         # The @runtime_checkable decorator enables isinstance
         assert hasattr(AIBackend, "__protocol_attrs__") or hasattr(
             AIBackend, "_is_runtime_protocol"
         )
 
     def test_protocol_has_name_property(self):
-        """Protocol defines name property."""
         assert "name" in dir(AIBackend)
 
     def test_protocol_has_platform_property(self):
-        """Protocol defines platform property."""
         assert "platform" in dir(AIBackend)
 
     def test_protocol_has_supports_parallel_property(self):
-        """Protocol defines supports_parallel property."""
         assert "supports_parallel" in dir(AIBackend)
 
     def test_protocol_has_run_with_callback_method(self):
-        """Protocol defines run_with_callback method."""
         assert hasattr(AIBackend, "run_with_callback")
         assert callable(getattr(AIBackend, "run_with_callback", None))
 
     def test_protocol_has_run_print_with_output_method(self):
-        """Protocol defines run_print_with_output method."""
         assert hasattr(AIBackend, "run_print_with_output")
 
     def test_protocol_has_run_print_quiet_method(self):
-        """Protocol defines run_print_quiet method."""
         assert hasattr(AIBackend, "run_print_quiet")
 
     def test_protocol_has_run_streaming_method(self):
-        """Protocol defines run_streaming method."""
         assert hasattr(AIBackend, "run_streaming")
 
     def test_protocol_has_check_installed_method(self):
-        """Protocol defines check_installed method."""
         assert hasattr(AIBackend, "check_installed")
 
     def test_protocol_has_detect_rate_limit_method(self):
-        """Protocol defines detect_rate_limit method."""
         assert hasattr(AIBackend, "detect_rate_limit")
 
     def test_protocol_has_supports_parallel_execution_method(self):
-        """Protocol defines supports_parallel_execution method."""
         assert hasattr(AIBackend, "supports_parallel_execution")
 
     def test_protocol_has_close_method(self):
-        """Protocol defines close method."""
         assert hasattr(AIBackend, "close")
 
     def test_protocol_does_not_have_run_print(self):
-        """Protocol does NOT define run_print (interactive mode).
-
-        Per Final Decision #4, AIBackend does not include run_print().
-        INGOT owns interactive UX; backends operate in non-interactive mode.
-        """
         # Verify run_print is not defined as a method in the protocol.
         # Check __protocol_attrs__ which contains the protocol's defined members.
         protocol_attrs = getattr(AIBackend, "__protocol_attrs__", set())
@@ -82,11 +62,7 @@ class TestAIBackendProtocol:
 
 
 class TestAIBackendCompliance:
-    """Tests verifying protocol compliance detection."""
-
     def test_fake_backend_satisfies_protocol(self):
-        """A properly implemented fake backend satisfies AIBackend."""
-
         class FakeBackend:
             @property
             def name(self) -> str:
@@ -164,8 +140,6 @@ class TestAIBackendCompliance:
         assert isinstance(fake, AIBackend)
 
     def test_incomplete_backend_does_not_satisfy_protocol(self):
-        """An incomplete implementation does not satisfy AIBackend."""
-
         class IncompleteBackend:
             @property
             def name(self) -> str:
@@ -179,16 +153,12 @@ class TestAIBackendCompliance:
 
 
 class TestAIBackendImports:
-    """Tests for module imports."""
-
     def test_aibackend_importable_from_package(self):
-        """AIBackend can be imported from backends package."""
         from ingot.integrations.backends import AIBackend
 
         assert AIBackend is not None
 
     def test_all_exports_available(self):
-        """All expected exports are available from backends package."""
         from ingot.integrations.backends import (
             AIBackend,
             BackendRateLimitError,

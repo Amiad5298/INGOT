@@ -310,8 +310,8 @@ pip install ingot
 
 ```bash
 # Clone the repository
-git clone https://github.com/Amiad5298/Spec.git
-cd Spec
+git clone https://github.com/Amiad5298/AI-Platform.git
+cd AI-Platform
 
 # Create and activate virtual environment
 python -m venv .venv
@@ -617,7 +617,7 @@ ingot_content_hash: abc123def456
 | `description` | Human-readable description shown in agent listings |
 | `model` | AI model for this agent (e.g., `claude-sonnet-4-5`, `claude-opus-4`) |
 | `color` | Terminal color for agent output (blue, green, purple, etc.) |
-| `spec_version` | INGOT version that created/updated this agent |
+| `ingot_version` | INGOT version that created/updated this agent |
 | `ingot_content_hash` | Hash for detecting template updates (auto-managed) |
 
 ### Version Management
@@ -677,8 +677,8 @@ ingot/
 
 ```bash
 # Clone the repository
-git clone https://github.com/Amiad5298/Spec.git
-cd Spec
+git clone https://github.com/Amiad5298/AI-Platform.git
+cd AI-Platform
 
 # Create virtual environment
 python -m venv .venv

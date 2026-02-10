@@ -15,16 +15,7 @@ from ingot.utils.logging import log_command
 
 @dataclass
 class DiffResult:
-    """Result of a git diff operation.
-
-    Attributes:
-        diff: The diff content (empty string if no changes or error)
-        has_error: True if git command failed
-        error_message: Description of the error if has_error is True
-        changed_files: List of changed file paths (from git diff --name-status)
-        diffstat: Summary of changes (insertions/deletions)
-        untracked_files: List of untracked file paths
-    """
+    """Result of a git diff operation."""
 
     diff: str = ""
     has_error: bool = False
@@ -68,11 +59,6 @@ def _parse_name_status_line(line: str) -> str:
     - Rename:  "R100\told\tnew"   -> "new" (destination path)
     - Copy:    "C100\tsrc\tcopy"  -> "copy" (destination path)
 
-    Args:
-        line: A single line from git diff --name-status output.
-
-    Returns:
-        The filepath (for renames/copies, returns the new/destination path).
     """
     parts = line.split("\t")
     # For renames/copies, git outputs: status\told_path\tnew_path
@@ -86,9 +72,6 @@ def find_repo_root() -> Path | None:
     Traverses from current working directory upward until:
     - A .git directory is found (returns that directory)
     - The filesystem root is reached (returns None)
-
-    Returns:
-        Path to repository root, or None if not in a repository
     """
     current = Path.cwd()
     while True:
@@ -104,11 +87,7 @@ def find_repo_root() -> Path | None:
 
 
 def is_git_repo() -> bool:
-    """Check if current directory is a git repository.
-
-    Returns:
-        True if in a git repository
-    """
+    """Check if current directory is a git repository."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
@@ -122,11 +101,7 @@ def is_git_repo() -> bool:
 
 
 def is_dirty() -> bool:
-    """Check if working directory has uncommitted changes.
-
-    Returns:
-        True if there are uncommitted changes (staged or unstaged)
-    """
+    """Check if working directory has uncommitted changes (staged or unstaged)."""
     try:
         # Check unstaged changes
         result1 = subprocess.run(
@@ -144,11 +119,7 @@ def is_dirty() -> bool:
 
 
 def has_untracked_files() -> bool:
-    """Check if there are any untracked files (excluding ignored).
-
-    Returns:
-        True if there are untracked files
-    """
+    """Check if there are any untracked files (excluding ignored)."""
     try:
         result = subprocess.run(
             ["git", "ls-files", "--others", "--exclude-standard"],
@@ -165,18 +136,12 @@ def has_any_changes() -> bool:
     """Check if working directory has any changes (staged, unstaged, or untracked).
 
     This is a comprehensive check that combines is_dirty() and has_untracked_files().
-
-    Returns:
-        True if there are any changes (staged, unstaged, or untracked files)
     """
     return is_dirty() or has_untracked_files()
 
 
 def get_current_branch() -> str:
     """Get current branch name.
-
-    Returns:
-        Current branch name
 
     Raises:
         subprocess.CalledProcessError: If git command fails
@@ -194,9 +159,6 @@ def get_current_branch() -> str:
 def get_current_commit() -> str:
     """Get current commit hash.
 
-    Returns:
-        Full commit hash
-
     Raises:
         subprocess.CalledProcessError: If git command fails
     """
@@ -211,11 +173,7 @@ def get_current_commit() -> str:
 
 
 def get_status_short() -> str:
-    """Get short git status output.
-
-    Returns:
-        Short status output
-    """
+    """Get short git status output."""
     result = subprocess.run(
         ["git", "status", "--short"],
         capture_output=True,
@@ -226,14 +184,7 @@ def get_status_short() -> str:
 
 
 def branch_exists(branch_name: str) -> bool:
-    """Check if a branch exists.
-
-    Args:
-        branch_name: Name of the branch to check
-
-    Returns:
-        True if branch exists
-    """
+    """Check if a branch exists."""
     result = subprocess.run(
         ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"],
         capture_output=True,
@@ -242,14 +193,7 @@ def branch_exists(branch_name: str) -> bool:
 
 
 def create_branch(branch_name: str) -> bool:
-    """Create and checkout a new branch.
-
-    Args:
-        branch_name: Name for the new branch
-
-    Returns:
-        True if successful
-    """
+    """Create and checkout a new branch."""
     try:
         result = subprocess.run(
             ["git", "checkout", "-b", branch_name],
@@ -267,14 +211,7 @@ def create_branch(branch_name: str) -> bool:
 
 
 def checkout_branch(branch_name: str) -> bool:
-    """Switch to an existing branch.
-
-    Args:
-        branch_name: Name of the branch to checkout
-
-    Returns:
-        True if successful
-    """
+    """Switch to an existing branch."""
     try:
         result = subprocess.run(
             ["git", "checkout", branch_name],
@@ -292,11 +229,7 @@ def checkout_branch(branch_name: str) -> bool:
 
 
 def add_to_gitignore(pattern: str) -> None:
-    """Add pattern to .gitignore if not present.
-
-    Args:
-        pattern: Pattern to add to .gitignore
-    """
+    """Add pattern to .gitignore if not present."""
     gitignore = Path(".gitignore")
 
     if gitignore.exists():
@@ -312,13 +245,6 @@ def add_to_gitignore(pattern: str) -> None:
 
 def create_checkpoint_commit(ticket_id: str, task_name: str) -> str:
     """Create a checkpoint commit for a completed task.
-
-    Args:
-        ticket_id: Ticket ID (e.g., PROJ-123)
-        task_name: Name of the completed task
-
-    Returns:
-        Commit hash (short form)
 
     Raises:
         subprocess.CalledProcessError: If git command fails
@@ -337,13 +263,7 @@ def create_checkpoint_commit(ticket_id: str, task_name: str) -> str:
 
 
 def squash_commits(base_commit: str, ticket_id: str, tasks: list[str]) -> None:
-    """Squash checkpoint commits into a single commit.
-
-    Args:
-        base_commit: Commit hash to reset to
-        ticket_id: Ticket ID (e.g., PROJ-123)
-        tasks: List of completed task names
-    """
+    """Squash checkpoint commits into a single commit."""
     if len(tasks) == 1:
         final_msg = f"feat({ticket_id}): {tasks[0]}"
     else:
@@ -358,15 +278,7 @@ def squash_commits(base_commit: str, ticket_id: str, tasks: list[str]) -> None:
 
 
 def handle_dirty_state(context: str, action: DirtyStateAction) -> bool:
-    """Handle uncommitted changes based on user selection.
-
-    Args:
-        context: Description of pending operation
-        action: Selected action from menu
-
-    Returns:
-        True if safe to proceed, False if aborted
-    """
+    """Handle uncommitted changes based on user selection."""
     # Import here to avoid circular imports
     from ingot.ui.prompts import prompt_confirm, prompt_input
 
@@ -404,14 +316,7 @@ def handle_dirty_state(context: str, action: DirtyStateAction) -> bool:
 
 
 def stash_changes(message: str = "WIP") -> bool:
-    """Stash uncommitted changes.
-
-    Args:
-        message: Stash message
-
-    Returns:
-        True if stash was successful
-    """
+    """Stash uncommitted changes."""
     try:
         result = subprocess.run(
             ["git", "stash", "push", "-m", message],
@@ -429,14 +334,7 @@ def stash_changes(message: str = "WIP") -> bool:
 
 
 def commit_changes(message: str) -> str:
-    """Stage all changes and commit.
-
-    Args:
-        message: Commit message
-
-    Returns:
-        Short commit hash, or empty string on failure
-    """
+    """Stage all changes and commit, returning the short commit hash (or empty on failure)."""
     try:
         # Stage all changes
         subprocess.run(["git", "add", "-A"], check=True)
@@ -473,13 +371,6 @@ def get_diff_from_baseline(base_commit: str | None) -> DiffResult:
 
     If base_commit is empty/None but repo is dirty, falls back to
     collecting staged + unstaged + untracked changes (no commit-to-commit diff).
-
-    Args:
-        base_commit: The baseline commit hash to diff from (can be empty/None)
-
-    Returns:
-        DiffResult with diff content, changed files list, diffstat, and error status.
-        On error, has_error is True and error_message contains details.
     """
     # Handle missing base_commit - fall back to staged + unstaged + untracked
     no_base_commit = not base_commit or not base_commit.strip()
@@ -709,12 +600,6 @@ def _is_doc_file_for_diff(filepath: str) -> bool:
     This is a simple check to determine if we should include full content
     for untracked files. Only documentation files get full content to
     avoid leaking secrets or other sensitive non-doc files.
-
-    Args:
-        filepath: Path to the file.
-
-    Returns:
-        True if the file appears to be documentation.
     """
     path = Path(filepath)
     # Note: .txt is intentionally excluded to avoid treating config files like
@@ -746,13 +631,6 @@ def _generate_untracked_file_diff(filepath: str, max_file_size: int = 50_000) ->
     Only includes full content for documentation files to avoid
     leaking secrets or sensitive information. Non-doc files get
     a filename-only entry.
-
-    Args:
-        filepath: Path to the untracked file.
-        max_file_size: Max bytes to include content (default 50KB).
-
-    Returns:
-        Diff-like string for the file.
     """
     import os
 
@@ -820,15 +698,7 @@ def _generate_untracked_file_diff(filepath: str, max_file_size: int = 50_000) ->
 
 
 def get_changed_files_list(base_commit: str) -> tuple[list[str], str]:
-    """Get list of changed files and name-status output since base commit.
-
-    Args:
-        base_commit: The baseline commit hash
-
-    Returns:
-        Tuple of (file_list, name_status_output) where name_status_output
-        is the raw git diff --name-status output.
-    """
+    """Get list of changed files and raw name-status output since base commit."""
     if not base_commit:
         return [], ""
 
@@ -847,11 +717,7 @@ def get_changed_files_list(base_commit: str) -> tuple[list[str], str]:
 
 
 def get_untracked_files_list() -> list[str]:
-    """Get list of untracked files (excluding ignored).
-
-    Returns:
-        List of untracked file paths.
-    """
+    """Get list of untracked files (excluding ignored)."""
     result = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
         capture_output=True,

@@ -94,14 +94,7 @@ class TicketService:
         cache: TicketCache | None = None,
         default_ttl: timedelta = DEFAULT_CACHE_TTL,
     ) -> None:
-        """Initialize TicketService with fetchers and optional cache.
-
-        Args:
-            primary_fetcher: Primary fetcher (typically AuggieMediatedFetcher)
-            fallback_fetcher: Optional fallback (typically DirectAPIFetcher)
-            cache: Optional cache implementation (defaults to InMemoryTicketCache)
-            default_ttl: Default cache TTL (default: 1 hour)
-        """
+        """Initialize TicketService with fetchers and optional cache."""
         self._primary: TicketFetcherProtocol = primary_fetcher
         self._fallback: TicketFetcherProtocol | None = fallback_fetcher
         self._cache = cache
@@ -125,18 +118,10 @@ class TicketService:
         5. Normalizes to GenericTicket
         6. Caches the result
 
-        Args:
-            input_str: Ticket URL or ID (e.g., "PROJ-123", "https://...")
-            skip_cache: If True, bypass cache lookup (still caches result)
-            ttl: Custom TTL for this ticket (defaults to self._default_ttl)
-
-        Returns:
-            Normalized GenericTicket
-
         Raises:
-            PlatformNotSupportedError: If platform cannot be detected
-            ValueError: If input cannot be parsed
-            TicketFetchError: If both fetchers fail
+            PlatformNotSupportedError: If platform cannot be detected.
+            ValueError: If input cannot be parsed.
+            TicketFetchError: If both fetchers fail.
         """
         if self._closed:
             raise RuntimeError("TicketService has been closed")
@@ -182,16 +167,9 @@ class TicketService:
         Tries primary fetcher first. If it fails with agent-related errors
         AND a fallback is configured, retries with the fallback fetcher.
 
-        Args:
-            ticket_id: Normalized ticket ID
-            platform: Target platform
-
-        Returns:
-            Raw ticket data dict
-
         Raises:
-            TicketFetchError: If all fetchers fail
-            PlatformNotSupportedError: If no fetcher supports the platform
+            TicketFetchError: If all fetchers fail.
+            PlatformNotSupportedError: If no fetcher supports the platform.
         """
         platform_str = platform.name.lower()
 
@@ -221,24 +199,14 @@ class TicketService:
             raise
 
     def invalidate_cache(self, platform: Platform, ticket_id: str) -> None:
-        """Invalidate a specific cached ticket.
-
-        Args:
-            platform: Ticket platform
-            ticket_id: Ticket ID to invalidate
-        """
+        """Invalidate a specific cached ticket."""
         if not self._cache:
             return
         cache_key = CacheKey(platform, ticket_id)
         self._cache.invalidate(cache_key)
 
     def clear_cache(self, platform: Platform | None = None) -> None:
-        """Clear cached tickets.
-
-        Args:
-            platform: If specified, only clear tickets for this platform.
-                     If None, clear all cached tickets.
-        """
+        """Clear cached tickets, optionally filtered by platform."""
         if not self._cache:
             return
         if platform:
@@ -319,24 +287,10 @@ async def create_ticket_service(
         TicketService does NOT use AuthenticationManager directly.
         AuthenticationManager is passed to DirectAPIFetcher:
 
-            TicketService → DirectAPIFetcher → AuthenticationManager → ConfigManager
-
-    Args:
-        backend: AIBackend instance for agent-mediated fetching.
-            If None, DirectAPIFetcher becomes the only fetcher.
-        auth_manager: AuthenticationManager for DirectAPIFetcher.
-            Required if enable_fallback=True or backend is None.
-        config_manager: Optional ConfigManager for AuggieMediatedFetcher.
-        cache: Optional custom cache implementation.
-            Defaults to InMemoryTicketCache with max_size=1000.
-        cache_ttl: Default cache TTL (default: 1 hour).
-        enable_fallback: Whether to enable DirectAPIFetcher fallback.
-
-    Returns:
-        Configured TicketService ready for use
+            TicketService -> DirectAPIFetcher -> AuthenticationManager -> ConfigManager
 
     Raises:
-        ValueError: If configuration is invalid (no fetchers configured)
+        ValueError: If configuration is invalid (no fetchers configured).
 
     Example:
         from ingot.integrations.backends import AuggieBackend
@@ -412,8 +366,7 @@ async def create_ticket_service(
 
     if not primary:
         raise ValueError(
-            "Cannot create TicketService: no fetchers configured. "
-            "Provide backend or auth_manager."
+            "Cannot create TicketService: no fetchers configured. Provide backend or auth_manager."
         )
 
     # Configure cache

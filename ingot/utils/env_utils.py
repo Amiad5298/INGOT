@@ -24,14 +24,7 @@ class EnvVarExpansionError(Exception):
 
 
 def is_sensitive_key(key: str) -> bool:
-    """Check if a configuration key contains sensitive data.
-
-    Args:
-        key: The configuration key name
-
-    Returns:
-        True if the key is considered sensitive
-    """
+    """Check if a configuration key contains sensitive data."""
     key_upper = key.upper()
     return any(pattern in key_upper for pattern in SENSITIVE_KEY_PATTERNS)
 
@@ -45,17 +38,6 @@ def expand_env_vars(
 
     Supports nested structures (dicts, lists) and can operate in strict mode
     where missing environment variables cause an error.
-
-    Args:
-        value: The value to expand (string, dict, list, or other)
-        strict: If True, raises EnvVarExpansionError for missing env vars.
-                If False, preserves the ${VAR} pattern for debugging.
-        context: Context string for error messages (e.g., key name).
-                 If context contains sensitive key patterns, it will not
-                 be included in log messages.
-
-    Returns:
-        The value with ${VAR} references replaced with environment values
 
     Raises:
         EnvVarExpansionError: If strict=True and an env var is not set
@@ -119,13 +101,6 @@ def expand_env_vars_strict(value: Any, context: str = "") -> Any:
     """Expand environment variables in strict mode (errors on missing vars).
 
     Use this for credential expansion where missing vars indicate misconfiguration.
-
-    Args:
-        value: The value to expand
-        context: Context string for error messages
-
-    Returns:
-        The expanded value
 
     Raises:
         EnvVarExpansionError: If any referenced env var is not set

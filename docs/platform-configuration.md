@@ -1,19 +1,19 @@
 # Platform Configuration Guide
 
-> Complete documentation for configuring credentials for SPEC's 6 supported ticket platforms.
+> Complete documentation for configuring credentials for INGOT's 6 supported ticket platforms.
 
 ## Quick Start Checklist
 
 1. **Choose your platform(s)** – Identify which ticket platforms you'll use (Jira, Linear, GitHub, Azure DevOps, Monday, Trello)
-2. **Set default platform** *(optional)* – Add `DEFAULT_PLATFORM=<platform>` to `~/.spec-config` to avoid using `--platform` flag
+2. **Set default platform** *(optional)* – Add `DEFAULT_PLATFORM=<platform>` to `~/.ingot-config` to avoid using `--platform` flag
 3. **Configure fallback credentials** *(if required)* – Azure DevOps, Monday, and Trello **require** credentials; Jira/Linear/GitHub need them only as a backup
-4. **Verify configuration** – Run `spec --config` to confirm your setup
+4. **Verify configuration** – Run `ingot --config` to confirm your setup
 
 ---
 
 ## Overview
 
-SPEC supports fetching tickets from 6 platforms:
+INGOT supports fetching tickets from 6 platforms:
 
 - **Jira** – Atlassian's issue tracking system
 - **Linear** – Modern project management for software teams
@@ -24,29 +24,29 @@ SPEC supports fetching tickets from 6 platforms:
 
 ### Two Authentication Modes
 
-SPEC uses two authentication modes to fetch tickets. **"Agent integration"** refers to using an AI coding assistant's built-in platform connections (e.g., Auggie MCP tools), while **"fallback credentials"** means providing your own API keys for direct API access.
+INGOT uses two authentication modes to fetch tickets. **"Agent integration"** refers to using an AI coding assistant's built-in platform connections (e.g., Auggie MCP tools), while **"fallback credentials"** means providing your own API keys for direct API access.
 
 1. **Agent Integration via Auggie MCP (Primary)**
    - Platforms: Jira, Linear, GitHub
    - Authentication is handled by Auggie's built-in MCP (Model Context Protocol) integrations
-   - No configuration needed in SPEC—works out of the box when using Auggie
+   - No configuration needed in INGOT—works out of the box when using Auggie
    - Credentials are managed in your Auggie agent settings
-   - **Note:** "Auggie" is the specific AI agent implementation; if you're using a different agent or running SPEC standalone, use fallback credentials instead
+   - **Note:** "Auggie" is the specific AI agent implementation; if you're using a different agent or running INGOT standalone, use fallback credentials instead
 
 2. **Fallback Credentials (Direct API)**
    - Platforms: **All 6** (Azure DevOps, Monday, Trello **require** this)
    - Authentication via `FALLBACK_*` configuration keys
-   - Credentials stored in `~/.spec-config` or `.spec` file
+   - Credentials stored in `~/.ingot-config` or `.ingot` file
    - Used when agent integration is unavailable or for platforms without agent support
 
 ### How Authentication Works
 
-When you run `spec <ticket-id>`, SPEC uses the AUTO fetch strategy:
+When you run `ingot <ticket-id>`, INGOT uses the AUTO fetch strategy:
 
 1. **First**, tries Auggie MCP integration (if available for the platform)
 2. **If unavailable**, falls back to direct API access using your configured credentials
 
-For Azure DevOps, Monday, and Trello, SPEC always uses direct API access since these platforms don't have Auggie MCP integration.
+For Azure DevOps, Monday, and Trello, INGOT always uses direct API access since these platforms don't have Auggie MCP integration.
 
 ---
 
@@ -65,7 +65,7 @@ For Azure DevOps, Monday, and Trello, SPEC always uses direct API access since t
 
 ## Credential Key Aliases
 
-For convenience, SPEC accepts alternative key names that are automatically normalized to canonical keys:
+For convenience, INGOT accepts alternative key names that are automatically normalized to canonical keys:
 
 | Platform | Alias | Canonical Key |
 |----------|-------|---------------|
@@ -80,27 +80,27 @@ For convenience, SPEC accepts alternative key names that are automatically norma
 
 ## Configuration File Locations & Precedence
 
-SPEC supports multiple configuration files with a cascading hierarchy. Settings from higher-priority sources override lower-priority ones.
+INGOT supports multiple configuration files with a cascading hierarchy. Settings from higher-priority sources override lower-priority ones.
 
 ### Configuration Precedence (Highest to Lowest)
 
 | Priority | Source | Location | Use Case |
 |----------|--------|----------|----------|
 | 1 (Highest) | Environment Variables | Shell environment | CI/CD, temporary overrides |
-| 2 | Local Config | `.spec` in project directory | Project-specific settings |
-| 3 | Global Config | `~/.spec-config` | User defaults |
-| 4 (Lowest) | Built-in Defaults | Hardcoded in SPEC | Non-secret defaults only (e.g., default platform) |
+| 2 | Local Config | `.ingot` in project directory | Project-specific settings |
+| 3 | Global Config | `~/.ingot-config` | User defaults |
+| 4 (Lowest) | Built-in Defaults | Hardcoded in INGOT | Non-secret defaults only (e.g., default platform) |
 
 > **Note:** Built-in defaults apply only to non-secret settings like `DEFAULT_PLATFORM`. Credentials have no defaults—you must provide them explicitly.
 
-### Local Config (`.spec`)
+### Local Config (`.ingot`)
 
-SPEC searches upward from the current directory for a `.spec` file. This allows project-specific configuration that overrides global settings.
+INGOT searches upward from the current directory for a `.ingot` file. This allows project-specific configuration that overrides global settings.
 
 **Example project structure:**
 ```
 my-project/
-├── .spec           ← Project-specific config (if needed)
+├── .ingot           ← Project-specific config (if needed)
 └── src/
     └── ...
 ```
@@ -110,25 +110,25 @@ my-project/
 - Project-specific default platform
 - CI/CD settings for a particular repository
 
-> **⚠️ Security Warning:** Never commit secrets or credentials to a `.spec` file if it is tracked in version control. Use environment variables for secrets (see [Security Best Practices](#security-best-practices)). If your `.spec` file contains personal credentials, add it to `.gitignore`.
+> **⚠️ Security Warning:** Never commit secrets or credentials to a `.ingot` file if it is tracked in version control. Use environment variables for secrets (see [Security Best Practices](#security-best-practices)). If your `.ingot` file contains personal credentials, add it to `.gitignore`.
 
 ```bash
 # Add to your .gitignore
-.spec
+.ingot
 ```
 
-### Global Config (`~/.spec-config`)
+### Global Config (`~/.ingot-config`)
 
 The global config file stores user-wide defaults. This is the recommended location for personal credentials and preferences.
 
-**Location:** `~/.spec-config` (in your home directory)
+**Location:** `~/.ingot-config` (in your home directory)
 
 ### Viewing Current Configuration
 
-Use `spec --config` to see your current configuration:
+Use `ingot --config` to see your current configuration:
 
 ```bash
-spec --config
+ingot --config
 ```
 
 This displays:
@@ -145,7 +145,7 @@ Configure a default platform to avoid specifying `--platform` on every command.
 ### Configuration
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 DEFAULT_PLATFORM=jira
 ```
 
@@ -166,8 +166,8 @@ With `DEFAULT_PLATFORM=jira` configured:
 
 ```bash
 # These are equivalent:
-spec PROJ-123
-spec --platform jira PROJ-123
+ingot PROJ-123
+ingot --platform jira PROJ-123
 ```
 
 > **Note:** The `--platform` flag always overrides the default when specified.
@@ -202,7 +202,7 @@ Jira is fully integrated with Auggie's MCP tools. When using Auggie, no addition
 
 1. Go to [Atlassian API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
 2. Click **"Create API token"**
-3. Give it a descriptive name (e.g., "SPEC CLI")
+3. Give it a descriptive name (e.g., "INGOT CLI")
 4. Copy the token immediately (it won't be shown again)
 5. Store it in an environment variable:
    ```bash
@@ -212,7 +212,7 @@ Jira is fully integrated with Auggie's MCP tools. When using Auggie, no addition
 #### Configuration
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 FALLBACK_JIRA_URL=https://company.atlassian.net
 FALLBACK_JIRA_EMAIL=user@example.com
 FALLBACK_JIRA_TOKEN=${JIRA_API_TOKEN}
@@ -247,7 +247,7 @@ Linear is fully integrated with Auggie's MCP tools. When using Auggie, no additi
 
 1. Go to [Linear Settings → API](https://linear.app/settings/api)
 2. Under **"Personal API keys"**, click **"Create key"**
-3. Give it a label (e.g., "SPEC CLI")
+3. Give it a label (e.g., "INGOT CLI")
 4. Copy the key immediately
 5. Store it in an environment variable:
    ```bash
@@ -257,7 +257,7 @@ Linear is fully integrated with Auggie's MCP tools. When using Auggie, no additi
 #### Configuration
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 FALLBACK_LINEAR_API_KEY=${LINEAR_API_KEY}
 ```
 
@@ -310,7 +310,7 @@ GitHub Issues is fully integrated with Auggie's MCP tools. When using Auggie, no
 #### Configuration
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 FALLBACK_GITHUB_TOKEN=${GITHUB_TOKEN}
 ```
 
@@ -347,7 +347,7 @@ Azure DevOps requires fallback credentials—there is no Auggie MCP integration.
 2. Click your profile icon (top right) → **"Personal access tokens"**
 3. Click **"New Token"**
 4. Configure the token:
-   - **Name:** SPEC CLI
+   - **Name:** INGOT CLI
    - **Organization:** Select your organization (or "All accessible organizations")
    - **Expiration:** Set an appropriate date (max 1 year)
    - **Scopes:** Select **"Custom defined"**, then enable:
@@ -361,7 +361,7 @@ Azure DevOps requires fallback credentials—there is no Auggie MCP integration.
 #### Configuration
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 FALLBACK_AZURE_DEVOPS_ORGANIZATION=myorg
 FALLBACK_AZURE_DEVOPS_PAT=${AZURE_DEVOPS_PAT}
 ```
@@ -405,7 +405,7 @@ Monday.com requires fallback credentials—there is no Auggie MCP integration.
 #### Configuration
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 FALLBACK_MONDAY_API_KEY=${MONDAY_API_KEY}
 ```
 
@@ -434,7 +434,7 @@ Trello requires fallback credentials—there is no Auggie MCP integration.
 | `FALLBACK_TRELLO_API_KEY` | **API Key** | Your Trello API Key from the Power-Up Admin portal |
 | `FALLBACK_TRELLO_TOKEN` | **Token** | Authorization Token generated for your account |
 
-> **Terminology Note:** Trello's official terms are "API Key" and "Token". SPEC also accepts `api_token` as an alias for `token` (see [Credential Key Aliases](#credential-key-aliases)).
+> **Terminology Note:** Trello's official terms are "API Key" and "Token". INGOT also accepts `api_token` as an alias for `token` (see [Credential Key Aliases](#credential-key-aliases)).
 
 #### Getting Credentials (Two-Step Process)
 
@@ -461,7 +461,7 @@ Trello requires fallback credentials—there is no Auggie MCP integration.
 #### Configuration
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 FALLBACK_TRELLO_API_KEY=${TRELLO_API_KEY}
 FALLBACK_TRELLO_TOKEN=${TRELLO_TOKEN}
 ```
@@ -474,10 +474,10 @@ FALLBACK_TRELLO_TOKEN=${TRELLO_TOKEN}
 
 ## Complete Configuration Example
 
-Here's a complete example `~/.spec-config` file:
+Here's a complete example `~/.ingot-config` file:
 
 ```bash
-# ~/.spec-config
+# ~/.ingot-config
 
 # ============================================================
 # DEFAULT PLATFORM (optional - avoids --platform flag)
@@ -540,7 +540,7 @@ FALLBACK_JIRA_TOKEN=${JIRA_API_TOKEN}
 
 ### Environment Variable Syntax
 
-Use `${VAR_NAME}` syntax to reference environment variables in your config file. SPEC expands these at runtime.
+Use `${VAR_NAME}` syntax to reference environment variables in your config file. INGOT expands these at runtime.
 
 ### Setting Environment Variables
 
@@ -588,7 +588,7 @@ API tokens should be rotated periodically for security. Here's a recommended sch
 1. Generate a new token in the platform's admin console
 2. Update the environment variable in your shell profile
 3. Reload your shell (`source ~/.zshrc`)
-4. Verify with `spec --config`
+4. Verify with `ingot --config`
 5. Revoke the old token in the platform's admin console
 
 ### Scoping Tokens
@@ -607,7 +607,7 @@ Follow the principle of least privilege:
 ### Check Configuration Status
 
 ```bash
-spec --config
+ingot --config
 ```
 
 This displays:
@@ -620,16 +620,16 @@ This displays:
 
 ```bash
 # Test Jira
-spec PROJ-123
+ingot PROJ-123
 
 # Test Linear
-spec --platform linear ABC-123
+ingot --platform linear ABC-123
 
 # Test GitHub
-spec --platform github owner/repo#42
+ingot --platform github owner/repo#42
 
 # Test Azure DevOps
-spec --platform azure_devops https://dev.azure.com/org/project/_workitems/edit/123
+ingot --platform azure_devops https://dev.azure.com/org/project/_workitems/edit/123
 ```
 
 ### Expected Success Output
@@ -644,7 +644,7 @@ When configuration is correct, you'll see the ticket content rendered as a speci
 
 | Error Message | Cause | Solution |
 |---------------|-------|----------|
-| `No fallback credentials configured for platform 'X'` | Missing `FALLBACK_*` keys | Add required credentials to `~/.spec-config` |
+| `No fallback credentials configured for platform 'X'` | Missing `FALLBACK_*` keys | Add required credentials to `~/.ingot-config` |
 | `Missing required credential fields for 'X': field1, field2` | Incomplete credentials | Add the listed fields to your config |
 | `Credential field 'X' for 'Y' is empty` | Empty credential value | Provide a non-empty value for the field |
 | `Credential field 'X' for 'Y' contains unexpanded environment variable: ${VAR}` | Environment variable not set | Set the environment variable in your shell |
@@ -661,7 +661,7 @@ When configuration is correct, you'll see the ticket content rendered as a speci
 
 2. **Verify config file syntax:**
    ```bash
-   cat ~/.spec-config
+   cat ~/.ingot-config
    ```
 
 3. **Test API access directly:**
@@ -673,22 +673,22 @@ When configuration is correct, you'll see the ticket content rendered as a speci
 
 ### Ambiguous Ticket IDs
 
-Ticket IDs like `ABC-123` match both Jira and Linear formats. When SPEC cannot determine the platform:
+Ticket IDs like `ABC-123` match both Jira and Linear formats. When INGOT cannot determine the platform:
 
-1. It checks `DEFAULT_PLATFORM` in `~/.spec-config`
+1. It checks `DEFAULT_PLATFORM` in `~/.ingot-config`
 2. If not set, it prompts you to select a platform interactively
 
 **Solutions:**
 
 ```bash
 # Option 1: Use --platform flag
-spec ENG-456 --platform linear
+ingot ENG-456 --platform linear
 
 # Option 2: Set a default platform
-echo 'DEFAULT_PLATFORM=jira' >> ~/.spec-config
+echo 'DEFAULT_PLATFORM=jira' >> ~/.ingot-config
 
 # Option 3: Use full URLs (always unambiguous)
-spec https://linear.app/team/issue/ENG-456
+ingot https://linear.app/team/issue/ENG-456
 ```
 
 ### Platform-Specific Issues
@@ -716,6 +716,6 @@ spec https://linear.app/team/issue/ENG-456
 ### Getting Help
 
 If you're still having issues:
-1. Check the [SPEC README](../README.md) for general usage
-2. Review the [configuration template](../spec/config/templates/fetch_config.template) for a complete example with all available options, including fetch strategy, agent integrations, caching, and timeouts
+1. Check the [INGOT README](../README.md) for general usage
+2. Review the [configuration template](../ingot/config/templates/fetch_config.template) for a complete example with all available options, including fetch strategy, agent integrations, caching, and timeouts
 3. Open an issue on the project repository

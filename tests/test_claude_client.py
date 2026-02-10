@@ -14,10 +14,7 @@ from ingot.integrations.claude import (
 
 
 class TestClaudeClientBuildCommand:
-    """Tests for ClaudeClient.build_command() method."""
-
     def test_basic_structure(self):
-        """Basic command: claude -p <prompt>."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", print_mode=True)
 
@@ -26,7 +23,6 @@ class TestClaudeClientBuildCommand:
         assert cmd[-1] == "test prompt"
 
     def test_model_flag_when_model_set(self):
-        """--model flag included when model is set on client."""
         client = ClaudeClient(model="claude-3-opus")
         cmd = client.build_command("test prompt", print_mode=True)
 
@@ -35,7 +31,6 @@ class TestClaudeClientBuildCommand:
         assert cmd[model_idx + 1] == "claude-3-opus"
 
     def test_model_flag_when_model_passed(self):
-        """--model flag uses per-call model override."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", model="claude-3-sonnet", print_mode=True)
 
@@ -44,21 +39,18 @@ class TestClaudeClientBuildCommand:
         assert cmd[model_idx + 1] == "claude-3-sonnet"
 
     def test_no_session_persistence_flag(self):
-        """--no-session-persistence when dont_save_session=True."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", dont_save_session=True, print_mode=True)
 
         assert "--no-session-persistence" in cmd
 
     def test_no_session_persistence_flag_absent(self):
-        """No --no-session-persistence when dont_save_session=False."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", dont_save_session=False, print_mode=True)
 
         assert "--no-session-persistence" not in cmd
 
     def test_system_prompt_file_flag(self):
-        """--append-system-prompt-file when system_prompt_file provided."""
         client = ClaudeClient()
         cmd = client.build_command(
             "test prompt",
@@ -71,21 +63,18 @@ class TestClaudeClientBuildCommand:
         assert cmd[idx + 1] == "/tmp/prompt.md"
 
     def test_no_system_prompt_file_when_none(self):
-        """No --append-system-prompt-file when system_prompt_file is None."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", print_mode=True)
 
         assert "--append-system-prompt-file" not in cmd
 
     def test_no_system_prompt_file_when_empty(self):
-        """No --append-system-prompt-file when system_prompt_file is empty string."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", system_prompt_file="", print_mode=True)
 
         assert "--append-system-prompt-file" not in cmd
 
     def test_all_flags_combined(self):
-        """All flags work together correctly."""
         client = ClaudeClient()
         cmd = client.build_command(
             "do the work",
@@ -103,7 +92,6 @@ class TestClaudeClientBuildCommand:
         assert cmd[-1] == "do the work"
 
     def test_no_print_mode(self):
-        """Command without -p flag when print_mode=False."""
         client = ClaudeClient()
         cmd = client.build_command("test prompt", print_mode=False)
 
@@ -111,7 +99,6 @@ class TestClaudeClientBuildCommand:
         assert cmd[-1] == "test prompt"
 
     def test_prompt_is_last_argument(self):
-        """Prompt is always the last positional argument."""
         client = ClaudeClient(model="claude-3-opus")
         cmd = client.build_command(
             "my prompt here",
@@ -122,7 +109,6 @@ class TestClaudeClientBuildCommand:
         assert cmd[-1] == "my prompt here"
 
     def test_explicit_model_overrides_instance_default(self):
-        """Per-call model takes precedence over instance default."""
         client = ClaudeClient(model="default-model")
         cmd = client.build_command("test", model="override-model", print_mode=True)
 
@@ -132,10 +118,7 @@ class TestClaudeClientBuildCommand:
 
 
 class TestClaudeClientExecution:
-    """Tests for ClaudeClient execution methods with mocked subprocess."""
-
     def test_run_with_callback_streams_output(self):
-        """run_with_callback streams output via Popen."""
         client = ClaudeClient()
         mock_callback = MagicMock()
 
@@ -158,7 +141,6 @@ class TestClaudeClientExecution:
         mock_callback.assert_any_call("line 2")
 
     def test_run_with_callback_failure(self):
-        """run_with_callback returns False on non-zero exit code."""
         client = ClaudeClient()
         mock_callback = MagicMock()
 
@@ -177,7 +159,6 @@ class TestClaudeClientExecution:
         assert "error output" in output
 
     def test_run_print_with_output_returns_tuple(self):
-        """run_print_with_output returns (success, output) tuple."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -192,7 +173,6 @@ class TestClaudeClientExecution:
         assert "response line" in output
 
     def test_run_print_with_output_does_not_print_to_stdout(self, capsys):
-        """run_print_with_output does NOT print to stdout."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -207,7 +187,6 @@ class TestClaudeClientExecution:
         assert captured.out == ""
 
     def test_run_print_with_output_includes_stderr_on_failure(self):
-        """run_print_with_output includes stderr when CLI fails with empty stdout."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -222,7 +201,6 @@ class TestClaudeClientExecution:
         assert "Error: invalid model" in output
 
     def test_run_print_with_output_prefers_stdout_even_on_failure(self):
-        """run_print_with_output returns stdout when present even on failure."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -237,7 +215,6 @@ class TestClaudeClientExecution:
         assert output == "partial output"
 
     def test_run_print_quiet_returns_output_string(self):
-        """run_print_quiet returns output string only."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -251,7 +228,6 @@ class TestClaudeClientExecution:
         assert output == "quiet output content"
 
     def test_run_print_quiet_empty_output(self):
-        """run_print_quiet returns empty string on None stdout."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -265,7 +241,6 @@ class TestClaudeClientExecution:
         assert output == ""
 
     def test_run_print_quiet_includes_stderr_on_failure(self):
-        """run_print_quiet includes stderr when CLI fails with no stdout."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -279,7 +254,6 @@ class TestClaudeClientExecution:
         assert "Error: rate limit exceeded" in output
 
     def test_run_print_quiet_does_not_print_to_stdout(self, capsys):
-        """run_print_quiet does NOT print to stdout."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -294,7 +268,6 @@ class TestClaudeClientExecution:
         assert captured.out == ""
 
     def test_run_print_quiet_passes_timeout_to_subprocess(self):
-        """timeout_seconds is forwarded to subprocess.run(timeout=)."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -310,7 +283,6 @@ class TestClaudeClientExecution:
         assert mock_run.call_args.kwargs.get("timeout") == 30.0
 
     def test_run_print_quiet_timeout_raises_timeout_expired(self):
-        """subprocess.TimeoutExpired propagates from run_print_quiet."""
         client = ClaudeClient()
 
         with (
@@ -323,7 +295,6 @@ class TestClaudeClientExecution:
             client.run_print_quiet("test", timeout_seconds=5.0)
 
     def test_run_print_with_output_passes_timeout_to_subprocess(self):
-        """timeout_seconds is forwarded to subprocess.run(timeout=)."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -339,7 +310,6 @@ class TestClaudeClientExecution:
         assert mock_run.call_args.kwargs.get("timeout") == 45.0
 
     def test_run_print_with_output_timeout_raises_timeout_expired(self):
-        """subprocess.TimeoutExpired propagates from run_print_with_output."""
         client = ClaudeClient()
 
         with (
@@ -352,7 +322,6 @@ class TestClaudeClientExecution:
             client.run_print_with_output("test", timeout_seconds=10.0)
 
     def test_run_print_quiet_uses_system_prompt_file(self):
-        """system_prompt is written to a temp file and passed via --append-system-prompt-file."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -373,7 +342,6 @@ class TestClaudeClientExecution:
         ]
 
     def test_run_print_with_output_uses_system_prompt_file(self):
-        """system_prompt is written to a temp file and passed via --append-system-prompt-file."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -390,7 +358,6 @@ class TestClaudeClientExecution:
         assert "--append-system-prompt-file" in cmd
 
     def test_run_print_quiet_no_timeout_by_default(self):
-        """No timeout passed to subprocess.run when timeout_seconds is None."""
         client = ClaudeClient()
 
         mock_result = MagicMock()
@@ -407,10 +374,7 @@ class TestClaudeClientExecution:
 
 
 class TestCheckClaudeInstalled:
-    """Tests for check_claude_installed() function."""
-
     def test_installed_returns_true_and_version(self):
-        """Returns (True, version) when CLI is installed."""
         with (
             patch("ingot.integrations.claude.shutil.which", return_value="/usr/local/bin/claude"),
             patch(
@@ -428,7 +392,6 @@ class TestCheckClaudeInstalled:
         assert "1.0.0" in message
 
     def test_not_installed_returns_false(self):
-        """Returns (False, message) when CLI is not in PATH."""
         with patch("ingot.integrations.claude.shutil.which", return_value=None):
             is_installed, message = check_claude_installed()
 
@@ -437,73 +400,54 @@ class TestCheckClaudeInstalled:
 
 
 class TestLooksLikeRateLimit:
-    """Tests for looks_like_rate_limit() function."""
-
     def test_detects_429(self):
-        """Detects HTTP 429 status code."""
         assert looks_like_rate_limit("Error 429: Too Many Requests") is True
 
     def test_detects_rate_limit(self):
-        """Detects 'rate limit' text."""
         assert looks_like_rate_limit("rate limit exceeded") is True
 
     def test_detects_overloaded(self):
-        """Detects 'overloaded' (Anthropic-specific)."""
         assert looks_like_rate_limit("API is overloaded") is True
 
     def test_detects_529(self):
-        """Detects HTTP 529 status code (Anthropic-specific)."""
         assert looks_like_rate_limit("Error 529") is True
 
     def test_detects_quota_exceeded(self):
-        """Detects 'quota exceeded'."""
         assert looks_like_rate_limit("quota exceeded for this account") is True
 
     def test_detects_throttling(self):
-        """Detects 'throttl' prefix (throttle, throttling, throttled)."""
         assert looks_like_rate_limit("request throttled") is True
 
     def test_detects_capacity(self):
-        """Detects 'capacity' keyword."""
         assert looks_like_rate_limit("insufficient capacity") is True
 
     def test_does_not_detect_502(self):
-        """502 is a server error, not a rate limit."""
         assert looks_like_rate_limit("502 Bad Gateway") is False
 
     def test_does_not_detect_503(self):
-        """503 is a server error, not a rate limit."""
         assert looks_like_rate_limit("503 Service Unavailable") is False
 
     def test_does_not_detect_504(self):
-        """504 is a server error, not a rate limit."""
         assert looks_like_rate_limit("504 Gateway Timeout") is False
 
     def test_normal_output_returns_false(self):
-        """Normal output returns False."""
         assert looks_like_rate_limit("Successfully generated code") is False
 
     def test_none_output_returns_false(self):
-        """None output returns False without raising."""
         assert looks_like_rate_limit(None) is False
 
     def test_empty_string_returns_false(self):
-        """Empty string returns False."""
         assert looks_like_rate_limit("") is False
 
 
 class TestClaudeClientModuleExports:
-    """Tests for __all__ exports."""
-
     def test_no_private_functions_exported(self):
-        """No underscore-prefixed names in __all__."""
         from ingot.integrations.claude import __all__
 
         for name in __all__:
             assert not name.startswith("_"), f"Private name '{name}' should not be in __all__"
 
     def test_expected_exports(self):
-        """Only expected public names are exported."""
         from ingot.integrations.claude import __all__
 
         assert set(__all__) == {

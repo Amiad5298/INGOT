@@ -29,8 +29,8 @@ class ErrorAnalysis:
         """Format as markdown for prompt."""
         return f"""
 **Type:** {self.error_type}
-**File:** {self.file_path or 'Unknown'}
-**Line:** {self.line_number or 'Unknown'}
+**File:** {self.file_path or "Unknown"}
+**Line:** {self.line_number or "Unknown"}
 
 **Error Message:**
 ```

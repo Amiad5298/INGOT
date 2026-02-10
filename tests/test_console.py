@@ -16,40 +16,29 @@ from ingot.utils.console import (
 
 
 class TestCustomTheme:
-    """Tests for custom Rich theme."""
-
     def test_theme_has_error_style(self):
-        """Theme defines error style."""
         assert "error" in custom_theme.styles
 
     def test_theme_has_success_style(self):
-        """Theme defines success style."""
         assert "success" in custom_theme.styles
 
     def test_theme_has_warning_style(self):
-        """Theme defines warning style."""
         assert "warning" in custom_theme.styles
 
     def test_theme_has_info_style(self):
-        """Theme defines info style."""
         assert "info" in custom_theme.styles
 
     def test_theme_has_header_style(self):
-        """Theme defines header style."""
         assert "header" in custom_theme.styles
 
     def test_theme_has_step_style(self):
-        """Theme defines step style."""
         assert "step" in custom_theme.styles
 
 
 class TestPrintFunctions:
-    """Tests for print functions."""
-
     @patch("ingot.utils.console.console_err")
     @patch("ingot.utils.logging.log_message")
     def test_print_error(self, mock_log, mock_console_err):
-        """print_error outputs error message."""
         print_error("Test error")
 
         mock_console_err.print.assert_called_once()
@@ -61,7 +50,6 @@ class TestPrintFunctions:
     @patch("ingot.utils.console.console")
     @patch("ingot.utils.logging.log_message")
     def test_print_success(self, mock_log, mock_console):
-        """print_success outputs success message."""
         print_success("Test success")
 
         mock_console.print.assert_called_once()
@@ -73,7 +61,6 @@ class TestPrintFunctions:
     @patch("ingot.utils.console.console")
     @patch("ingot.utils.logging.log_message")
     def test_print_warning(self, mock_log, mock_console):
-        """print_warning outputs warning message."""
         print_warning("Test warning")
 
         mock_console.print.assert_called_once()
@@ -85,7 +72,6 @@ class TestPrintFunctions:
     @patch("ingot.utils.console.console")
     @patch("ingot.utils.logging.log_message")
     def test_print_info(self, mock_log, mock_console):
-        """print_info outputs info message."""
         print_info("Test info")
 
         mock_console.print.assert_called_once()
@@ -96,7 +82,6 @@ class TestPrintFunctions:
 
     @patch("ingot.utils.console.console")
     def test_print_header(self, mock_console):
-        """print_header outputs header with formatting."""
         print_header("Test Header")
 
         # Should print empty line, header, empty line
@@ -106,7 +91,6 @@ class TestPrintFunctions:
 
     @patch("ingot.utils.console.console")
     def test_print_step(self, mock_console):
-        """print_step outputs step with arrow."""
         print_step("Test step")
 
         mock_console.print.assert_called_once()
@@ -116,11 +100,8 @@ class TestPrintFunctions:
 
 
 class TestBanner:
-    """Tests for banner display."""
-
     @patch("ingot.utils.console.console")
     def test_show_banner(self, mock_console):
-        """show_banner displays ASCII art."""
         show_banner()
 
         mock_console.print.assert_called_once()
@@ -131,11 +112,8 @@ class TestBanner:
 
 
 class TestVersion:
-    """Tests for version display."""
-
     @patch("ingot.utils.console.console")
     def test_show_version(self, mock_console):
-        """show_version displays version info."""
         show_version()
 
         # Should print multiple lines

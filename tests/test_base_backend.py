@@ -77,48 +77,36 @@ class ConcreteTestBackend(BaseBackend):
 
 
 class TestSubagentMetadata:
-    """Tests for SubagentMetadata dataclass."""
-
     def test_subagent_metadata_defaults(self):
-        """SubagentMetadata has None defaults for all fields."""
         metadata = SubagentMetadata()
         assert metadata.model is None
         assert metadata.temperature is None
 
     def test_subagent_metadata_with_values(self):
-        """SubagentMetadata accepts model and temperature."""
         metadata = SubagentMetadata(model="claude-3-opus", temperature=0.7)
         assert metadata.model == "claude-3-opus"
         assert metadata.temperature == 0.7
 
     def test_subagent_metadata_model_only(self):
-        """SubagentMetadata can have model without temperature."""
         metadata = SubagentMetadata(model="gpt-4")
         assert metadata.model == "gpt-4"
         assert metadata.temperature is None
 
     def test_subagent_metadata_temperature_only(self):
-        """SubagentMetadata can have temperature without model."""
         metadata = SubagentMetadata(temperature=0.5)
         assert metadata.model is None
         assert metadata.temperature == 0.5
 
 
 class TestBaseBackendAbstract:
-    """Tests for BaseBackend abstract class enforcement."""
-
     def test_basebackend_is_abc(self):
-        """BaseBackend is an abstract base class."""
         assert issubclass(BaseBackend, ABC)
 
     def test_basebackend_cannot_be_instantiated(self):
-        """BaseBackend raises TypeError on direct instantiation."""
         with pytest.raises(TypeError, match="abstract"):
             BaseBackend()
 
     def test_concrete_backend_must_implement_abstract_methods(self):
-        """Subclass without implementations raises TypeError."""
-
         class IncompleteBackend(BaseBackend):
             pass
 
@@ -126,47 +114,36 @@ class TestBaseBackendAbstract:
             IncompleteBackend()
 
     def test_concrete_backend_can_be_instantiated(self):
-        """Properly implemented subclass can be instantiated."""
         backend = ConcreteTestBackend()
         assert backend is not None
         assert backend.name == "TestBackend"
 
 
 class TestBaseBackendDefaults:
-    """Tests for BaseBackend default implementations."""
-
     def test_supports_parallel_default_true(self):
-        """Default supports_parallel is True."""
         backend = ConcreteTestBackend()
         assert backend.supports_parallel is True
 
     def test_supports_parallel_execution_returns_property(self):
-        """supports_parallel_execution() returns supports_parallel value."""
         backend = ConcreteTestBackend()
         assert backend.supports_parallel_execution() is True
         assert backend.supports_parallel_execution() == backend.supports_parallel
 
     def test_close_is_noop(self):
-        """close() is a no-op and doesn't raise."""
         backend = ConcreteTestBackend()
         backend.close()  # Should not raise
 
     def test_model_stored_as_instance_attribute(self):
-        """Model parameter is stored as _model attribute."""
         backend = ConcreteTestBackend(model="test-model")
         assert backend._model == "test-model"
 
     def test_model_defaults_to_empty_string(self):
-        """Model defaults to empty string when not provided."""
         backend = ConcreteTestBackend()
         assert backend._model == ""
 
 
 class TestParseSubagentPrompt:
-    """Tests for _parse_subagent_prompt method."""
-
     def test_parse_subagent_prompt_with_frontmatter(self, tmp_path, monkeypatch):
-        """Parses YAML frontmatter and returns metadata + body."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         subagent_file = agents_dir / "test-agent.md"
@@ -183,7 +160,6 @@ class TestParseSubagentPrompt:
         assert body == "You are a test agent."
 
     def test_parse_subagent_prompt_without_frontmatter(self, tmp_path, monkeypatch):
-        """Returns empty metadata and full content when no frontmatter."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         subagent_file = agents_dir / "plain-agent.md"
@@ -197,7 +173,6 @@ class TestParseSubagentPrompt:
         assert body == "You are a plain agent without frontmatter."
 
     def test_parse_subagent_prompt_file_not_found(self, tmp_path, monkeypatch):
-        """Returns empty metadata and empty body when file not found."""
         monkeypatch.chdir(tmp_path)
 
         backend = ConcreteTestBackend()
@@ -207,7 +182,6 @@ class TestParseSubagentPrompt:
         assert body == ""
 
     def test_parse_subagent_prompt_invalid_yaml(self, tmp_path, monkeypatch):
-        """Returns empty metadata when YAML is invalid."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         subagent_file = agents_dir / "invalid-agent.md"
@@ -221,7 +195,6 @@ class TestParseSubagentPrompt:
         assert metadata.model is None
 
     def test_parse_subagent_prompt_model_only(self, tmp_path, monkeypatch):
-        """Frontmatter with only model field, no temperature."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         subagent_file = agents_dir / "model-only.md"
@@ -236,7 +209,6 @@ class TestParseSubagentPrompt:
         assert body == "Prompt body here."
 
     def test_parse_subagent_prompt_empty_frontmatter(self, tmp_path, monkeypatch):
-        """Handles empty frontmatter `---\\n---\\n` gracefully."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         subagent_file = agents_dir / "empty-frontmatter.md"
@@ -251,7 +223,6 @@ class TestParseSubagentPrompt:
         assert body == "Body after empty frontmatter."
 
     def test_parse_subagent_prompt_extra_fields_ignored(self, tmp_path, monkeypatch):
-        """Unknown frontmatter fields are ignored gracefully."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         subagent_file = agents_dir / "extra-fields.md"
@@ -269,16 +240,12 @@ class TestParseSubagentPrompt:
 
 
 class TestResolveModel:
-    """Tests for _resolve_model method."""
-
     def test_resolve_model_explicit_override(self):
-        """Explicit model takes highest precedence."""
         backend = ConcreteTestBackend(model="default-model")
         result = backend._resolve_model(explicit_model="override-model", subagent=None)
         assert result == "override-model"
 
     def test_resolve_model_from_frontmatter(self, tmp_path, monkeypatch):
-        """Model from subagent frontmatter used when no explicit override."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         (agents_dir / "model-agent.md").write_text("---\nmodel: frontmatter-model\n---\n")
@@ -289,19 +256,16 @@ class TestResolveModel:
         assert result == "frontmatter-model"
 
     def test_resolve_model_instance_default(self):
-        """Falls back to instance default when no override or frontmatter."""
         backend = ConcreteTestBackend(model="default-model")
         result = backend._resolve_model(explicit_model=None, subagent=None)
         assert result == "default-model"
 
     def test_resolve_model_returns_none_when_empty(self):
-        """Returns None when no model specified anywhere."""
         backend = ConcreteTestBackend()
         result = backend._resolve_model(explicit_model=None, subagent=None)
         assert result is None
 
     def test_resolve_model_explicit_overrides_frontmatter(self, tmp_path, monkeypatch):
-        """Explicit model overrides frontmatter model."""
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
         (agents_dir / "model-agent.md").write_text("---\nmodel: frontmatter-model\n---\n")
@@ -313,10 +277,7 @@ class TestResolveModel:
 
 
 class TestRunStreamingWithTimeout:
-    """Tests for _run_streaming_with_timeout method."""
-
     def test_run_streaming_with_timeout_success(self, mocker):
-        """Process completes before timeout - returns output and exit code."""
         mock_process = mocker.MagicMock()
         mock_process.stdout = iter(["line1\n", "line2\n"])
         mock_process.returncode = 0
@@ -338,7 +299,6 @@ class TestRunStreamingWithTimeout:
         assert output_lines == ["line1", "line2"]
 
     def test_run_streaming_with_timeout_no_timeout(self, mocker):
-        """Process runs without timeout when timeout_seconds=None."""
         mock_process = mocker.MagicMock()
         mock_process.stdout = iter(["output\n"])
         mock_process.returncode = 0
@@ -361,7 +321,6 @@ class TestRunStreamingWithTimeout:
         assert output == "output\n"
 
     def test_run_streaming_with_timeout_callback_receives_stripped_lines(self, mocker):
-        """Output callback receives lines with newlines stripped."""
         mock_process = mocker.MagicMock()
         mock_process.stdout = iter(["  line with spaces  \n", "another line\n"])
         mock_process.returncode = 0
@@ -382,7 +341,6 @@ class TestRunStreamingWithTimeout:
         assert output_lines == ["  line with spaces  ", "another line"]
 
     def test_run_streaming_with_timeout_nonzero_exit(self, mocker):
-        """Process with non-zero exit code returns that code."""
         mock_process = mocker.MagicMock()
         mock_process.stdout = iter(["error output\n"])
         mock_process.returncode = 1
@@ -402,7 +360,6 @@ class TestRunStreamingWithTimeout:
         assert output == "error output\n"
 
     def test_run_streaming_with_timeout_exceeds(self, mocker):
-        """Process killed when timeout exceeded - raises BackendTimeoutError."""
         import threading
 
         mock_process = mocker.MagicMock()
@@ -438,22 +395,17 @@ class TestRunStreamingWithTimeout:
 
 
 class TestBaseBackendImports:
-    """Tests for module imports."""
-
     def test_basebackend_importable_from_package(self):
-        """BaseBackend can be imported from backends package."""
         from ingot.integrations.backends import BaseBackend
 
         assert BaseBackend is not None
 
     def test_subagentmetadata_importable_from_package(self):
-        """SubagentMetadata can be imported from backends package."""
         from ingot.integrations.backends import SubagentMetadata
 
         assert SubagentMetadata is not None
 
     def test_all_exports_available(self):
-        """All expected exports are available from backends package."""
         from ingot.integrations.backends import (
             AIBackend,
             BackendTimeoutError,
@@ -468,40 +420,32 @@ class TestBaseBackendImports:
 
 
 class TestMatchesCommonRateLimit:
-    """Tests for the shared matches_common_rate_limit function."""
-
     def test_none_output_returns_false(self):
-        """None output returns False without raising AttributeError."""
         from ingot.integrations.backends.base import matches_common_rate_limit
 
         assert matches_common_rate_limit(None) is False
 
     def test_empty_string_returns_false(self):
-        """Empty string returns False."""
         from ingot.integrations.backends.base import matches_common_rate_limit
 
         assert matches_common_rate_limit("") is False
 
     def test_detects_429(self):
-        """Detects HTTP 429 status code."""
         from ingot.integrations.backends.base import matches_common_rate_limit
 
         assert matches_common_rate_limit("Error 429: Too Many Requests") is True
 
     def test_detects_rate_limit_keyword(self):
-        """Detects rate limit keywords."""
         from ingot.integrations.backends.base import matches_common_rate_limit
 
         assert matches_common_rate_limit("rate limit exceeded") is True
 
     def test_does_not_detect_502(self):
-        """502 is not a rate limit."""
         from ingot.integrations.backends.base import matches_common_rate_limit
 
         assert matches_common_rate_limit("502 Bad Gateway") is False
 
     def test_extra_keywords(self):
-        """Extra keywords are checked."""
         from ingot.integrations.backends.base import matches_common_rate_limit
 
         assert (
@@ -510,7 +454,6 @@ class TestMatchesCommonRateLimit:
         assert matches_common_rate_limit("server overloaded") is False
 
     def test_extra_status_re(self):
-        """Extra status code regex is checked."""
         import re
 
         from ingot.integrations.backends.base import matches_common_rate_limit
@@ -522,9 +465,6 @@ class TestMatchesCommonRateLimit:
 
 
 class TestBaseBackendProtocolCompliance:
-    """Tests verifying BaseBackend subclasses satisfy AIBackend protocol."""
-
     def test_concrete_backend_satisfies_aibackend_protocol(self):
-        """ConcreteTestBackend satisfies AIBackend protocol."""
         backend = ConcreteTestBackend()
         assert isinstance(backend, AIBackend)

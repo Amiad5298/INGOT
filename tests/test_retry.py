@@ -14,10 +14,6 @@ from ingot.utils.retry import (
 )
 from ingot.workflow.state import RateLimitConfig
 
-# =============================================================================
-# Fixtures
-# =============================================================================
-
 
 @pytest.fixture
 def rate_limit_config():
@@ -41,46 +37,27 @@ def config_with_jitter():
     )
 
 
-# =============================================================================
-# Tests for RateLimitExceededError
-# =============================================================================
-
-
 class TestRateLimitExceededError:
-    """Tests for RateLimitExceededError exception."""
-
     def test_creates_exception_with_message(self):
-        """Exception stores message correctly."""
         error = RateLimitExceededError("Rate limit exceeded", attempts=3, total_wait_time=5.0)
         assert "Rate limit exceeded" in str(error)
 
     def test_creates_exception_with_attempts(self):
-        """Exception stores attempts value."""
         error = RateLimitExceededError("Test error", attempts=5, total_wait_time=10.0)
         assert error.attempts == 5
 
     def test_creates_exception_with_total_wait_time(self):
-        """Exception stores total_wait_time value."""
         error = RateLimitExceededError("Test error", attempts=3, total_wait_time=7.5)
         assert error.total_wait_time == 7.5
 
 
-# =============================================================================
-# Tests for calculate_backoff_delay
-# =============================================================================
-
-
 class TestCalculateBackoffDelay:
-    """Tests for calculate_backoff_delay function."""
-
     def test_first_attempt_uses_base_delay(self, rate_limit_config):
-        """Attempt 0 returns approximately base_delay."""
         delay = calculate_backoff_delay(0, rate_limit_config)
         # With jitter_factor=0, should be exactly base_delay
         assert delay == rate_limit_config.base_delay_seconds
 
     def test_delay_increases_exponentially(self, rate_limit_config):
-        """Each attempt roughly doubles the delay."""
         delay_0 = calculate_backoff_delay(0, rate_limit_config)
         delay_1 = calculate_backoff_delay(1, rate_limit_config)
         delay_2 = calculate_backoff_delay(2, rate_limit_config)
@@ -90,7 +67,6 @@ class TestCalculateBackoffDelay:
         assert delay_2 == delay_1 * 2
 
     def test_delay_respects_max_delay(self):
-        """Delay never exceeds max_delay_seconds."""
         config = RateLimitConfig(
             base_delay_seconds=10.0,
             max_delay_seconds=15.0,
@@ -101,20 +77,17 @@ class TestCalculateBackoffDelay:
         assert delay == config.max_delay_seconds
 
     def test_jitter_adds_randomness(self, config_with_jitter):
-        """Same attempt returns different values (jitter)."""
         delays = [calculate_backoff_delay(0, config_with_jitter) for _ in range(10)]
         # With jitter, not all values should be identical
         assert len(set(delays)) > 1
 
     def test_zero_jitter_returns_exact_delay(self, rate_limit_config):
-        """With jitter_factor=0, returns exact exponential delay."""
         # Multiple calls should return the same value
         delays = [calculate_backoff_delay(1, rate_limit_config) for _ in range(5)]
         assert all(d == delays[0] for d in delays)
         assert delays[0] == rate_limit_config.base_delay_seconds * 2
 
     def test_custom_config_values(self):
-        """Uses values from provided RateLimitConfig."""
         config = RateLimitConfig(
             base_delay_seconds=5.0,
             max_delay_seconds=100.0,
@@ -124,51 +97,37 @@ class TestCalculateBackoffDelay:
         assert delay == 5.0
 
 
-# =============================================================================
-# Tests for _is_retryable_error
-# =============================================================================
-
-
 class TestIsRetryableError:
-    """Tests for _is_retryable_error function."""
-
     @pytest.fixture
     def default_config(self):
         """Default config with standard retryable status codes."""
         return RateLimitConfig()
 
     def test_detects_429_status_code(self, default_config):
-        """HTTP 429 is retryable."""
         error = Exception("HTTP Error 429: Too Many Requests")
         assert _is_retryable_error(error, default_config) is True
 
     def test_detects_502_status_code(self, default_config):
-        """HTTP 502 Bad Gateway is retryable."""
         error = Exception("HTTP Error 502: Bad Gateway")
         assert _is_retryable_error(error, default_config) is True
 
     def test_detects_503_status_code(self, default_config):
-        """HTTP 503 Service Unavailable is retryable."""
         error = Exception("Service Unavailable (503)")
         assert _is_retryable_error(error, default_config) is True
 
     def test_detects_504_status_code(self, default_config):
-        """HTTP 504 Gateway Timeout is retryable."""
         error = Exception("Gateway Timeout: 504")
         assert _is_retryable_error(error, default_config) is True
 
     def test_detects_rate_limit_text(self, default_config):
-        """'rate limit' in message is retryable."""
         error = Exception("Rate limit exceeded, please wait")
         assert _is_retryable_error(error, default_config) is True
 
     def test_regular_error_not_retryable(self, default_config):
-        """Normal exceptions are not retryable."""
         error = Exception("Connection refused")
         assert _is_retryable_error(error, default_config) is False
 
     def test_custom_status_codes(self):
-        """Respects custom retryable_status_codes in config."""
         config = RateLimitConfig(retryable_status_codes=(418, 500))
         error_418 = Exception("I'm a teapot (418)")
         Exception("HTTP 429 Too Many Requests")
@@ -181,17 +140,14 @@ class TestIsRetryableError:
         assert _is_retryable_error(error_500, config) is True
 
     def test_status_code_word_boundary_no_false_positive(self, default_config):
-        """Status codes embedded in identifiers should not match."""
         error = Exception("Working on ticket PROJ-4290")
         assert _is_retryable_error(error, default_config) is False
 
     def test_status_code_word_boundary_true_positive(self, default_config):
-        """Standalone status codes should still match."""
         error = Exception("HTTP 429 Too Many Requests")
         assert _is_retryable_error(error, default_config) is True
 
     def test_detects_backend_rate_limit_error_by_type(self, default_config):
-        """BackendRateLimitError is retryable even without keywords in message."""
         error = BackendRateLimitError(
             "something went wrong",
             output="generic output",
@@ -200,7 +156,6 @@ class TestIsRetryableError:
         assert _is_retryable_error(error, default_config) is True
 
     def test_detects_auggie_rate_limit_error_by_type(self, default_config):
-        """AuggieRateLimitError is retryable even without keywords in message."""
         error = AuggieRateLimitError(
             "something went wrong",
             output="generic output",
@@ -208,17 +163,8 @@ class TestIsRetryableError:
         assert _is_retryable_error(error, default_config) is True
 
 
-# =============================================================================
-# Tests for with_rate_limit_retry decorator
-# =============================================================================
-
-
 class TestWithRateLimitRetry:
-    """Tests for with_rate_limit_retry decorator."""
-
     def test_returns_result_on_success(self, rate_limit_config):
-        """Decorated function returns normally on success."""
-
         @with_rate_limit_retry(rate_limit_config)
         def successful_func():
             return "success"
@@ -228,7 +174,6 @@ class TestWithRateLimitRetry:
 
     @patch("ingot.utils.retry.time.sleep")
     def test_retries_on_retryable_error(self, mock_sleep, rate_limit_config):
-        """Retries when retryable error occurs."""
         call_count = 0
 
         @with_rate_limit_retry(rate_limit_config)
@@ -246,8 +191,6 @@ class TestWithRateLimitRetry:
 
     @patch("ingot.utils.retry.time.sleep")
     def test_raises_after_max_retries(self, mock_sleep, rate_limit_config):
-        """Raises RateLimitExceededError after max retries."""
-
         @with_rate_limit_retry(rate_limit_config)
         def always_fails():
             raise Exception("HTTP Error 429: Too Many Requests")
@@ -260,7 +203,6 @@ class TestWithRateLimitRetry:
 
     @patch("ingot.utils.retry.time.sleep")
     def test_calls_on_retry_callback(self, mock_sleep, rate_limit_config):
-        """Calls on_retry callback with attempt info."""
         callback = MagicMock()
         call_count = 0
 
@@ -284,7 +226,6 @@ class TestWithRateLimitRetry:
 
     @patch("ingot.utils.retry.time.sleep")
     def test_respects_calculated_delay(self, mock_sleep, rate_limit_config):
-        """Uses calculated delay between retries."""
         call_count = 0
 
         @with_rate_limit_retry(rate_limit_config)
@@ -304,7 +245,6 @@ class TestWithRateLimitRetry:
         assert delay == rate_limit_config.base_delay_seconds
 
     def test_non_retryable_error_raises_immediately(self, rate_limit_config):
-        """Non-retryable errors are not retried."""
         call_count = 0
 
         @with_rate_limit_retry(rate_limit_config)
@@ -321,19 +261,9 @@ class TestWithRateLimitRetry:
 
 
 class TestAuggieRateLimitErrorRetry:
-    """Tests for retry behavior with AuggieRateLimitError."""
-
     @patch("ingot.utils.retry.random.uniform", return_value=0.5)
     @patch("ingot.utils.retry.time.sleep")
     def test_retry_triggers_on_auggie_rate_limit_error(self, mock_sleep, mock_random):
-        """AuggieRateLimitError triggers retry with deterministic behavior.
-
-        This test verifies that:
-        1. AuggieRateLimitError is detected as retryable (contains rate limit keywords)
-        2. Retry mechanism triggers with proper exponential backoff
-        3. Mock sleep ensures deterministic, fast test execution
-        4. Mock random.uniform ensures deterministic jitter calculation
-        """
         config = RateLimitConfig(
             max_retries=3,
             base_delay_seconds=1.0,
@@ -365,7 +295,6 @@ class TestAuggieRateLimitErrorRetry:
     @patch("ingot.utils.retry.random.uniform", return_value=0.0)
     @patch("ingot.utils.retry.time.sleep")
     def test_retry_exhaustion_on_persistent_rate_limit(self, mock_sleep, mock_random):
-        """Persistent rate limit errors exhaust retries and raise RateLimitExceededError."""
         config = RateLimitConfig(
             max_retries=2,
             base_delay_seconds=1.0,
@@ -388,11 +317,6 @@ class TestAuggieRateLimitErrorRetry:
     @patch("ingot.utils.retry.random.uniform", return_value=0.5)
     @patch("ingot.utils.retry.time.sleep")
     def test_backoff_delay_calculation_deterministic(self, mock_sleep, mock_random):
-        """Verify backoff delay calculation is deterministic with mocked random.
-
-        Note: random.uniform(0, max) is mocked to return a fixed value (0.5).
-        This becomes the actual jitter value added to the exponential delay.
-        """
         config = RateLimitConfig(
             max_retries=3,
             base_delay_seconds=2.0,
@@ -422,11 +346,8 @@ class TestAuggieRateLimitErrorRetry:
 
 
 class TestBackendRateLimitErrorRetry:
-    """Tests for retry behavior with BackendRateLimitError."""
-
     @patch("ingot.utils.retry.time.sleep")
     def test_retry_triggers_on_backend_rate_limit_error(self, mock_sleep):
-        """BackendRateLimitError triggers retry and succeeds after failures."""
         config = RateLimitConfig(
             max_retries=3,
             base_delay_seconds=0.1,
@@ -455,7 +376,6 @@ class TestBackendRateLimitErrorRetry:
 
     @patch("ingot.utils.retry.time.sleep")
     def test_retry_exhaustion_on_persistent_backend_rate_limit(self, mock_sleep):
-        """Persistent BackendRateLimitError exhausts retries."""
         config = RateLimitConfig(
             max_retries=2,
             base_delay_seconds=0.1,
@@ -475,7 +395,6 @@ class TestBackendRateLimitErrorRetry:
 
     @patch("ingot.utils.retry.time.sleep")
     def test_retries_backend_error_without_rate_limit_keywords(self, mock_sleep):
-        """BackendRateLimitError is retried even without rate limit keywords."""
         config = RateLimitConfig(
             max_retries=3,
             base_delay_seconds=0.1,

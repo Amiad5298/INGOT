@@ -38,14 +38,7 @@ def _freeze_credentials(creds: dict[str, str]) -> Mapping[str, str]:
 
 @dataclass(frozen=True)
 class PlatformCredentials:
-    """Credentials for a specific platform.
-
-    Attributes:
-        platform: The platform these credentials are for
-        is_configured: Whether valid credentials are available
-        credentials: Read-only mapping of credential key-value pairs (empty if not configured)
-        error_message: Description of why credentials are unavailable (if not configured)
-    """
+    """Credentials for a specific platform."""
 
     platform: Platform
     is_configured: bool
@@ -79,8 +72,6 @@ class AuthenticationManager:
         - Monday: api_key
         - Trello: api_key, token
 
-    Attributes:
-        _config: ConfigManager instance for loading credentials
     """
 
     # Set of platforms that support fallback credentials.
@@ -97,23 +88,12 @@ class AuthenticationManager:
     )
 
     def __init__(self, config: ConfigManager) -> None:
-        """Initialize with ConfigManager.
-
-        Args:
-            config: ConfigManager instance (should have load() called)
-        """
+        """Initialize with ConfigManager."""
         self._config = config
 
     @staticmethod
     def _get_platform_name(platform: Platform) -> str:
-        """Derive the lowercase platform name from the Platform enum.
-
-        Args:
-            platform: Platform enum value
-
-        Returns:
-            Lowercase platform name (e.g., "azure_devops" for Platform.AZURE_DEVOPS)
-        """
+        """Derive the lowercase platform name from the Platform enum."""
         return platform.name.lower()
 
     def get_credentials(self, platform: Platform) -> PlatformCredentials:
@@ -121,12 +101,6 @@ class AuthenticationManager:
 
         Retrieves and validates credentials for the specified platform
         from the configuration hierarchy.
-
-        Args:
-            platform: Platform enum value to get credentials for
-
-        Returns:
-            PlatformCredentials with credentials if available, or error_message if not
         """
         if platform not in self.SUPPORTED_FALLBACK_PLATFORMS:
             return PlatformCredentials(
@@ -189,13 +163,6 @@ class AuthenticationManager:
         This performs a lightweight check that verifies at least one REQUIRED
         credential key exists in the configuration, without strict validation
         (e.g., env var expansion). For full validation, use get_credentials() instead.
-
-        Args:
-            platform: Platform to check
-
-        Returns:
-            True if at least one required credential key exists for the platform
-            (may still fail full validation due to missing env vars or empty values)
         """
         if platform not in self.SUPPORTED_FALLBACK_PLATFORMS:
             return False
@@ -225,11 +192,7 @@ class AuthenticationManager:
             return False
 
     def list_fallback_platforms(self) -> list[Platform]:
-        """List platforms with fallback credentials configured.
-
-        Returns:
-            List of Platform enum values that have valid fallback credentials
-        """
+        """List platforms with fallback credentials configured."""
         return [
             platform
             for platform in self.SUPPORTED_FALLBACK_PLATFORMS
@@ -254,14 +217,6 @@ class AuthenticationManager:
 
         For API connectivity testing, use DirectAPIFetcher which makes
         actual API calls and will surface authentication errors.
-
-        Args:
-            platform: Platform to validate credentials for
-
-        Returns:
-            Tuple of (success: bool, message: str)
-            - (True, "Credentials configured for {platform}") if valid
-            - (False, error_message) if validation fails
         """
         creds = self.get_credentials(platform)
 

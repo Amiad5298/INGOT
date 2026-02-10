@@ -11,45 +11,34 @@ from ingot.integrations.backends.errors import BackendTimeoutError
 
 
 class TestAuggieBackendProperties:
-    """Tests for AuggieBackend properties."""
-
     def test_name_property(self):
-        """Backend name is 'Auggie'."""
         backend = AuggieBackend()
         assert backend.name == "Auggie"
 
     def test_platform_property(self):
-        """Platform is AgentPlatform.AUGGIE."""
         backend = AuggieBackend()
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_supports_parallel_property(self):
-        """Backend supports parallel execution."""
         backend = AuggieBackend()
         assert backend.supports_parallel is True
 
     def test_supports_parallel_execution_method(self):
-        """supports_parallel_execution() returns supports_parallel value."""
         backend = AuggieBackend()
         assert backend.supports_parallel_execution() is True
         assert backend.supports_parallel_execution() == backend.supports_parallel
 
     def test_model_stored_in_client(self):
-        """Model is passed to underlying AuggieClient."""
         backend = AuggieBackend(model="test-model")
         assert backend._client.model == "test-model"
 
 
 class TestAuggieBackendProtocolCompliance:
-    """Tests verifying AIBackend protocol compliance."""
-
     def test_isinstance_aibackend(self):
-        """AuggieBackend satisfies AIBackend protocol via isinstance()."""
         backend = AuggieBackend()
         assert isinstance(backend, AIBackend)
 
     def test_has_all_required_properties(self):
-        """AuggieBackend has all required protocol properties."""
         backend = AuggieBackend()
         # Properties should be accessible without error
         assert hasattr(backend, "name")
@@ -61,7 +50,6 @@ class TestAuggieBackendProtocolCompliance:
         assert isinstance(backend.supports_parallel, bool)
 
     def test_has_all_required_methods(self):
-        """AuggieBackend has all required protocol methods."""
         backend = AuggieBackend()
         # Methods should be callable
         assert callable(backend.run_with_callback)
@@ -75,10 +63,7 @@ class TestAuggieBackendProtocolCompliance:
 
 
 class TestAuggieBackendDelegation:
-    """Tests for method delegation to AuggieClient."""
-
     def test_run_with_callback_delegates_to_client(self):
-        """run_with_callback delegates to AuggieClient when no timeout."""
         backend = AuggieBackend()
         mock_callback = MagicMock()
 
@@ -95,7 +80,6 @@ class TestAuggieBackendDelegation:
         assert output == "output"
 
     def test_run_with_callback_maps_subagent_to_agent(self):
-        """subagent parameter maps to agent in AuggieClient."""
         backend = AuggieBackend()
         mock_callback = MagicMock()
 
@@ -114,7 +98,6 @@ class TestAuggieBackendDelegation:
         assert "subagent" not in call_kwargs
 
     def test_run_print_with_output_delegates(self):
-        """run_print_with_output delegates to AuggieClient."""
         backend = AuggieBackend()
 
         with patch.object(
@@ -127,7 +110,6 @@ class TestAuggieBackendDelegation:
         assert output == "output"
 
     def test_run_print_quiet_delegates(self):
-        """run_print_quiet delegates to AuggieClient."""
         backend = AuggieBackend()
 
         with patch.object(
@@ -139,7 +121,6 @@ class TestAuggieBackendDelegation:
         assert output == "quiet output"
 
     def test_run_print_quiet_maps_subagent_to_agent(self):
-        """subagent parameter maps to agent in run_print_quiet."""
         backend = AuggieBackend()
 
         with patch.object(
@@ -153,21 +134,19 @@ class TestAuggieBackendDelegation:
         assert "subagent" not in call_kwargs
 
     def test_run_print_with_output_maps_subagent_to_agent(self):
-        """subagent parameter maps to agent in run_print_with_output."""
         backend = AuggieBackend()
 
         with patch.object(
             backend._client, "run_print_with_output", return_value=(True, "output")
         ) as mock_run:
-            backend.run_print_with_output("test prompt", subagent="spec-executor")
+            backend.run_print_with_output("test prompt", subagent="test-agent")
 
         # Verify agent parameter was passed (not subagent)
         call_kwargs = mock_run.call_args.kwargs
-        assert call_kwargs.get("agent") == "spec-executor"
+        assert call_kwargs.get("agent") == "test-agent"
         assert "subagent" not in call_kwargs
 
     def test_dont_save_session_passed_to_client(self):
-        """dont_save_session is correctly passed to AuggieClient methods."""
         backend = AuggieBackend()
 
         # Test run_with_callback
@@ -194,7 +173,6 @@ class TestAuggieBackendDelegation:
         assert mock_run.call_args.kwargs.get("dont_save_session") is True
 
     def test_run_streaming_delegates_to_run_print_with_output(self):
-        """run_streaming calls run_print_with_output internally."""
         backend = AuggieBackend()
 
         with patch.object(
@@ -212,7 +190,6 @@ class TestAuggieBackendDelegation:
         assert output == "streaming output"
 
     def test_detect_rate_limit_delegates(self):
-        """detect_rate_limit uses _looks_like_rate_limit."""
         backend = AuggieBackend()
 
         # Test positive cases
@@ -224,7 +201,6 @@ class TestAuggieBackendDelegation:
         assert backend.detect_rate_limit("normal output") is False
 
     def test_check_installed_delegates(self):
-        """check_installed uses check_auggie_installed."""
         backend = AuggieBackend()
 
         with patch(
@@ -251,7 +227,6 @@ class TestAuggieBackendModelResolution:
     """
 
     def test_run_with_callback_resolves_model(self):
-        """Model is resolved using _resolve_model()."""
         backend = AuggieBackend(model="default-model")
 
         with patch.object(
@@ -268,7 +243,6 @@ class TestAuggieBackendModelResolution:
         assert call_kwargs.get("model") == "explicit-model"
 
     def test_run_print_with_output_resolves_model(self):
-        """run_print_with_output resolves model correctly."""
         backend = AuggieBackend(model="default-model")
 
         with patch.object(
@@ -281,10 +255,6 @@ class TestAuggieBackendModelResolution:
         assert call_kwargs.get("model") == "default-model"
 
     def test_model_precedence_explicit_beats_frontmatter(self, tmp_path, monkeypatch):
-        """Explicit model override takes precedence over frontmatter model.
-
-        Precedence: explicit > frontmatter > default
-        """
         # Create a mock subagent file with frontmatter model
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
@@ -316,11 +286,6 @@ You are a test agent.
         assert call_kwargs.get("model") == "explicit-model"
 
     def test_model_precedence_frontmatter_beats_default(self, tmp_path, monkeypatch):
-        """Frontmatter model takes precedence over instance default.
-
-        Precedence: explicit > frontmatter > default
-        This test verifies that _resolve_model() correctly reads frontmatter.
-        """
         # Create a mock subagent file with frontmatter model
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
@@ -352,10 +317,6 @@ You are a test agent.
         assert call_kwargs.get("model") == "frontmatter-model"
 
     def test_model_precedence_default_when_no_frontmatter(self, tmp_path, monkeypatch):
-        """Instance default is used when no explicit or frontmatter model.
-
-        Precedence: explicit > frontmatter > default
-        """
         # Create a mock subagent file WITHOUT frontmatter model
         agents_dir = tmp_path / ".augment" / "agents"
         agents_dir.mkdir(parents=True)
@@ -382,10 +343,7 @@ You are a test agent.
 
 
 class TestAuggieBackendTimeout:
-    """Tests for timeout handling in AuggieBackend."""
-
     def test_run_with_callback_uses_timeout_wrapper(self, mocker):
-        """Timeout triggers _run_streaming_with_timeout()."""
         backend = AuggieBackend()
         mock_callback = MagicMock()
 
@@ -407,7 +365,6 @@ class TestAuggieBackendTimeout:
         assert output == "timeout output"
 
     def test_run_with_callback_without_timeout_delegates_directly(self, mocker):
-        """Without timeout, delegates directly to AuggieClient.run_with_callback()."""
         backend = AuggieBackend()
         mock_callback = MagicMock()
 
@@ -430,7 +387,6 @@ class TestAuggieBackendTimeout:
         assert output == "direct output"
 
     def test_timeout_error_propagates(self, mocker):
-        """BackendTimeoutError from _run_streaming_with_timeout bubbles up."""
         backend = AuggieBackend()
         mock_callback = MagicMock()
 
@@ -452,7 +408,6 @@ class TestAuggieBackendTimeout:
         assert exc_info.value.timeout_seconds == 30.0
 
     def test_run_print_with_output_enforces_timeout(self, mocker):
-        """run_print_with_output enforces timeout via subprocess.run(timeout=...)."""
         import subprocess
 
         backend = AuggieBackend()
@@ -468,7 +423,6 @@ class TestAuggieBackendTimeout:
         assert exc_info.value.timeout_seconds == 10.0
 
     def test_run_print_with_output_timeout_returns_result(self, mocker):
-        """run_print_with_output with timeout returns normally on success."""
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "output text"
@@ -483,7 +437,6 @@ class TestAuggieBackendTimeout:
         assert output == "output text"
 
     def test_run_print_with_output_without_timeout_delegates(self, mocker):
-        """run_print_with_output without timeout delegates to client."""
         backend = AuggieBackend()
         mock_run = mocker.patch.object(
             backend._client, "run_print_with_output", return_value=(True, "delegated")
@@ -498,7 +451,6 @@ class TestAuggieBackendTimeout:
         assert output == "delegated"
 
     def test_run_print_quiet_enforces_timeout(self, mocker):
-        """run_print_quiet enforces timeout via subprocess.run(timeout=...)."""
         import subprocess
 
         backend = AuggieBackend()
@@ -514,7 +466,6 @@ class TestAuggieBackendTimeout:
         assert exc_info.value.timeout_seconds == 15.0
 
     def test_run_print_quiet_timeout_returns_result(self, mocker):
-        """run_print_quiet with timeout returns output on success."""
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "quiet output"
@@ -528,7 +479,6 @@ class TestAuggieBackendTimeout:
         assert output == "quiet output"
 
     def test_run_print_quiet_without_timeout_delegates(self, mocker):
-        """run_print_quiet without timeout delegates to client."""
         backend = AuggieBackend()
         mock_run = mocker.patch.object(backend._client, "run_print_quiet", return_value="delegated")
         mock_subprocess = mocker.patch("ingot.integrations.backends.auggie.subprocess.run")
@@ -548,7 +498,6 @@ class TestAuggieClientContract:
     """
 
     def test_build_command_basic_structure(self):
-        """Verify _build_command() returns expected command structure."""
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -558,7 +507,6 @@ class TestAuggieClientContract:
         assert cmd[-1] == "test prompt"
 
     def test_build_command_with_model(self):
-        """Verify _build_command() includes model flag."""
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
@@ -568,10 +516,6 @@ class TestAuggieClientContract:
         assert cmd[model_idx + 1] == "test-model"
 
     def test_build_command_explicit_model_overrides_agent_model(self):
-        """Explicit model override takes precedence over agent definition model.
-
-        Model precedence: explicit > agent definition > instance default.
-        """
         from unittest.mock import MagicMock, patch
 
         from ingot.integrations.auggie import AuggieClient
@@ -599,7 +543,6 @@ class TestAuggieClientContract:
         assert cmd[model_idx + 1] == "explicit-override-model"
 
     def test_build_command_agent_model_used_when_no_explicit(self):
-        """Agent definition model is used when no explicit model is passed."""
         from unittest.mock import MagicMock, patch
 
         from ingot.integrations.auggie import AuggieClient
@@ -626,17 +569,12 @@ class TestAuggieClientContract:
 
 
 class TestAuggieBackendClose:
-    """Tests for close() method."""
-
     def test_close_is_noop(self):
-        """close() is inherited from BaseBackend and is a no-op."""
         backend = AuggieBackend()
         backend.close()  # Should not raise
 
 
 class TestAuggieDetectRateLimit:
-    """Comprehensive rate limit detection tests for Auggie backend."""
-
     @pytest.fixture
     def backend(self):
         return AuggieBackend()
@@ -663,7 +601,6 @@ class TestAuggieDetectRateLimit:
         ],
     )
     def test_positive_detection(self, backend, output):
-        """Output containing rate limit patterns returns True."""
         assert backend.detect_rate_limit(output) is True
 
     @pytest.mark.parametrize(
@@ -690,15 +627,12 @@ class TestAuggieDetectRateLimit:
         ],
     )
     def test_negative_detection(self, backend, output):
-        """Output without rate limit indicators returns False."""
         assert backend.detect_rate_limit(output) is False
 
     def test_429_word_boundary_no_false_positive(self, backend):
-        """'429' embedded in identifiers (e.g., PROJ-4290) should not match."""
         assert backend.detect_rate_limit("Working on PROJ-4290") is False
 
     def test_429_word_boundary_true_positive(self, backend):
-        """Standalone '429' status code should match."""
         assert backend.detect_rate_limit("HTTP 429 error") is True
 
 
@@ -707,10 +641,7 @@ class TestAuggieDetectRateLimit:
     reason="Integration tests require INGOT_INTEGRATION_TESTS=1",
 )
 class TestAuggieBackendIntegration:
-    """Integration tests with real Auggie CLI."""
-
     def test_check_installed_returns_version(self):
-        """check_installed returns True and version string when Auggie is installed."""
         backend = AuggieBackend()
         is_installed, message = backend.check_installed()
         # If Auggie is installed, should return True

@@ -48,14 +48,9 @@ def matches_common_rate_limit(
 ) -> bool:
     """Check if output matches common rate-limit patterns.
 
-    Shared by all backend looks_like_rate_limit functions.  Backends call
+    Shared by all backend looks_like_rate_limit functions. Backends call
     this with their own ``extra_keywords`` / ``extra_status_re`` to layer
     provider-specific patterns on top of the common set.
-
-    Args:
-        output: The output text to check.
-        extra_keywords: Additional substring-match keywords (e.g., "overloaded").
-        extra_status_re: Additional compiled regex for status codes (e.g., ``r"\\b529\\b"``).
     """
     if not output:
         return False
@@ -137,18 +132,13 @@ class AIBackend(Protocol):
 
     @property
     def platform(self) -> AgentPlatform:
-        """The agent platform enum value.
-
-        Returns the AgentPlatform enum member for this backend.
-        Used for configuration and logging.
-        """
+        """The agent platform enum value."""
         ...
 
     @property
     def model(self) -> str:
         """Default model for this backend instance.
 
-        Returns the model string configured at creation time.
         Used by BackendFactory to forward the model when creating
         fresh backend instances (e.g., for parallel execution workers).
         """
@@ -183,21 +173,16 @@ class AIBackend(Protocol):
         to the callback while also being accumulated for the return value.
 
         Args:
-            prompt: The prompt to send to the AI
-            output_callback: Called for each line of output (stripped of newline)
-            subagent: Subagent name (loads prompt from .augment/agents/{name}.md)
-            model: Model override (best-effort, safely ignored if unsupported)
-            dont_save_session: If True, isolate this execution (no session persistence)
-            timeout_seconds: Maximum execution time (None = no timeout)
-
-        Returns:
-            Tuple of (success, full_output) where:
-            - success: True if command returned exit code 0
-            - full_output: All output lines joined (preserves newlines)
+            prompt: The prompt to send to the AI.
+            output_callback: Called for each line of output (stripped of newline).
+            subagent: Subagent name (loads prompt from .augment/agents/{name}.md).
+            model: Model override (best-effort, safely ignored if unsupported).
+            dont_save_session: If True, isolate this execution (no session persistence).
+            timeout_seconds: Maximum execution time (None = no timeout).
 
         Raises:
-            BackendTimeoutError: If timeout_seconds is exceeded
-            BackendNotInstalledError: If CLI is not installed
+            BackendTimeoutError: If timeout_seconds is exceeded.
+            BackendNotInstalledError: If CLI is not installed.
         """
         ...
 
@@ -214,16 +199,6 @@ class AIBackend(Protocol):
 
         Convenience method that wraps run_with_callback with a default
         print callback. Output is printed to stdout as it streams.
-
-        Args:
-            prompt: The prompt to send to the AI
-            subagent: Subagent name (loads prompt from .augment/agents/{name}.md)
-            model: Model override (best-effort, safely ignored if unsupported)
-            dont_save_session: If True, isolate this execution
-            timeout_seconds: Maximum execution time (None = no timeout)
-
-        Returns:
-            Tuple of (success, full_output)
         """
         ...
 
@@ -240,16 +215,6 @@ class AIBackend(Protocol):
 
         No output is printed during execution. This is used for background
         operations where only the final result matters.
-
-        Args:
-            prompt: The prompt to send to the AI
-            subagent: Subagent name (loads prompt from .augment/agents/{name}.md)
-            model: Model override (best-effort, safely ignored if unsupported)
-            dont_save_session: If True, isolate this execution
-            timeout_seconds: Maximum execution time (None = no timeout)
-
-        Returns:
-            The full output as a string (success is not indicated)
 
         Note:
             Callers must check the content to determine success/failure.
@@ -269,15 +234,6 @@ class AIBackend(Protocol):
 
         This replaces interactive run_print() usage. User input should be
         collected via TUI first, then included in the prompt.
-
-        Args:
-            prompt: The prompt to send (with any user input already included)
-            subagent: Subagent name (loads prompt from .augment/agents/{name}.md)
-            model: Model override (best-effort, safely ignored if unsupported)
-            timeout_seconds: Maximum execution time (None = no timeout)
-
-        Returns:
-            Tuple of (success, full_output)
         """
         ...
 
@@ -286,11 +242,6 @@ class AIBackend(Protocol):
 
         Verifies that the CLI executable is available in PATH and can
         execute a basic command (typically --version).
-
-        Returns:
-            Tuple of (is_installed, message) where:
-            - is_installed: True if CLI is available and functional
-            - message: Version string if installed, error message if not
 
         Example:
             >>> installed, msg = backend.check_installed()
@@ -304,12 +255,6 @@ class AIBackend(Protocol):
 
         Backend-specific pattern matching for rate limit detection.
         Each backend implements patterns appropriate for its provider.
-
-        Args:
-            output: The output text to check
-
-        Returns:
-            True if output contains rate limit indicators
 
         Example patterns:
             - HTTP 429 status codes
@@ -325,9 +270,6 @@ class AIBackend(Protocol):
 
         Returns the value of the `supports_parallel` property.
         This method exists for explicit API clarity in workflow code.
-
-        Returns:
-            True if multiple CLI invocations can run concurrently
         """
         ...
 
@@ -370,11 +312,7 @@ class BaseBackend(ABC):
     """
 
     def __init__(self, model: str = "") -> None:
-        """Initialize the backend with optional default model.
-
-        Args:
-            model: Default model to use when not specified per-call or in frontmatter
-        """
+        """Initialize the backend with optional default model."""
         self._model = model
 
     @property
@@ -394,11 +332,7 @@ class BaseBackend(ABC):
     @property
     @abstractmethod
     def platform(self) -> AgentPlatform:
-        """The agent platform enum value.
-
-        Returns the AgentPlatform enum member for this backend.
-        Used for configuration and logging.
-        """
+        """The agent platform enum value."""
         ...
 
     @property
@@ -415,9 +349,6 @@ class BaseBackend(ABC):
 
         Returns the value of the supports_parallel property.
         This method exists for explicit API clarity in workflow code.
-
-        Returns:
-            True if multiple CLI invocations can run concurrently
         """
         return self.supports_parallel
 
@@ -442,14 +373,6 @@ class BaseBackend(ABC):
 
         The function looks for files in `.augment/agents/{subagent}.md`.
         If the file starts with `---`, it parses the YAML frontmatter.
-
-        Args:
-            subagent: Subagent name (e.g., "ingot-planner")
-
-        Returns:
-            Tuple of (metadata, prompt_body) where:
-            - metadata: Parsed SubagentMetadata from frontmatter
-            - prompt_body: The prompt content without frontmatter
 
         Example:
             >>> metadata, body = backend._parse_subagent_prompt("ingot-planner")
@@ -504,13 +427,6 @@ class BaseBackend(ABC):
         1. Explicit per-call model override (highest precedence)
         2. Subagent frontmatter model field
         3. Instance default model (self._model)
-
-        Args:
-            explicit_model: Model passed to run_* method
-            subagent: Subagent name for frontmatter lookup
-
-        Returns:
-            Resolved model name or None if no model specified
         """
         # 1. Explicit override takes precedence
         if explicit_model:
@@ -542,19 +458,10 @@ class BaseBackend(ABC):
         The watchdog thread:
         1. Starts when timeout_seconds is provided
         2. Waits on a stop_event for timeout_seconds
-        3. If not stopped, terminates the process (SIGTERM → SIGKILL)
-
-        Args:
-            cmd: Command to execute as subprocess
-            output_callback: Called for each line of output (stripped of newline)
-            timeout_seconds: Maximum execution time (None = no timeout)
-
-        Returns:
-            Tuple of (return_code, full_output) where return_code is the
-            subprocess exit code and full_output is all output joined.
+        3. If not stopped, terminates the process (SIGTERM -> SIGKILL)
 
         Raises:
-            BackendTimeoutError: If execution exceeds timeout_seconds
+            BackendTimeoutError: If execution exceeds timeout_seconds.
 
         Example:
             >>> return_code, output = self._run_streaming_with_timeout(

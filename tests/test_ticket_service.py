@@ -107,10 +107,7 @@ def mock_provider(sample_ticket):
 
 
 class TestTicketServiceConstructor:
-    """Test TicketService constructor."""
-
     def test_init_with_primary_only(self, mock_primary_fetcher):
-        """Should initialize with primary fetcher only."""
         service = TicketService(primary_fetcher=mock_primary_fetcher)
 
         assert service.primary_fetcher_name == "MockPrimaryFetcher"
@@ -118,7 +115,6 @@ class TestTicketServiceConstructor:
         assert service.has_cache is False
 
     def test_init_with_primary_and_fallback(self, mock_primary_fetcher, mock_fallback_fetcher):
-        """Should initialize with both primary and fallback fetchers."""
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
             fallback_fetcher=mock_fallback_fetcher,
@@ -128,7 +124,6 @@ class TestTicketServiceConstructor:
         assert service.fallback_fetcher_name == "MockFallbackFetcher"
 
     def test_init_with_cache(self, mock_primary_fetcher, mock_cache):
-        """Should initialize with cache."""
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
             cache=mock_cache,
@@ -137,7 +132,6 @@ class TestTicketServiceConstructor:
         assert service.has_cache is True
 
     def test_init_with_custom_ttl(self, mock_primary_fetcher):
-        """Should accept custom default TTL."""
         ttl = timedelta(hours=2)
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
@@ -148,11 +142,8 @@ class TestTicketServiceConstructor:
 
 
 class TestGetTicket:
-    """Test get_ticket() orchestration method."""
-
     @pytest.mark.asyncio
     async def test_successful_fetch(self, mock_primary_fetcher, mock_provider, sample_ticket):
-        """Should successfully fetch and return a ticket."""
         with patch(
             "ingot.integrations.ticket_service.ProviderRegistry.get_provider_for_input",
             return_value=mock_provider,
@@ -168,7 +159,6 @@ class TestGetTicket:
     async def test_cache_hit_returns_cached_ticket(
         self, mock_primary_fetcher, mock_cache, mock_provider, sample_ticket
     ):
-        """Should return cached ticket on cache hit."""
         mock_cache.get.return_value = sample_ticket
 
         with patch(
@@ -189,7 +179,6 @@ class TestGetTicket:
     async def test_cache_miss_fetches_from_fetcher(
         self, mock_primary_fetcher, mock_cache, mock_provider, sample_ticket
     ):
-        """Should fetch from fetcher on cache miss."""
         mock_cache.get.return_value = None
 
         with patch(
@@ -211,7 +200,6 @@ class TestGetTicket:
     async def test_skip_cache_bypasses_cache_lookup(
         self, mock_primary_fetcher, mock_cache, mock_provider, sample_ticket
     ):
-        """Should skip cache lookup when skip_cache=True."""
         mock_cache.get.return_value = sample_ticket  # Would hit cache normally
 
         with patch(
@@ -232,7 +220,6 @@ class TestGetTicket:
     async def test_custom_ttl_used_for_caching(
         self, mock_primary_fetcher, mock_cache, mock_provider, sample_ticket
     ):
-        """Should use custom TTL when caching."""
         custom_ttl = timedelta(minutes=30)
 
         with patch(
@@ -251,7 +238,6 @@ class TestGetTicket:
 
     @pytest.mark.asyncio
     async def test_raises_error_when_closed(self, mock_primary_fetcher):
-        """Should raise RuntimeError when service is closed."""
         service = TicketService(primary_fetcher=mock_primary_fetcher)
         await service.close()
 
@@ -260,13 +246,10 @@ class TestGetTicket:
 
 
 class TestFallbackBehavior:
-    """Test fallback behavior on primary fetcher errors."""
-
     @pytest.mark.asyncio
     async def test_fallback_on_agent_integration_error(
         self, mock_primary_fetcher, mock_fallback_fetcher, mock_provider, sample_ticket
     ):
-        """Should fallback to fallback fetcher on AgentIntegrationError."""
         mock_primary_fetcher.fetch = AsyncMock(
             side_effect=AgentIntegrationError("Connection failed")
         )
@@ -289,7 +272,6 @@ class TestFallbackBehavior:
     async def test_fallback_on_agent_fetch_error(
         self, mock_primary_fetcher, mock_fallback_fetcher, mock_provider, sample_ticket
     ):
-        """Should fallback to fallback fetcher on AgentFetchError."""
         mock_primary_fetcher.fetch = AsyncMock(side_effect=AgentFetchError("Fetch failed"))
 
         with patch(
@@ -309,7 +291,6 @@ class TestFallbackBehavior:
     async def test_fallback_on_agent_response_parse_error(
         self, mock_primary_fetcher, mock_fallback_fetcher, mock_provider, sample_ticket
     ):
-        """Should fallback to fallback fetcher on AgentResponseParseError."""
         mock_primary_fetcher.fetch = AsyncMock(side_effect=AgentResponseParseError("Parse failed"))
 
         with patch(
@@ -327,7 +308,6 @@ class TestFallbackBehavior:
 
     @pytest.mark.asyncio
     async def test_error_propagation_when_no_fallback(self, mock_primary_fetcher, mock_provider):
-        """Should propagate error when no fallback configured."""
         mock_primary_fetcher.fetch = AsyncMock(
             side_effect=AgentIntegrationError("Connection failed")
         )
@@ -345,7 +325,6 @@ class TestFallbackBehavior:
     async def test_direct_api_only_platform_skips_primary(
         self, mock_primary_fetcher, mock_fallback_fetcher, mock_provider, sample_ticket
     ):
-        """Should use fallback directly for platforms not supported by primary."""
         mock_primary_fetcher.supports_platform.return_value = False
         mock_provider.platform = Platform.AZURE_DEVOPS
 
@@ -365,7 +344,6 @@ class TestFallbackBehavior:
 
     @pytest.mark.asyncio
     async def test_raises_platform_not_supported_error(self, mock_primary_fetcher, mock_provider):
-        """Should raise PlatformNotSupportedError when no fetcher supports platform."""
         mock_primary_fetcher.supports_platform.return_value = False
         mock_provider.platform = Platform.AZURE_DEVOPS
 
@@ -380,10 +358,7 @@ class TestFallbackBehavior:
 
 
 class TestCacheManagement:
-    """Test cache management methods."""
-
     def test_invalidate_cache(self, mock_primary_fetcher, mock_cache):
-        """Should invalidate specific cached ticket."""
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
             cache=mock_cache,
@@ -398,13 +373,11 @@ class TestCacheManagement:
         assert call_args.ticket_id == "PROJ-123"
 
     def test_invalidate_cache_no_cache(self, mock_primary_fetcher):
-        """Should be no-op when no cache configured."""
         service = TicketService(primary_fetcher=mock_primary_fetcher)
         # Should not raise
         service.invalidate_cache(Platform.JIRA, "PROJ-123")
 
     def test_clear_cache_all(self, mock_primary_fetcher, mock_cache):
-        """Should clear all cached tickets."""
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
             cache=mock_cache,
@@ -416,7 +389,6 @@ class TestCacheManagement:
         mock_cache.clear_platform.assert_not_called()
 
     def test_clear_cache_by_platform(self, mock_primary_fetcher, mock_cache):
-        """Should clear only tickets for specified platform."""
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
             cache=mock_cache,
@@ -428,13 +400,11 @@ class TestCacheManagement:
         mock_cache.clear.assert_not_called()
 
     def test_clear_cache_no_cache(self, mock_primary_fetcher):
-        """Should be no-op when no cache configured."""
         service = TicketService(primary_fetcher=mock_primary_fetcher)
         # Should not raise
         service.clear_cache()
 
     def test_has_cache_property(self, mock_primary_fetcher, mock_cache):
-        """Should return correct has_cache value."""
         service_with = TicketService(
             primary_fetcher=mock_primary_fetcher,
             cache=mock_cache,
@@ -446,13 +416,10 @@ class TestCacheManagement:
 
 
 class TestResourceManagement:
-    """Test async resource management."""
-
     @pytest.mark.asyncio
     async def test_context_manager_closes_resources(
         self, mock_primary_fetcher, mock_fallback_fetcher
     ):
-        """Should close resources when exiting context manager."""
         async with TicketService(
             primary_fetcher=mock_primary_fetcher,
             fallback_fetcher=mock_fallback_fetcher,
@@ -463,7 +430,6 @@ class TestResourceManagement:
 
     @pytest.mark.asyncio
     async def test_explicit_close(self, mock_primary_fetcher, mock_fallback_fetcher):
-        """Should close resources when close() called explicitly."""
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
             fallback_fetcher=mock_fallback_fetcher,
@@ -475,7 +441,6 @@ class TestResourceManagement:
 
     @pytest.mark.asyncio
     async def test_close_is_idempotent(self, mock_primary_fetcher, mock_fallback_fetcher):
-        """Should only close once even if called multiple times."""
         service = TicketService(
             primary_fetcher=mock_primary_fetcher,
             fallback_fetcher=mock_fallback_fetcher,
@@ -489,18 +454,14 @@ class TestResourceManagement:
 
     @pytest.mark.asyncio
     async def test_close_without_fallback(self, mock_primary_fetcher):
-        """Should close successfully without fallback fetcher."""
         service = TicketService(primary_fetcher=mock_primary_fetcher)
         # Should not raise
         await service.close()
 
 
 class TestCreateTicketService:
-    """Test create_ticket_service factory function."""
-
     @pytest.mark.asyncio
     async def test_create_with_auggie_backend(self):
-        """Should create service with AuggieMediatedFetcher as primary."""
         mock_auggie = MagicMock()
         mock_auggie.platform = AgentPlatform.AUGGIE
         mock_auth = MagicMock()
@@ -530,7 +491,6 @@ class TestCreateTicketService:
 
     @pytest.mark.asyncio
     async def test_create_with_auth_manager_only(self):
-        """Should use DirectAPIFetcher as primary when no backend."""
         mock_auth = MagicMock()
 
         with patch(
@@ -551,13 +511,11 @@ class TestCreateTicketService:
 
     @pytest.mark.asyncio
     async def test_create_raises_without_any_client(self):
-        """Should raise ValueError when no clients provided."""
         with pytest.raises(ValueError, match="no fetchers configured"):
             await create_ticket_service()
 
     @pytest.mark.asyncio
     async def test_create_with_custom_cache(self):
-        """Should use provided custom cache."""
         mock_auth = MagicMock()
         custom_cache = InMemoryTicketCache(max_size=500)
 
@@ -579,7 +537,6 @@ class TestCreateTicketService:
 
     @pytest.mark.asyncio
     async def test_create_without_fallback(self):
-        """Should disable fallback when enable_fallback=False."""
         mock_auggie = MagicMock()
         mock_auggie.platform = AgentPlatform.AUGGIE
         mock_auth = MagicMock()
@@ -610,7 +567,6 @@ class TestCreateTicketService:
         ids=["manual", "aider"],
     )
     async def test_create_with_non_auggie_platform_uses_direct_api(self, platform):
-        """Should use DirectAPIFetcher as primary when backend platform has no mediated fetcher."""
         mock_backend = MagicMock()
         mock_backend.platform = platform
         mock_auth = MagicMock()
@@ -630,7 +586,6 @@ class TestCreateTicketService:
 
     @pytest.mark.asyncio
     async def test_create_with_cursor_platform_creates_cursor_fetcher(self):
-        """Cursor platform creates CursorMediatedFetcher as primary."""
         mock_backend = MagicMock()
         mock_backend.platform = AgentPlatform.CURSOR
 
@@ -649,7 +604,6 @@ class TestCreateTicketService:
 
     @pytest.mark.asyncio
     async def test_create_with_claude_platform_creates_claude_fetcher(self):
-        """Claude platform creates ClaudeMediatedFetcher as primary."""
         mock_backend = MagicMock()
         mock_backend.platform = AgentPlatform.CLAUDE
 
@@ -676,7 +630,6 @@ class TestCreateTicketService:
         ids=["manual", "aider"],
     )
     async def test_create_with_non_auggie_platform_no_fallback_raises(self, platform):
-        """Should raise ValueError when backend has no mediated fetcher and no fallback."""
         mock_backend = MagicMock()
         mock_backend.platform = platform
 
@@ -685,7 +638,6 @@ class TestCreateTicketService:
 
     @pytest.mark.asyncio
     async def test_create_consults_compatibility_matrix(self):
-        """Patching MCP_SUPPORT changes fetcher selection, proving the matrix is consulted."""
         mock_backend = MagicMock()
         mock_backend.platform = AgentPlatform.AUGGIE
         mock_auth = MagicMock()

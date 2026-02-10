@@ -25,10 +25,6 @@ class TaskLogBuffer:
     in memory for efficient tail display. Uses a deque with fixed maxlen
     to bound memory usage.
 
-    Attributes:
-        log_path: Path to the log file.
-        tail_lines: Maximum number of lines to keep in memory buffer.
-
     Example:
         >>> with TaskLogBuffer(Path("/tmp/task.log")) as buffer:
         ...     buffer.write("Starting task...")
@@ -49,7 +45,6 @@ class TaskLogBuffer:
 
     def __post_init__(self) -> None:
         """Initialize buffer with correct maxlen based on tail_lines."""
-        # Re-create deque with user-specified maxlen
         self._buffer = collections.deque(maxlen=self.tail_lines)
 
     def _ensure_file_open(self) -> None:
@@ -62,47 +57,28 @@ class TaskLogBuffer:
             self._file_handle = open(self.log_path, "a", encoding="utf-8")
 
     def write(self, line: str, *, with_timestamp: bool = True) -> None:
-        """Write a line to the log file and in-memory buffer.
-
-        Args:
-            line: The line to write (without trailing newline).
-            with_timestamp: If True, prepend timestamp to file output.
-        """
+        """Write a line to the log file and in-memory buffer."""
         self._ensure_file_open()
 
-        # Format line for file output
         if with_timestamp:
             timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S.%f]")[:-3] + "]"
             file_line = f"{timestamp} {line}"
         else:
             file_line = line
 
-        # Write to file
         assert self._file_handle is not None
         self._file_handle.write(f"{file_line}\n")
         self._file_handle.flush()
 
-        # Add to in-memory buffer (without timestamp for cleaner display)
         self._buffer.append(line)
         self._line_count += 1
 
     def write_raw(self, line: str) -> None:
-        """Write a line without timestamp.
-
-        Args:
-            line: The line to write (without trailing newline).
-        """
+        """Write a line without timestamp."""
         self.write(line, with_timestamp=False)
 
     def get_tail(self, n: int = 15) -> list[str]:
-        """Get the last n lines from the in-memory buffer.
-
-        Args:
-            n: Number of lines to return. Returns all if n > buffer size.
-
-        Returns:
-            List of the last n lines (or fewer if buffer has less).
-        """
+        """Get the last n lines from the in-memory buffer."""
         if n >= len(self._buffer):
             return list(self._buffer)
         return list(self._buffer)[-n:]

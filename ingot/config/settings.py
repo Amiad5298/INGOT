@@ -148,25 +148,11 @@ class Settings:
     )
 
     def get_attribute_for_key(self, key: str) -> str | None:
-        """Get the attribute name for a config key.
-
-        Args:
-            key: Configuration key (e.g., "DEFAULT_MODEL")
-
-        Returns:
-            Attribute name or None if key is unknown
-        """
+        """Get the attribute name for a config key."""
         return self._key_mapping.get(key)
 
     def get_key_for_attribute(self, attr: str) -> str | None:
-        """Get the config key for an attribute name.
-
-        Args:
-            attr: Attribute name (e.g., "default_model")
-
-        Returns:
-            Config key or None if attribute is unknown
-        """
+        """Get the config key for an attribute name."""
         for key, value in self._key_mapping.items():
             if value == attr:
                 return key
@@ -174,11 +160,7 @@ class Settings:
 
     @classmethod
     def get_config_keys(cls) -> list[str]:
-        """Get list of all valid configuration keys.
-
-        Returns:
-            List of configuration key names
-        """
+        """Get list of all valid configuration keys."""
         # Create a temporary instance to get the keys
         temp = cls()
         return list(temp._key_mapping.keys())
@@ -188,9 +170,6 @@ class Settings:
 
         Logs a warning if the configured value is invalid (non-empty but not
         a valid platform name).
-
-        Returns:
-            Platform enum value if default_platform is set and valid, None otherwise
         """
         import logging
 

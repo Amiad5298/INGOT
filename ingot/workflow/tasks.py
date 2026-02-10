@@ -42,14 +42,6 @@ def normalize_path(file_path: str, repo_root: Path) -> str:
     SECURITY: repo_root is REQUIRED. All paths are validated against the
     repository root to prevent directory traversal attacks.
 
-    Args:
-        file_path: The file path to normalize
-        repo_root: Repository root for jail check. Paths must resolve
-                   to within this directory. REQUIRED for security.
-
-    Returns:
-        Normalized path string relative to repo_root
-
     Raises:
         PathSecurityError: If the resolved path escapes the repository root
     """
@@ -93,14 +85,6 @@ def deduplicate_paths(paths: list[str], repo_root: Path) -> list[str]:
 
     SECURITY: repo_root is REQUIRED for path normalization and jail check.
 
-    Args:
-        paths: List of file paths to deduplicate
-        repo_root: Repository root for normalization and security validation.
-                   REQUIRED - all paths must resolve within this directory.
-
-    Returns:
-        Order-preserving deduplicated list of normalized paths
-
     Raises:
         PathSecurityError: If any path escapes the repository root
     """
@@ -134,19 +118,7 @@ class TaskCategory(Enum):
 
 @dataclass
 class Task:
-    """Represents a single task from the task list.
-
-    Attributes:
-        name: Task name/description
-        status: Current task status
-        line_number: Line number in the task list file
-        indent_level: Indentation level (for nested tasks)
-        parent: Parent task name (if nested)
-        category: Task execution category (fundamental or independent)
-        dependency_order: Order for fundamental tasks (sequential execution)
-        group_id: Group identifier for parallel tasks
-        target_files: List of files this task should modify (predictive context)
-    """
+    """Represents a single task from the task list."""
 
     name: str
     status: TaskStatus = TaskStatus.PENDING
@@ -185,13 +157,6 @@ def _parse_task_metadata(
     Metadata Bleed Prevention:
     - If a non-empty line that is NOT metadata and NOT a blank line appears
       before metadata, the metadata is NOT attached to the task.
-
-    Args:
-        lines: All lines from task list
-        task_line_num: Line number of the task (0-indexed)
-
-    Returns:
-        Tuple of (category, order, group_id, target_files)
     """
     # Default values
     category = TaskCategory.FUNDAMENTAL
@@ -297,12 +262,6 @@ def parse_task_list(content: str) -> list[Task]:
     - <!-- category: fundamental, order: N -->
     - <!-- category: independent, group: GROUP_NAME -->
     - <!-- files: path/to/file1.py, path/to/file2.py -->
-
-    Args:
-        content: Markdown content with task list
-
-    Returns:
-        List of Task objects
     """
     tasks: list[Task] = []
     lines = content.splitlines()
@@ -351,26 +310,12 @@ def parse_task_list(content: str) -> list[Task]:
 
 
 def get_pending_tasks(tasks: list[Task]) -> list[Task]:
-    """Get list of pending (incomplete) tasks.
-
-    Args:
-        tasks: List of all tasks
-
-    Returns:
-        List of pending tasks
-    """
+    """Get list of pending (incomplete) tasks."""
     return [t for t in tasks if t.status == TaskStatus.PENDING]
 
 
 def get_completed_tasks(tasks: list[Task]) -> list[Task]:
-    """Get list of completed tasks.
-
-    Args:
-        tasks: List of all tasks
-
-    Returns:
-        List of completed tasks
-    """
+    """Get list of completed tasks."""
     return [t for t in tasks if t.status == TaskStatus.COMPLETE]
 
 
@@ -381,13 +326,6 @@ def mark_task_complete(
     """Mark a task as complete in the task list file.
 
     Updates the checkbox from [ ] to [x] for the matching task.
-
-    Args:
-        tasklist_path: Path to task list file
-        task_name: Name of task to mark complete
-
-    Returns:
-        True if task was found and marked
     """
     if not tasklist_path.exists():
         log_message(f"Task list file not found: {tasklist_path}")
@@ -422,12 +360,6 @@ def format_task_list(tasks: list[Task]) -> str:
 
     Outputs category and files metadata as HTML comments above each task
     to enable round-trip parsing (parse -> format -> parse preserves data).
-
-    Args:
-        tasks: List of tasks
-
-    Returns:
-        Markdown formatted task list with metadata comments
     """
     lines = []
     for task in tasks:
@@ -469,12 +401,6 @@ def get_fundamental_tasks(tasks: list[Task]) -> list[Task]:
 
     This ensures tasks with explicit ordering (order > 0) are always executed
     before tasks with no explicit order (order = 0).
-
-    Args:
-        tasks: List of all tasks
-
-    Returns:
-        List of fundamental tasks sorted by (explicit_order_flag, dependency_order, line_number)
     """
     fundamental = [t for t in tasks if t.category == TaskCategory.FUNDAMENTAL]
     # Sort key: (0 if explicit order else 1, dependency_order, line_number)
@@ -486,38 +412,17 @@ def get_fundamental_tasks(tasks: list[Task]) -> list[Task]:
 
 
 def get_independent_tasks(tasks: list[Task]) -> list[Task]:
-    """Get independent tasks (parallelizable).
-
-    Args:
-        tasks: List of all tasks
-
-    Returns:
-        List of independent tasks
-    """
+    """Get independent tasks (parallelizable)."""
     return [t for t in tasks if t.category == TaskCategory.INDEPENDENT]
 
 
 def get_pending_fundamental_tasks(tasks: list[Task]) -> list[Task]:
-    """Get pending fundamental tasks sorted by order.
-
-    Args:
-        tasks: List of all tasks
-
-    Returns:
-        List of pending fundamental tasks sorted by dependency_order
-    """
+    """Get pending fundamental tasks sorted by order."""
     return [t for t in get_fundamental_tasks(tasks) if t.status == TaskStatus.PENDING]
 
 
 def get_pending_independent_tasks(tasks: list[Task]) -> list[Task]:
-    """Get pending independent tasks.
-
-    Args:
-        tasks: List of all tasks
-
-    Returns:
-        List of pending independent tasks
-    """
+    """Get pending independent tasks."""
     return [t for t in get_independent_tasks(tasks) if t.status == TaskStatus.PENDING]
 
 

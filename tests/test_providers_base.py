@@ -29,18 +29,13 @@ from ingot.integrations.providers.base import (
 
 
 class TestSanitizeForBranchComponent:
-    """Tests for sanitize_for_branch_component helper function."""
-
     def test_lowercases_input(self):
-        """Converts input to lowercase."""
         assert sanitize_for_branch_component("UPPERCASE") == "uppercase"
 
     def test_replaces_spaces_with_hyphens(self):
-        """Replaces spaces with hyphens."""
         assert sanitize_for_branch_component("hello world") == "hello-world"
 
     def test_replaces_special_chars_with_hyphens(self):
-        """Replaces special characters with hyphens."""
         result = sanitize_for_branch_component("test@#$%^&*()")
         assert "@" not in result
         assert "#" not in result
@@ -48,48 +43,38 @@ class TestSanitizeForBranchComponent:
         assert result == "test"
 
     def test_collapses_multiple_hyphens(self):
-        """Collapses multiple consecutive hyphens."""
         assert sanitize_for_branch_component("a---b") == "a-b"
         assert sanitize_for_branch_component("a - - - b") == "a-b"
 
     def test_strips_leading_trailing_hyphens(self):
-        """Strips leading and trailing hyphens."""
         assert sanitize_for_branch_component("-test-") == "test"
         assert sanitize_for_branch_component("---test---") == "test"
 
     def test_handles_empty_string(self):
-        """Returns empty string for empty input."""
         assert sanitize_for_branch_component("") == ""
 
     def test_handles_only_special_chars(self):
-        """Returns empty string when input has only special chars."""
         assert sanitize_for_branch_component("@#$%^&*()") == ""
 
     def test_preserves_numbers(self):
-        """Preserves numbers in input."""
         assert sanitize_for_branch_component("test123") == "test123"
 
     def test_preserves_hyphens(self):
-        """Preserves existing hyphens."""
         assert sanitize_for_branch_component("test-value") == "test-value"
 
     def test_replaces_slashes_with_hyphens(self):
-        """Replaces forward slashes with hyphens."""
         assert sanitize_for_branch_component("owner/repo") == "owner-repo"
 
     def test_replaces_hash_with_hyphen(self):
-        """Replaces hash symbol with hyphen."""
         result = sanitize_for_branch_component("repo#123")
         assert "#" not in result
         assert result == "repo-123"
 
     def test_complex_github_id(self):
-        """Handles complex GitHub-style IDs."""
         result = sanitize_for_branch_component("my-org/my-repo#456")
         assert result == "my-org-my-repo-456"
 
     def test_unicode_replaced(self):
-        """Unicode characters are replaced with hyphens."""
         result = sanitize_for_branch_component("test émoji 🎉")
         # All non-[a-z0-9-] replaced
         assert "é" not in result
@@ -97,137 +82,100 @@ class TestSanitizeForBranchComponent:
 
 
 class TestSanitizeTitleForBranch:
-    """Tests for sanitize_title_for_branch helper function."""
-
     def test_truncates_to_max_length(self):
-        """Truncates title to max_length."""
         long_title = "a" * 100
         result = sanitize_title_for_branch(long_title, max_length=50)
         assert len(result) <= 50
 
     def test_sanitizes_after_truncation(self):
-        """Sanitizes properly after truncation."""
         result = sanitize_title_for_branch("Add New Feature", max_length=50)
         assert result == "add-new-feature"
 
     def test_default_max_length_is_50(self):
-        """Default max_length is 50."""
         long_title = "a" * 100
         result = sanitize_title_for_branch(long_title)
         assert len(result) <= 50
 
 
 class TestPlatformEnum:
-    """Tests for Platform enum."""
-
     def test_is_enum(self):
-        """Platform is an Enum."""
         assert issubclass(Platform, Enum)
 
     def test_has_jira(self):
-        """Has JIRA platform."""
         assert Platform.JIRA is not None
 
     def test_has_github(self):
-        """Has GITHUB platform."""
         assert Platform.GITHUB is not None
 
     def test_has_linear(self):
-        """Has LINEAR platform."""
         assert Platform.LINEAR is not None
 
     def test_has_azure_devops(self):
-        """Has AZURE_DEVOPS platform."""
         assert Platform.AZURE_DEVOPS is not None
 
     def test_has_monday(self):
-        """Has MONDAY platform."""
         assert Platform.MONDAY is not None
 
     def test_has_trello(self):
-        """Has TRELLO platform."""
         assert Platform.TRELLO is not None
 
     def test_all_platforms(self):
-        """All expected platforms are present."""
         platforms = list(Platform)
         assert len(platforms) == 6
 
     def test_platform_values_are_auto(self):
-        """Platform values are auto-generated integers."""
         for platform in Platform:
             assert isinstance(platform.value, int)
 
 
 class TestTicketStatusEnum:
-    """Tests for TicketStatus enum."""
-
     def test_is_enum(self):
-        """TicketStatus is an Enum."""
         assert issubclass(TicketStatus, Enum)
 
     def test_has_open(self):
-        """Has OPEN status."""
         assert TicketStatus.OPEN is not None
 
     def test_has_in_progress(self):
-        """Has IN_PROGRESS status."""
         assert TicketStatus.IN_PROGRESS is not None
 
     def test_has_review(self):
-        """Has REVIEW status."""
         assert TicketStatus.REVIEW is not None
 
     def test_has_done(self):
-        """Has DONE status."""
         assert TicketStatus.DONE is not None
 
     def test_has_closed(self):
-        """Has CLOSED status."""
         assert TicketStatus.CLOSED is not None
 
     def test_has_blocked(self):
-        """Has BLOCKED status."""
         assert TicketStatus.BLOCKED is not None
 
     def test_has_unknown(self):
-        """Has UNKNOWN status for unmapped statuses."""
         assert TicketStatus.UNKNOWN is not None
 
 
 class TestTicketTypeEnum:
-    """Tests for TicketType enum."""
-
     def test_is_enum(self):
-        """TicketType is an Enum."""
         assert issubclass(TicketType, Enum)
 
     def test_has_feature(self):
-        """Has FEATURE type."""
         assert TicketType.FEATURE is not None
 
     def test_has_bug(self):
-        """Has BUG type."""
         assert TicketType.BUG is not None
 
     def test_has_task(self):
-        """Has TASK type."""
         assert TicketType.TASK is not None
 
     def test_has_maintenance(self):
-        """Has MAINTENANCE type."""
         assert TicketType.MAINTENANCE is not None
 
     def test_has_unknown(self):
-        """Has UNKNOWN type for unmapped types."""
         assert TicketType.UNKNOWN is not None
 
 
 class TestGenericTicketBasic:
-    """Basic tests for GenericTicket dataclass."""
-
     def test_creation_with_required_fields(self):
-        """Can create ticket with required fields only."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -238,7 +186,6 @@ class TestGenericTicketBasic:
         assert ticket.url == "https://jira.example.com/TEST-123"
 
     def test_default_values(self):
-        """Has sensible default values."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.GITHUB,
@@ -253,7 +200,6 @@ class TestGenericTicketBasic:
         assert ticket.platform_metadata == {}
 
     def test_full_ticket(self):
-        """Can create ticket with all fields."""
         ticket = GenericTicket(
             id="PROJ-456",
             platform=Platform.LINEAR,
@@ -272,10 +218,7 @@ class TestGenericTicketBasic:
 
 
 class TestGenericTicketSemanticBranchPrefix:
-    """Tests for GenericTicket.semantic_branch_prefix property."""
-
     def test_feature_returns_feat(self):
-        """FEATURE type returns 'feat'."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -285,7 +228,6 @@ class TestGenericTicketSemanticBranchPrefix:
         assert ticket.semantic_branch_prefix == "feat"
 
     def test_bug_returns_fix(self):
-        """BUG type returns 'fix'."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -295,7 +237,6 @@ class TestGenericTicketSemanticBranchPrefix:
         assert ticket.semantic_branch_prefix == "fix"
 
     def test_task_returns_chore(self):
-        """TASK type returns 'chore'."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -305,7 +246,6 @@ class TestGenericTicketSemanticBranchPrefix:
         assert ticket.semantic_branch_prefix == "chore"
 
     def test_maintenance_returns_refactor(self):
-        """MAINTENANCE type returns 'refactor'."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -315,7 +255,6 @@ class TestGenericTicketSemanticBranchPrefix:
         assert ticket.semantic_branch_prefix == "refactor"
 
     def test_unknown_returns_feature(self):
-        """UNKNOWN type defaults to 'feature'."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -326,10 +265,7 @@ class TestGenericTicketSemanticBranchPrefix:
 
 
 class TestGenericTicketBranchSlug:
-    """Tests for GenericTicket.branch_slug property."""
-
     def test_basic_slug_with_summary(self):
-        """Generates slug with branch_summary."""
         ticket = GenericTicket(
             id="PROJ-123",
             platform=Platform.JIRA,
@@ -344,7 +280,6 @@ class TestGenericTicketBranchSlug:
         assert "/" not in slug
 
     def test_slug_is_lowercase(self):
-        """Slug contains lowercase ticket ID."""
         ticket = GenericTicket(
             id="TEST-1",
             platform=Platform.JIRA,
@@ -356,7 +291,6 @@ class TestGenericTicketBranchSlug:
         assert "test-1" in slug  # ID is lowercased
 
     def test_slug_without_summary(self):
-        """Slug works without branch_summary."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -368,7 +302,6 @@ class TestGenericTicketBranchSlug:
         assert slug == "t-1"
 
     def test_slug_includes_ticket_id(self):
-        """Includes ticket ID in slug."""
         ticket = GenericTicket(
             id="ABC-999",
             platform=Platform.JIRA,
@@ -380,7 +313,6 @@ class TestGenericTicketBranchSlug:
         assert "abc-999" in slug.lower()
 
     def test_slug_no_prefix_for_bug(self):
-        """Bug ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="BUG-1",
             platform=Platform.JIRA,
@@ -394,7 +326,6 @@ class TestGenericTicketBranchSlug:
         assert "bug-1" in slug
 
     def test_slug_no_prefix_for_task(self):
-        """Task ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="TASK-1",
             platform=Platform.JIRA,
@@ -407,7 +338,6 @@ class TestGenericTicketBranchSlug:
         assert "task-1" in slug
 
     def test_slug_no_prefix_for_maintenance(self):
-        """Maintenance ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="MAINT-1",
             platform=Platform.JIRA,
@@ -420,7 +350,6 @@ class TestGenericTicketBranchSlug:
         assert "maint-1" in slug
 
     def test_slug_no_prefix_for_unknown(self):
-        """Unknown type ticket slug does not include prefix."""
         ticket = GenericTicket(
             id="U-1",
             platform=Platform.JIRA,
@@ -434,10 +363,7 @@ class TestGenericTicketBranchSlug:
 
 
 class TestGenericTicketBranchSlugEdgeCases:
-    """Tests for GenericTicket.branch_slug edge cases."""
-
     def test_github_style_id_with_slash(self):
-        """Handles GitHub-style IDs like owner/repo#42."""
         ticket = GenericTicket(
             id="owner/repo#42",
             platform=Platform.GITHUB,
@@ -452,7 +378,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "owner-repo-42" in slug.lower()
 
     def test_sanitizes_spaces_in_id(self):
-        """Replaces spaces with hyphens in ticket ID."""
         ticket = GenericTicket(
             id="PROJ 123",
             platform=Platform.JIRA,
@@ -464,7 +389,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert " " not in slug
 
     def test_sanitizes_colons_in_id(self):
-        """Replaces colons with hyphens."""
         ticket = GenericTicket(
             id="PREFIX:123",
             platform=Platform.JIRA,
@@ -476,7 +400,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert ":" not in slug
 
     def test_removes_double_dot_sequence(self):
-        """Removes disallowed '..' sequence."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -488,7 +411,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert ".." not in slug
 
     def test_removes_at_brace_sequence(self):
-        """Removes disallowed '@{' sequence."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -500,7 +422,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "@{" not in slug
 
     def test_removes_trailing_slash(self):
-        """Removes trailing slash."""
         ticket = GenericTicket(
             id="TEST-123/",
             platform=Platform.JIRA,
@@ -511,7 +432,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert not slug.endswith("/")
 
     def test_removes_lock_suffix(self):
-        """Removes .lock suffix."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -523,7 +443,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert not slug.endswith(".lock")
 
     def test_generates_summary_from_title_when_empty(self):
-        """Generates safe summary from title when branch_summary is empty."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -538,7 +457,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "authentication" in slug.lower()
 
     def test_handles_empty_title_and_summary(self):
-        """Works with both empty title and summary."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -552,7 +470,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert slug == "test-123"
 
     def test_sanitizes_special_characters_in_summary(self):
-        """Sanitizes special characters in branch summary."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -567,7 +484,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "~" not in slug
 
     def test_collapses_consecutive_hyphens(self):
-        """Collapses multiple consecutive hyphens."""
         ticket = GenericTicket(
             id="TEST---123",
             platform=Platform.JIRA,
@@ -579,7 +495,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "---" not in slug
 
     def test_output_is_entirely_lowercase(self):
-        """Slug is entirely lowercase."""
         ticket = GenericTicket(
             id="UPPERCASE-ID",
             platform=Platform.JIRA,
@@ -591,7 +506,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert slug == slug.lower()
 
     def test_output_contains_only_safe_characters(self):
-        """Slug contains only [a-z0-9-] characters (no slash)."""
         ticket = GenericTicket(
             id="PROJ@123",
             platform=Platform.JIRA,
@@ -604,7 +518,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert re.match(r"^[a-z0-9-]+$", slug), f"Invalid slug: {slug}"
 
     def test_summary_with_spaces_and_punctuation(self):
-        """Summaries with spaces and punctuation are properly sanitized."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -623,7 +536,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "test-123" in slug
 
     def test_summary_with_unicode_characters(self):
-        """Unicode characters are replaced with hyphens."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -636,7 +548,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert re.match(r"^[a-z0-9-]+$", slug), f"Invalid slug: {slug}"
 
     def test_complex_github_style_id(self):
-        """Complex GitHub-style IDs like 'org/repo#123' are properly sanitized."""
         ticket = GenericTicket(
             id="my-org/my-repo#456",
             platform=Platform.GITHUB,
@@ -652,7 +563,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "my-org-my-repo-456" in slug.lower()
 
     def test_deterministic_output(self):
-        """Same input produces same output every time."""
         ticket = GenericTicket(
             id="PROJ-999",
             platform=Platform.JIRA,
@@ -666,7 +576,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert slug1 == slug2 == slug3
 
     def test_empty_branch_summary_uses_title(self):
-        """When branch_summary is empty, uses sanitized title (max 50 chars)."""
         long_title = "A" * 60 + " Feature Title"
         ticket = GenericTicket(
             id="TEST-1",
@@ -681,7 +590,6 @@ class TestGenericTicketBranchSlugEdgeCases:
         assert "a" in slug  # From the A's in title
 
     def test_id_with_dots_handled(self):
-        """IDs containing dots are properly sanitized."""
         ticket = GenericTicket(
             id="proj.sub.123",
             platform=Platform.JIRA,
@@ -695,20 +603,14 @@ class TestGenericTicketBranchSlugEdgeCases:
 
 
 class TestIssueTrackerProviderABC:
-    """Tests for IssueTrackerProvider abstract base class."""
-
     def test_is_abstract_class(self):
-        """IssueTrackerProvider is an ABC."""
         assert issubclass(IssueTrackerProvider, ABC)
 
     def test_cannot_instantiate_directly(self):
-        """Cannot instantiate abstract class directly."""
         with pytest.raises(TypeError):
             IssueTrackerProvider()
 
     def test_requires_platform_property(self):
-        """Subclass must implement platform property."""
-
         class IncompleteProv(IssueTrackerProvider):
             @property
             def name(self):
@@ -727,8 +629,6 @@ class TestIssueTrackerProviderABC:
             IncompleteProv()
 
     def test_requires_name_property(self):
-        """Subclass must implement name property."""
-
         class IncompleteProv(IssueTrackerProvider):
             @property
             def platform(self):
@@ -747,8 +647,6 @@ class TestIssueTrackerProviderABC:
             IncompleteProv()
 
     def test_complete_implementation_works(self):
-        """Complete implementation can be instantiated."""
-
         class CompleteProv(IssueTrackerProvider):
             @property
             def platform(self):
@@ -783,8 +681,6 @@ class TestIssueTrackerProviderABC:
 
 
 class TestIssueTrackerProviderGenerateBranchSummary:
-    """Tests for default generate_branch_summary implementation."""
-
     @pytest.fixture
     def provider(self):
         """Create a test provider with default implementation."""
@@ -826,7 +722,6 @@ class TestIssueTrackerProviderGenerateBranchSummary:
         return TestProvider()
 
     def test_basic_summary(self, provider):
-        """Generates basic summary from title."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -839,7 +734,6 @@ class TestIssueTrackerProviderGenerateBranchSummary:
         assert len(summary) > 0
 
     def test_summary_lowercase(self, provider):
-        """Summary is lowercase."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -850,7 +744,6 @@ class TestIssueTrackerProviderGenerateBranchSummary:
         assert summary == summary.lower()
 
     def test_summary_replaces_spaces(self, provider):
-        """Spaces become hyphens in summary."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -862,7 +755,6 @@ class TestIssueTrackerProviderGenerateBranchSummary:
         assert "-" in summary
 
     def test_summary_removes_special_chars(self, provider):
-        """Removes special characters."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -876,7 +768,6 @@ class TestIssueTrackerProviderGenerateBranchSummary:
         assert "!" not in summary
 
     def test_summary_truncates_long_titles(self, provider):
-        """Truncates long titles."""
         ticket = GenericTicket(
             id="T-1",
             platform=Platform.JIRA,
@@ -888,15 +779,12 @@ class TestIssueTrackerProviderGenerateBranchSummary:
 
 
 class TestIssueTrackerProviderMethodSignatures:
-    """Tests for method signatures and type hints."""
-
     @pytest.fixture
     def provider_class(self):
         """Return the abstract provider class."""
         return IssueTrackerProvider
 
     def test_can_handle_takes_string(self, provider_class):
-        """can_handle method takes a string parameter."""
         import inspect
 
         sig = inspect.signature(provider_class.can_handle)
@@ -904,7 +792,6 @@ class TestIssueTrackerProviderMethodSignatures:
         assert "input_str" in params
 
     def test_parse_input_takes_string(self, provider_class):
-        """parse_input method takes a string parameter."""
         import inspect
 
         sig = inspect.signature(provider_class.parse_input)
@@ -921,8 +808,6 @@ class TestProviderPlatformAttribute:
     """
 
     def test_provider_with_platform_attribute(self):
-        """Provider class can declare PLATFORM class attribute."""
-
         class MockProvider(IssueTrackerProvider):
             PLATFORM = Platform.JIRA  # Class attribute
 
@@ -951,8 +836,6 @@ class TestProviderPlatformAttribute:
         assert MockProvider.PLATFORM == Platform.JIRA
 
     def test_platform_attribute_accessible_without_instantiation(self):
-        """PLATFORM attribute is accessible without calling __init__."""
-
         class MockProvider(IssueTrackerProvider):
             PLATFORM = Platform.GITHUB
 
@@ -985,13 +868,6 @@ class TestProviderPlatformAttribute:
         assert platform == Platform.GITHUB
 
     def test_registry_compatible_provider_pattern(self):
-        """Verify the recommended provider pattern for ProviderRegistry.
-
-        This pattern ensures:
-        1. PLATFORM is a class attribute (no instantiation needed)
-        2. platform property returns the same value (for consistency)
-        3. No side effects during class inspection
-        """
         init_called = False
 
         class RegistryCompatibleProvider(IssueTrackerProvider):
@@ -1043,7 +919,6 @@ class TestGenericTicketBranchSlugFallback:
     """
 
     def test_emoji_only_id_uses_fallback(self):
-        """ID containing only emojis produces deterministic fallback."""
         ticket = GenericTicket(
             id="🎉🎉🎉",
             platform=Platform.JIRA,
@@ -1065,7 +940,6 @@ class TestGenericTicketBranchSlugFallback:
         assert all(c in "0123456789abcdef" for c in hash_part)
 
     def test_special_chars_only_id_uses_fallback(self):
-        """ID containing only special chars produces deterministic fallback."""
         ticket = GenericTicket(
             id="@#$%^&*()",
             platform=Platform.JIRA,
@@ -1081,7 +955,6 @@ class TestGenericTicketBranchSlugFallback:
         assert re.match(r"^ticket-[a-f0-9]{6}$", slug)
 
     def test_fallback_id_is_deterministic(self):
-        """Same original ID produces same fallback hash."""
         id_value = "🚀🔥💯"
 
         ticket1 = GenericTicket(
@@ -1100,7 +973,6 @@ class TestGenericTicketBranchSlugFallback:
         assert ticket1.branch_slug == ticket2.branch_slug
 
     def test_different_emoji_ids_produce_different_fallbacks(self):
-        """Different emoji IDs produce different fallback hashes."""
         ticket1 = GenericTicket(
             id="🎉",
             platform=Platform.JIRA,
@@ -1117,7 +989,6 @@ class TestGenericTicketBranchSlugFallback:
         assert ticket1.branch_slug != ticket2.branch_slug
 
     def test_fallback_with_branch_summary(self):
-        """Fallback ID works with branch summary."""
         ticket = GenericTicket(
             id="🎉🎉",
             platform=Platform.JIRA,
@@ -1141,7 +1012,6 @@ class TestGenericTicketBranchSlugLongSummary:
     """
 
     def test_long_branch_summary_truncated(self):
-        """Long branch_summary is truncated to max length."""
         long_summary = "a" * 200  # Way longer than 50 chars
         ticket = GenericTicket(
             id="TEST-123",
@@ -1158,7 +1028,6 @@ class TestGenericTicketBranchSlugLongSummary:
         assert slug.startswith("test-123-")
 
     def test_long_summary_with_special_chars_truncated_cleanly(self):
-        """Long summary with special chars truncates without trailing hyphen."""
         # Create a long summary that would have hyphens at truncation point
         long_summary = "fix-bug-" * 30  # Lots of hyphens
         ticket = GenericTicket(
@@ -1174,7 +1043,6 @@ class TestGenericTicketBranchSlugLongSummary:
         assert not slug.endswith("-")
 
     def test_long_summary_500_chars(self):
-        """500-char summary is truncated properly."""
         # Create 500 char mixed summary
         long_summary = "this-is-a-very-long-summary-" * 20
         ticket = GenericTicket(
@@ -1194,7 +1062,6 @@ class TestGenericTicketBranchSlugLongSummary:
         assert re.match(r"^[a-z0-9-]+$", slug)
 
     def test_long_summary_unicode_truncation(self):
-        """Unicode in long summary is handled during truncation."""
         # Mix of unicode and ASCII
         long_summary = "feature-with-émojis-🎉-" * 20
         ticket = GenericTicket(
@@ -1222,7 +1089,6 @@ class TestGenericTicketBranchSlugNoMalformed:
     """
 
     def test_never_returns_empty(self):
-        """Slug never degenerates to empty string."""
         # Even with empty everything, should have fallback ID
         ticket = GenericTicket(
             id="🎉",  # Will sanitize to empty
@@ -1241,7 +1107,6 @@ class TestGenericTicketBranchSlugNoMalformed:
         assert "ticket-" in slug
 
     def test_never_returns_just_hyphen(self):
-        """Slug never degenerates to just '-'."""
         # ID that sanitizes to empty, summary that sanitizes to empty
         ticket = GenericTicket(
             id="@#$",
@@ -1260,7 +1125,6 @@ class TestGenericTicketBranchSlugNoMalformed:
         assert re.match(r"^ticket-[a-f0-9]{6}-unnamed-ticket$", slug)
 
     def test_all_ticket_types_produce_valid_slugs(self):
-        """All ticket types produce valid slugs with fallback ID."""
         for ticket_type in TicketType:
             ticket = GenericTicket(
                 id="🔥",  # Will need fallback
@@ -1278,7 +1142,6 @@ class TestGenericTicketBranchSlugNoMalformed:
             assert re.match(r"^[a-z0-9-]+$", slug)
 
     def test_empty_id_with_title_fallback(self):
-        """Empty sanitized ID with title still produces valid slug."""
         ticket = GenericTicket(
             id="🎉",  # Will sanitize to empty
             platform=Platform.JIRA,
@@ -1295,7 +1158,6 @@ class TestGenericTicketBranchSlugNoMalformed:
         assert "add" in slug or "user" in slug or "login" in slug
 
     def test_whitespace_only_branch_summary_handled(self):
-        """Whitespace-only branch_summary doesn't cause issues."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -1322,7 +1184,6 @@ class TestGenericTicketSafeFilenameStem:
     """
 
     def test_basic_stem(self):
-        """Basic ticket ID produces expected stem."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -1331,7 +1192,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "TEST-123"
 
     def test_github_style_id(self):
-        """GitHub-style IDs are sanitized."""
         ticket = GenericTicket(
             id="owner/repo#42",
             platform=Platform.GITHUB,
@@ -1343,7 +1203,6 @@ class TestGenericTicketSafeFilenameStem:
         assert stem == "owner_repo_42"
 
     def test_windows_reserved_name_con(self):
-        """Windows reserved name CON is prefixed."""
         ticket = GenericTicket(
             id="CON",
             platform=Platform.JIRA,
@@ -1352,7 +1211,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "ticket_CON"
 
     def test_windows_reserved_name_prn(self):
-        """Windows reserved name PRN is prefixed."""
         ticket = GenericTicket(
             id="PRN",
             platform=Platform.JIRA,
@@ -1361,7 +1219,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "ticket_PRN"
 
     def test_windows_reserved_name_aux(self):
-        """Windows reserved name AUX is prefixed."""
         ticket = GenericTicket(
             id="AUX",
             platform=Platform.JIRA,
@@ -1370,7 +1227,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "ticket_AUX"
 
     def test_windows_reserved_name_nul(self):
-        """Windows reserved name NUL is prefixed."""
         ticket = GenericTicket(
             id="NUL",
             platform=Platform.JIRA,
@@ -1379,7 +1235,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "ticket_NUL"
 
     def test_windows_reserved_name_com1(self):
-        """Windows reserved name COM1 is prefixed."""
         ticket = GenericTicket(
             id="COM1",
             platform=Platform.JIRA,
@@ -1388,7 +1243,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "ticket_COM1"
 
     def test_windows_reserved_name_lpt9(self):
-        """Windows reserved name LPT9 is prefixed."""
         ticket = GenericTicket(
             id="LPT9",
             platform=Platform.JIRA,
@@ -1397,7 +1251,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "ticket_LPT9"
 
     def test_windows_reserved_name_case_insensitive(self):
-        """Windows reserved name check is case-insensitive."""
         ticket = GenericTicket(
             id="con",
             platform=Platform.JIRA,
@@ -1406,7 +1259,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "ticket_con"
 
     def test_trailing_dot_stripped(self):
-        """Trailing dots are stripped."""
         ticket = GenericTicket(
             id="TEST-123...",
             platform=Platform.JIRA,
@@ -1416,7 +1268,6 @@ class TestGenericTicketSafeFilenameStem:
         assert not stem.endswith(".")
 
     def test_trailing_space_stripped(self):
-        """Trailing spaces are stripped."""
         ticket = GenericTicket(
             id="TEST-123   ",
             platform=Platform.JIRA,
@@ -1426,7 +1277,6 @@ class TestGenericTicketSafeFilenameStem:
         assert not stem.endswith(" ")
 
     def test_long_id_truncated(self):
-        """Long ticket IDs are truncated to 64 characters."""
         long_id = "A" * 100
         ticket = GenericTicket(
             id=long_id,
@@ -1437,7 +1287,6 @@ class TestGenericTicketSafeFilenameStem:
         assert len(stem) <= 64
 
     def test_truncation_preserves_content(self):
-        """Truncation keeps the first 64 characters."""
         long_id = "X" * 64 + "Y" * 36
         ticket = GenericTicket(
             id=long_id,
@@ -1449,7 +1298,6 @@ class TestGenericTicketSafeFilenameStem:
         assert all(c == "X" for c in stem)
 
     def test_truncation_cleans_trailing_underscore(self):
-        """Truncation strips trailing underscores from result."""
         # Create ID that would have underscore at position 64
         id_with_special = "A" * 63 + "/" + "B" * 10
         ticket = GenericTicket(
@@ -1462,7 +1310,6 @@ class TestGenericTicketSafeFilenameStem:
         assert not stem.endswith("_")
 
     def test_empty_id_returns_fallback(self):
-        """Empty ID returns 'unknown-ticket'."""
         ticket = GenericTicket(
             id="",
             platform=Platform.JIRA,
@@ -1471,7 +1318,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "unknown-ticket"
 
     def test_special_chars_only_returns_fallback(self):
-        """ID with only special chars returns 'unknown-ticket'."""
         ticket = GenericTicket(
             id="///###",
             platform=Platform.JIRA,
@@ -1480,7 +1326,6 @@ class TestGenericTicketSafeFilenameStem:
         assert ticket.safe_filename_stem == "unknown-ticket"
 
     def test_unsafe_chars_replaced(self):
-        """Unsafe filesystem characters are replaced."""
         ticket = GenericTicket(
             id='TEST:*?"<>|123',
             platform=Platform.JIRA,
@@ -1496,13 +1341,6 @@ class TestGenericTicketSafeFilenameStem:
         assert "|" not in stem
 
     def test_leading_trailing_dots_spaces_underscores_stripped(self):
-        """Leading and trailing dots, spaces, and underscores are stripped.
-
-        Verifies:
-        - Leading dots removed (dangerous on some systems - hidden files)
-        - Trailing dots and spaces removed (Windows filesystem issues)
-        - Multiple underscores collapsed to single underscore
-        """
         ticket = GenericTicket(
             id=".. test__id ..",
             platform=Platform.JIRA,
@@ -1521,7 +1359,6 @@ class TestGenericTicketSerialization:
     """
 
     def test_to_dict_basic_roundtrip(self):
-        """Basic serialization and deserialization roundtrip."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -1540,7 +1377,6 @@ class TestGenericTicketSerialization:
         assert restored.type == ticket.type
 
     def test_to_dict_normalizes_datetime_in_metadata(self):
-        """P1 Fix: datetime in platform_metadata is normalized to ISO string."""
         from datetime import UTC, datetime
 
         test_dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
@@ -1558,7 +1394,6 @@ class TestGenericTicketSerialization:
         assert "10:30:00" in data["platform_metadata"]["created"]
 
     def test_to_dict_normalizes_set_in_metadata(self):
-        """P1 Fix: set in platform_metadata is normalized to sorted list."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -1572,7 +1407,6 @@ class TestGenericTicketSerialization:
         assert data["platform_metadata"]["tags"] == ["alpha", "beta", "gamma"]
 
     def test_to_dict_normalizes_enum_in_metadata(self):
-        """P1 Fix: Enum in platform_metadata is normalized to value."""
         ticket = GenericTicket(
             id="TEST-123",
             platform=Platform.JIRA,
@@ -1585,8 +1419,6 @@ class TestGenericTicketSerialization:
         assert data["platform_metadata"]["status"] == "in_progress"
 
     def test_to_dict_normalizes_custom_object_in_metadata(self):
-        """P1 Fix: Non-serializable objects get __non_serializable__ marker."""
-
         class CustomClass:
             def __repr__(self):
                 return "CustomClass()"
@@ -1606,7 +1438,6 @@ class TestGenericTicketSerialization:
         assert "CustomClass()" in custom_data["repr"]
 
     def test_to_dict_normalizes_nested_metadata(self):
-        """P1 Fix: Nested structures in platform_metadata are recursively normalized."""
         from datetime import UTC, datetime
 
         ticket = GenericTicket(
@@ -1639,7 +1470,6 @@ class TestGenericTicketFromDictPlatformCasing:
     """
 
     def test_from_dict_accepts_uppercase_platform(self):
-        """from_dict accepts uppercase platform name (canonical)."""
         data = {
             "id": "TEST-123",
             "platform": "JIRA",
@@ -1649,7 +1479,6 @@ class TestGenericTicketFromDictPlatformCasing:
         assert ticket.platform == Platform.JIRA
 
     def test_from_dict_accepts_lowercase_platform(self):
-        """P1 Fix: from_dict accepts lowercase platform name."""
         data = {
             "id": "TEST-123",
             "platform": "jira",
@@ -1659,7 +1488,6 @@ class TestGenericTicketFromDictPlatformCasing:
         assert ticket.platform == Platform.JIRA
 
     def test_from_dict_accepts_mixed_case_platform(self):
-        """P1 Fix: from_dict accepts mixed case platform name."""
         data = {
             "id": "TEST-123",
             "platform": "Jira",
@@ -1669,7 +1497,6 @@ class TestGenericTicketFromDictPlatformCasing:
         assert ticket.platform == Platform.JIRA
 
     def test_from_dict_rejects_unknown_platform(self):
-        """from_dict still rejects unknown platform names."""
         data = {
             "id": "TEST-123",
             "platform": "unknown_platform",
@@ -1680,7 +1507,6 @@ class TestGenericTicketFromDictPlatformCasing:
         assert "Unknown platform" in str(exc_info.value)
 
     def test_from_dict_all_platforms_case_insensitive(self):
-        """P1 Fix: All platforms work with any casing."""
         platforms = ["GITHUB", "github", "GitHub", "LINEAR", "linear", "Linear"]
 
         for platform_str in platforms:

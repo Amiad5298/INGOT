@@ -6,10 +6,7 @@ from ingot.config.settings import CONFIG_FILE, Settings
 
 
 class TestSettings:
-    """Tests for Settings dataclass."""
-
     def test_default_values(self):
-        """Settings has correct default values."""
         settings = Settings()
 
         assert settings.default_model == ""
@@ -23,7 +20,6 @@ class TestSettings:
         assert settings.squash_at_end is True
 
     def test_custom_values(self):
-        """Settings accepts custom values."""
         settings = Settings(
             default_model="claude-3",
             planning_model="claude-3-opus",
@@ -37,7 +33,6 @@ class TestSettings:
         assert settings.skip_clarification is True
 
     def test_get_attribute_for_key(self):
-        """get_attribute_for_key returns correct attribute name."""
         settings = Settings()
 
         assert settings.get_attribute_for_key("DEFAULT_MODEL") == "default_model"
@@ -46,7 +41,6 @@ class TestSettings:
         assert settings.get_attribute_for_key("UNKNOWN_KEY") is None
 
     def test_get_key_for_attribute(self):
-        """get_key_for_attribute returns correct config key."""
         settings = Settings()
 
         assert settings.get_key_for_attribute("default_model") == "DEFAULT_MODEL"
@@ -55,7 +49,6 @@ class TestSettings:
         assert settings.get_key_for_attribute("unknown_attr") is None
 
     def test_get_config_keys(self):
-        """get_config_keys returns all valid keys."""
         keys = Settings.get_config_keys()
 
         assert "DEFAULT_MODEL" in keys
@@ -67,25 +60,19 @@ class TestSettings:
 
 
 class TestParallelSettings:
-    """Tests for parallel execution settings."""
-
     def test_parallel_execution_enabled_default(self):
-        """parallel_execution_enabled defaults to True."""
         settings = Settings()
         assert settings.parallel_execution_enabled is True
 
     def test_max_parallel_tasks_default(self):
-        """max_parallel_tasks defaults to 3."""
         settings = Settings()
         assert settings.max_parallel_tasks == 3
 
     def test_fail_fast_default(self):
-        """fail_fast defaults to False."""
         settings = Settings()
         assert settings.fail_fast is False
 
     def test_loads_from_config_file(self):
-        """Parallel settings can be loaded from config keys."""
         settings = Settings()
 
         # Verify the key mappings exist
@@ -98,35 +85,27 @@ class TestParallelSettings:
 
 
 class TestSubagentSettings:
-    """Tests for subagent settings."""
-
     def test_subagent_planner_default(self):
-        """subagent_planner defaults to ingot-planner."""
         settings = Settings()
         assert settings.subagent_planner == "ingot-planner"
 
     def test_subagent_tasklist_default(self):
-        """subagent_tasklist defaults to ingot-tasklist."""
         settings = Settings()
         assert settings.subagent_tasklist == "ingot-tasklist"
 
     def test_subagent_implementer_default(self):
-        """subagent_implementer defaults to ingot-implementer."""
         settings = Settings()
         assert settings.subagent_implementer == "ingot-implementer"
 
     def test_subagent_reviewer_default(self):
-        """subagent_reviewer defaults to ingot-reviewer."""
         settings = Settings()
         assert settings.subagent_reviewer == "ingot-reviewer"
 
     def test_subagent_doc_updater_default(self):
-        """subagent_doc_updater defaults to ingot-doc-updater."""
         settings = Settings()
         assert settings.subagent_doc_updater == "ingot-doc-updater"
 
     def test_subagent_custom_values(self):
-        """Subagent settings accept custom values."""
         settings = Settings(
             subagent_planner="custom-planner",
             subagent_implementer="custom-impl",
@@ -135,7 +114,6 @@ class TestSubagentSettings:
         assert settings.subagent_implementer == "custom-impl"
 
     def test_subagent_config_key_mappings(self):
-        """Subagent settings have correct config key mappings."""
         settings = Settings()
         assert settings.get_attribute_for_key("SUBAGENT_PLANNER") == "subagent_planner"
         assert settings.get_attribute_for_key("SUBAGENT_TASKLIST") == "subagent_tasklist"
@@ -145,63 +123,49 @@ class TestSubagentSettings:
 
 
 class TestDocUpdateSettings:
-    """Tests for documentation update settings."""
-
     def test_auto_update_docs_default(self):
-        """auto_update_docs defaults to True."""
         settings = Settings()
         assert settings.auto_update_docs is True
 
     def test_auto_update_docs_can_be_disabled(self):
-        """auto_update_docs can be set to False."""
         settings = Settings(auto_update_docs=False)
         assert settings.auto_update_docs is False
 
     def test_auto_update_docs_config_key_mapping(self):
-        """auto_update_docs has correct config key mapping."""
         settings = Settings()
         assert settings.get_attribute_for_key("AUTO_UPDATE_DOCS") == "auto_update_docs"
 
 
 class TestDefaultPlatformSettings:
-    """Tests for default_platform setting and get_default_platform method."""
-
     def test_default_platform_default_value(self):
-        """default_platform defaults to empty string."""
         settings = Settings()
         assert settings.default_platform == ""
 
     def test_default_platform_custom_value(self):
-        """default_platform accepts custom value."""
         settings = Settings(default_platform="jira")
         assert settings.default_platform == "jira"
 
     def test_default_platform_config_key_mapping(self):
-        """default_platform has correct config key mapping."""
         settings = Settings()
         assert settings.get_attribute_for_key("DEFAULT_PLATFORM") == "default_platform"
 
     def test_get_default_platform_returns_none_when_empty(self):
-        """get_default_platform returns None when not configured."""
         settings = Settings()
         assert settings.get_default_platform() is None
 
     def test_get_default_platform_returns_jira(self):
-        """get_default_platform returns Platform.JIRA for 'jira'."""
         from ingot.integrations.providers import Platform
 
         settings = Settings(default_platform="jira")
         assert settings.get_default_platform() == Platform.JIRA
 
     def test_get_default_platform_returns_linear(self):
-        """get_default_platform returns Platform.LINEAR for 'linear'."""
         from ingot.integrations.providers import Platform
 
         settings = Settings(default_platform="linear")
         assert settings.get_default_platform() == Platform.LINEAR
 
     def test_get_default_platform_case_insensitive(self):
-        """get_default_platform is case-insensitive."""
         from ingot.integrations.providers import Platform
 
         assert Settings(default_platform="JIRA").get_default_platform() == Platform.JIRA
@@ -209,12 +173,10 @@ class TestDefaultPlatformSettings:
         assert Settings(default_platform="LINEAR").get_default_platform() == Platform.LINEAR
 
     def test_get_default_platform_returns_none_for_invalid(self):
-        """get_default_platform returns None for invalid platform names."""
         settings = Settings(default_platform="invalid_platform")
         assert settings.get_default_platform() is None
 
     def test_get_default_platform_all_valid_platforms(self):
-        """get_default_platform works for all valid platform names."""
         from ingot.integrations.providers import Platform
 
         assert Settings(default_platform="github").get_default_platform() == Platform.GITHUB
@@ -227,12 +189,8 @@ class TestDefaultPlatformSettings:
 
 
 class TestConfigFile:
-    """Tests for CONFIG_FILE constant."""
-
     def test_config_file_in_home(self):
-        """CONFIG_FILE is in home directory."""
         assert CONFIG_FILE.parent == Path.home()
 
     def test_config_file_name(self):
-        """CONFIG_FILE has correct name."""
         assert CONFIG_FILE.name == ".ingot-config"

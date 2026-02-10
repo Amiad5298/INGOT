@@ -11,70 +11,54 @@ from ingot.integrations.backends.factory import BackendFactory
 
 
 class TestBackendFactoryCreate:
-    """Tests for BackendFactory.create() method."""
-
     def test_create_auggie_backend_from_enum(self):
-        """Create AuggieBackend from AgentPlatform enum."""
         backend = BackendFactory.create(AgentPlatform.AUGGIE)
         assert backend.name == "Auggie"
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_create_auggie_backend_from_string(self):
-        """Create AuggieBackend from string name."""
         backend = BackendFactory.create("auggie")
         assert backend.name == "Auggie"
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_create_auggie_backend_case_insensitive(self):
-        """String platform name is case-insensitive."""
         backend = BackendFactory.create("AUGGIE")
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_create_with_model_parameter(self):
-        """Model parameter is passed to backend constructor."""
         backend = BackendFactory.create(AgentPlatform.AUGGIE, model="claude-3-opus")
         # Model is stored internally (implementation detail)
         assert backend is not None
 
     def test_create_returns_aibackend_instance(self):
-        """Returned backend satisfies AIBackend protocol."""
         backend = BackendFactory.create(AgentPlatform.AUGGIE)
         assert isinstance(backend, AIBackend)
 
 
 class TestBackendFactoryUnimplementedPlatforms:
-    """Tests for unimplemented backend platforms."""
-
     def test_create_claude_backend(self):
-        """Claude backend creates ClaudeBackend instance."""
         backend = BackendFactory.create(AgentPlatform.CLAUDE)
         assert backend.name == "Claude Code"
         assert backend.platform == AgentPlatform.CLAUDE
         assert isinstance(backend, AIBackend)
 
     def test_create_cursor_backend(self):
-        """Cursor backend creates CursorBackend instance."""
         backend = BackendFactory.create(AgentPlatform.CURSOR)
         assert backend.name == "Cursor"
         assert backend.platform == AgentPlatform.CURSOR
         assert isinstance(backend, AIBackend)
 
     def test_create_aider_raises_value_error(self):
-        """Aider backend raises ValueError (deferred indefinitely, not a planned phase)."""
         with pytest.raises(ValueError, match="Aider backend not yet implemented"):
             BackendFactory.create(AgentPlatform.AIDER)
 
     def test_create_manual_raises_value_error(self):
-        """Manual mode raises ValueError (no AI backend - this is permanent)."""
         with pytest.raises(ValueError, match="Manual mode does not use an AI backend"):
             BackendFactory.create(AgentPlatform.MANUAL)
 
 
 class TestBackendFactoryVerifyInstalled:
-    """Tests for verify_installed parameter."""
-
     def test_verify_installed_true_with_installed_cli(self, mocker):
-        """verify_installed=True succeeds when CLI is installed."""
         mock_check = mocker.patch(
             "ingot.integrations.backends.auggie.AuggieBackend.check_installed",
             return_value=(True, "Auggie CLI v1.0.0"),
@@ -84,7 +68,6 @@ class TestBackendFactoryVerifyInstalled:
         mock_check.assert_called_once()
 
     def test_verify_installed_true_raises_when_cli_missing(self, mocker):
-        """verify_installed=True raises BackendNotInstalledError when CLI missing."""
         mock_check = mocker.patch(
             "ingot.integrations.backends.auggie.AuggieBackend.check_installed",
             return_value=(False, "Auggie CLI not found. Install from https://..."),
@@ -94,7 +77,6 @@ class TestBackendFactoryVerifyInstalled:
         mock_check.assert_called_once()
 
     def test_verify_installed_false_skips_check(self, mocker):
-        """verify_installed=False (default) does not call check_installed."""
         mock_check = mocker.patch(
             "ingot.integrations.backends.auggie.AuggieBackend.check_installed",
         )
@@ -103,52 +85,31 @@ class TestBackendFactoryVerifyInstalled:
 
 
 class TestBackendFactoryInvalidInput:
-    """Tests for invalid input handling."""
-
     def test_create_unknown_platform_string_raises(self):
-        """Unknown platform string raises ConfigValidationError.
-
-        Note: The parent spec's TestBackendFactory shows pytest.raises(ValueError),
-        but the actual behavior is ConfigValidationError because parse_ai_backend()
-        raises ConfigValidationError for invalid values.
-        """
         with pytest.raises(ConfigValidationError):
             BackendFactory.create("unknown_platform")
 
 
 class TestBackendFactoryStringNormalization:
-    """Tests for string input normalization (Linear ticket requirement)."""
-
     def test_create_strips_whitespace_from_string(self):
-        """String platform name handles leading/trailing whitespace."""
         backend = BackendFactory.create("  auggie  ")
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_create_handles_mixed_case_with_whitespace(self):
-        """String platform name handles mixed case and whitespace."""
         backend = BackendFactory.create("  AuGgIe  ")
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_create_empty_string_returns_default(self):
-        """Empty string returns default platform (AUGGIE).
-
-        Note: This behavior comes from parse_ai_backend() which has
-        default=AgentPlatform.AUGGIE.
-        """
         backend = BackendFactory.create("")
         assert backend.platform == AgentPlatform.AUGGIE
 
     def test_create_whitespace_only_string_returns_default(self):
-        """Whitespace-only string returns default platform."""
         backend = BackendFactory.create("   ")
         assert backend.platform == AgentPlatform.AUGGIE
 
 
 class TestBackendFactoryThreadSafety:
-    """Tests for thread safety in concurrent usage."""
-
     def test_create_is_thread_safe(self):
-        """Factory creates independent instances for concurrent calls."""
         backends = []
         errors = []
         lock = threading.Lock()
@@ -175,10 +136,7 @@ class TestBackendFactoryThreadSafety:
 
 
 class TestBackendFactoryExport:
-    """Tests for package export (AC6)."""
-
     def test_backend_factory_exported_from_package(self):
-        """BackendFactory is exported via ingot.integrations.backends."""
         from ingot.integrations.backends import BackendFactory as ExportedFactory
 
         assert ExportedFactory is not None
@@ -198,12 +156,6 @@ class TestBackendFactoryLazyImports:
     """
 
     def test_factory_module_has_no_toplevel_backend_imports(self):
-        """Verify factory.py doesn't have top-level backend imports.
-
-        This is a code structure test, not a runtime import test.
-        It verifies the factory follows the lazy import pattern by checking
-        that backend imports are inside the create() method, not at module level.
-        """
         import ast
         from pathlib import Path
 

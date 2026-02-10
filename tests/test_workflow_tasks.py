@@ -1,6 +1,5 @@
 """Tests for ingot.workflow.tasks module."""
 
-
 import pytest
 
 from ingot.workflow.tasks import (
@@ -15,22 +14,15 @@ from ingot.workflow.tasks import (
 
 
 class TestTaskStatus:
-    """Tests for TaskStatus enum."""
-
     def test_pending_value(self):
-        """PENDING has correct value."""
         assert TaskStatus.PENDING.value == "pending"
 
     def test_complete_value(self):
-        """COMPLETE has correct value."""
         assert TaskStatus.COMPLETE.value == "complete"
 
 
 class TestTask:
-    """Tests for Task dataclass."""
-
     def test_default_values(self):
-        """Default values are set correctly."""
         task = Task(name="Test task")
         assert task.status == TaskStatus.PENDING
         assert task.line_number == 0
@@ -39,10 +31,7 @@ class TestTask:
 
 
 class TestParseTaskList:
-    """Tests for parse_task_list function."""
-
     def test_parses_pending_task(self):
-        """Parses pending task with [ ]."""
         content = "- [ ] Task one"
         tasks = parse_task_list(content)
 
@@ -51,7 +40,6 @@ class TestParseTaskList:
         assert tasks[0].status == TaskStatus.PENDING
 
     def test_parses_complete_task(self):
-        """Parses complete task with [x]."""
         content = "- [x] Task one"
         tasks = parse_task_list(content)
 
@@ -59,14 +47,12 @@ class TestParseTaskList:
         assert tasks[0].status == TaskStatus.COMPLETE
 
     def test_parses_uppercase_x(self):
-        """Parses complete task with [X]."""
         content = "- [X] Task one"
         tasks = parse_task_list(content)
 
         assert tasks[0].status == TaskStatus.COMPLETE
 
     def test_parses_multiple_tasks(self):
-        """Parses multiple tasks."""
         content = """- [ ] Task one
 - [x] Task two
 - [ ] Task three"""
@@ -75,7 +61,6 @@ class TestParseTaskList:
         assert len(tasks) == 3
 
     def test_parses_asterisk_bullet(self):
-        """Parses task with * bullet."""
         content = "* [ ] Task one"
         tasks = parse_task_list(content)
 
@@ -83,14 +68,12 @@ class TestParseTaskList:
         assert tasks[0].name == "Task one"
 
     def test_parses_no_bullet(self):
-        """Parses task without bullet."""
         content = "[ ] Task one"
         tasks = parse_task_list(content)
 
         assert len(tasks) == 1
 
     def test_parses_indented_tasks(self):
-        """Parses indented (nested) tasks."""
         content = """- [ ] Parent task
   - [ ] Child task"""
         tasks = parse_task_list(content)
@@ -100,7 +83,6 @@ class TestParseTaskList:
         assert tasks[1].parent == "Parent task"
 
     def test_ignores_non_task_lines(self):
-        """Ignores lines that aren't tasks."""
         content = """# Header
 Some text
 - [ ] Actual task
@@ -111,10 +93,7 @@ More text"""
 
 
 class TestGetPendingTasks:
-    """Tests for get_pending_tasks function."""
-
     def test_returns_only_pending(self):
-        """Returns only pending tasks."""
         tasks = [
             Task(name="Task 1", status=TaskStatus.PENDING),
             Task(name="Task 2", status=TaskStatus.COMPLETE),
@@ -128,10 +107,7 @@ class TestGetPendingTasks:
 
 
 class TestGetCompletedTasks:
-    """Tests for get_completed_tasks function."""
-
     def test_returns_only_completed(self):
-        """Returns only completed tasks."""
         tasks = [
             Task(name="Task 1", status=TaskStatus.PENDING),
             Task(name="Task 2", status=TaskStatus.COMPLETE),
@@ -144,10 +120,7 @@ class TestGetCompletedTasks:
 
 
 class TestMarkTaskComplete:
-    """Tests for mark_task_complete function."""
-
     def test_marks_task_complete(self, tmp_path):
-        """Marks task as complete in file."""
         tasklist = tmp_path / "tasks.md"
         tasklist.write_text("- [ ] Task one\n- [ ] Task two\n")
 
@@ -159,7 +132,6 @@ class TestMarkTaskComplete:
         assert "[ ] Task two" in content
 
     def test_returns_false_for_missing_file(self, tmp_path):
-        """Returns False when file doesn't exist."""
         tasklist = tmp_path / "nonexistent.md"
 
         result = mark_task_complete(tasklist, "Task one")
@@ -168,10 +140,7 @@ class TestMarkTaskComplete:
 
 
 class TestFormatTaskList:
-    """Tests for format_task_list function."""
-
     def test_formats_pending_task(self):
-        """Formats pending task correctly with category metadata."""
         tasks = [Task(name="Task one", status=TaskStatus.PENDING)]
 
         result = format_task_list(tasks)
@@ -181,7 +150,6 @@ class TestFormatTaskList:
         assert "- [ ] Task one" in result
 
     def test_formats_complete_task(self):
-        """Formats complete task correctly with category metadata."""
         tasks = [Task(name="Task one", status=TaskStatus.COMPLETE)]
 
         result = format_task_list(tasks)
@@ -191,7 +159,6 @@ class TestFormatTaskList:
         assert "- [x] Task one" in result
 
     def test_formats_indented_task(self):
-        """Formats indented task correctly with category metadata."""
         tasks = [Task(name="Child task", indent_level=1)]
 
         result = format_task_list(tasks)
@@ -202,10 +169,7 @@ class TestFormatTaskList:
 
 
 class TestDeeplyNestedTasks:
-    """Tests for deeply nested tasks (3+ levels)."""
-
     def test_parses_three_level_nesting(self):
-        """Parses tasks with 3 levels of nesting."""
         content = """- [ ] Parent task
   - [ ] Child task
     - [ ] Grandchild task"""
@@ -219,7 +183,6 @@ class TestDeeplyNestedTasks:
         assert tasks[2].parent == "Child task"
 
     def test_parses_four_level_nesting(self):
-        """Parses tasks with 4 levels of nesting."""
         content = """- [ ] Level 0
   - [ ] Level 1
     - [ ] Level 2
@@ -231,7 +194,6 @@ class TestDeeplyNestedTasks:
         assert tasks[3].parent == "Level 2"
 
     def test_formats_deeply_nested_tasks(self):
-        """Formats deeply nested tasks correctly."""
         tasks = [
             Task(name="Level 0", indent_level=0),
             Task(name="Level 1", indent_level=1),
@@ -248,10 +210,7 @@ class TestDeeplyNestedTasks:
 
 
 class TestMixedIndentationStyles:
-    """Tests for mixed indentation styles."""
-
     def test_parses_mixed_bullets(self):
-        """Parses tasks with mixed bullet styles."""
         content = """- [ ] Dash task
 * [ ] Asterisk task
 [ ] No bullet task"""
@@ -263,7 +222,6 @@ class TestMixedIndentationStyles:
         assert tasks[2].name == "No bullet task"
 
     def test_parses_mixed_checkbox_cases(self):
-        """Parses tasks with mixed checkbox cases."""
         content = """- [x] Lowercase complete
 - [X] Uppercase complete
 - [ ] Pending task"""
@@ -276,15 +234,11 @@ class TestMixedIndentationStyles:
 
 
 class TestEdgeCases:
-    """Tests for edge cases."""
-
     def test_parses_empty_content(self):
-        """Handles empty content."""
         tasks = parse_task_list("")
         assert tasks == []
 
     def test_parses_content_with_only_headers(self):
-        """Handles content with only headers."""
         content = """# Header 1
 
 ## Header 2
@@ -295,12 +249,10 @@ Some text without tasks.
         assert tasks == []
 
     def test_parses_whitespace_only_content(self):
-        """Handles content with only whitespace."""
         tasks = parse_task_list("   \n\n   \n")
         assert tasks == []
 
     def test_parses_task_with_special_characters(self):
-        """Parses task with special characters in name."""
         content = "- [ ] Task with special: [brackets], (parens), {braces}, `backticks`"
         tasks = parse_task_list(content)
 
@@ -310,7 +262,6 @@ Some text without tasks.
         assert "`backticks`" in tasks[0].name
 
     def test_parses_task_with_emojis(self):
-        """Parses task with emojis in name."""
         content = "- [ ] Task with emoji 🎉 and 🚀"
         tasks = parse_task_list(content)
 
@@ -319,7 +270,6 @@ Some text without tasks.
         assert "🚀" in tasks[0].name
 
     def test_parses_task_with_urls(self):
-        """Parses task with URLs in name."""
         content = "- [ ] Review PR at https://github.com/org/repo/pull/123"
         tasks = parse_task_list(content)
 
@@ -328,10 +278,7 @@ Some text without tasks.
 
 
 class TestMarkTaskCompleteEdgeCases:
-    """Tests for mark_task_complete edge cases."""
-
     def test_returns_false_when_task_not_found(self, tmp_path):
-        """Returns False when task is not found in file."""
         tasklist = tmp_path / "tasks.md"
         tasklist.write_text("- [ ] Different task\n- [ ] Another task\n")
 
@@ -344,7 +291,6 @@ class TestMarkTaskCompleteEdgeCases:
         assert "[ ] Another task" in content
 
     def test_only_marks_exact_match(self, tmp_path):
-        """Only marks the task with exact name match."""
         tasklist = tmp_path / "tasks.md"
         tasklist.write_text("- [ ] Task\n- [ ] Task with suffix\n- [ ] Prefix Task\n")
 
@@ -357,7 +303,6 @@ class TestMarkTaskCompleteEdgeCases:
         assert "[ ] Prefix Task" in content
 
     def test_handles_already_complete_task(self, tmp_path):
-        """Handles case when task is already complete."""
         tasklist = tmp_path / "tasks.md"
         tasklist.write_text("- [x] Already done\n- [ ] Not done\n")
 
@@ -367,7 +312,6 @@ class TestMarkTaskCompleteEdgeCases:
         assert result is False
 
     def test_handles_special_regex_characters_in_task_name(self, tmp_path):
-        """Handles special regex characters in task name."""
         tasklist = tmp_path / "tasks.md"
         tasklist.write_text("- [ ] Fix bug (issue #123)\n")
 
@@ -378,37 +322,20 @@ class TestMarkTaskCompleteEdgeCases:
         assert "[x] Fix bug (issue #123)" in content
 
 
-# =============================================================================
-# Tests for TaskCategory enum
-# =============================================================================
-
-
 class TestTaskCategory:
-    """Tests for TaskCategory enum."""
-
     def test_fundamental_value(self):
-        """FUNDAMENTAL has correct string value."""
         from ingot.workflow.tasks import TaskCategory
 
         assert TaskCategory.FUNDAMENTAL.value == "fundamental"
 
     def test_independent_value(self):
-        """INDEPENDENT has correct string value."""
         from ingot.workflow.tasks import TaskCategory
 
         assert TaskCategory.INDEPENDENT.value == "independent"
 
 
-# =============================================================================
-# Tests for _parse_task_metadata
-# =============================================================================
-
-
 class TestParseTaskMetadata:
-    """Tests for _parse_task_metadata function."""
-
     def test_parses_fundamental_category(self):
-        """Parses 'category: fundamental' correctly."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -423,7 +350,6 @@ class TestParseTaskMetadata:
         assert target_files == []
 
     def test_parses_independent_category(self):
-        """Parses 'category: independent' correctly."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -437,7 +363,6 @@ class TestParseTaskMetadata:
         assert target_files == []
 
     def test_parses_order_field(self):
-        """Parses 'order: N' correctly."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -449,7 +374,6 @@ class TestParseTaskMetadata:
         assert order == 5
 
     def test_parses_group_field(self):
-        """Parses 'group: name' correctly."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -461,7 +385,6 @@ class TestParseTaskMetadata:
         assert group_id == "backend"
 
     def test_handles_missing_metadata(self):
-        """Returns defaults when no metadata comment."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -476,7 +399,6 @@ class TestParseTaskMetadata:
         assert target_files == []
 
     def test_handles_partial_metadata(self):
-        """Handles metadata with only some fields."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -489,7 +411,6 @@ class TestParseTaskMetadata:
         assert order == 0  # Default when not specified
 
     def test_case_insensitive_parsing(self):
-        """Parses 'Category: FUNDAMENTAL' correctly."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -502,16 +423,8 @@ class TestParseTaskMetadata:
         assert order == 2
 
 
-# =============================================================================
-# Tests for target_files metadata parsing (Predictive Context)
-# =============================================================================
-
-
 class TestTargetFilesMetadataParsing:
-    """Tests for parsing <!-- files: ... --> metadata comments."""
-
     def test_parses_single_file(self):
-        """Parses single file in files metadata."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -523,7 +436,6 @@ class TestTargetFilesMetadataParsing:
         assert target_files == ["src/models/user.py"]
 
     def test_parses_multiple_comma_separated_files(self):
-        """Parses multiple comma-separated files."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -539,7 +451,6 @@ class TestTargetFilesMetadataParsing:
         ]
 
     def test_parses_files_on_separate_line_from_category(self):
-        """Parses files metadata on separate line from category."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -554,7 +465,6 @@ class TestTargetFilesMetadataParsing:
         assert target_files == ["src/auth/service.py", "src/utils/password.py"]
 
     def test_parses_files_above_category(self):
-        """Parses files metadata above category line."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -569,7 +479,6 @@ class TestTargetFilesMetadataParsing:
         assert target_files == ["src/api/login.py"]
 
     def test_handles_empty_files_list(self):
-        """Handles empty files metadata gracefully."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -581,7 +490,6 @@ class TestTargetFilesMetadataParsing:
         assert target_files == []
 
     def test_handles_missing_files_metadata(self):
-        """Returns empty list when no files metadata present."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -593,7 +501,6 @@ class TestTargetFilesMetadataParsing:
         assert target_files == []
 
     def test_handles_whitespace_in_file_paths(self):
-        """Handles extra whitespace around file paths."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -605,7 +512,6 @@ class TestTargetFilesMetadataParsing:
         assert target_files == ["src/file1.py", "src/file2.py"]
 
     def test_parses_files_with_blank_lines_above_task(self):
-        """Parses files metadata with blank lines between metadata and task."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -621,15 +527,11 @@ class TestTargetFilesMetadataParsing:
 
 
 class TestTaskWithTargetFiles:
-    """Tests for Task dataclass with target_files field."""
-
     def test_default_target_files_is_empty_list(self):
-        """Default target_files is an empty list."""
         task = Task(name="Test task")
         assert task.target_files == []
 
     def test_target_files_can_be_set(self):
-        """target_files can be set on construction."""
         task = Task(
             name="Test task",
             target_files=["src/file1.py", "src/file2.py"],
@@ -637,7 +539,6 @@ class TestTaskWithTargetFiles:
         assert task.target_files == ["src/file1.py", "src/file2.py"]
 
     def test_parse_task_list_populates_target_files(self):
-        """parse_task_list populates target_files from metadata."""
         content = """## Tasks
 <!-- category: fundamental, order: 1 -->
 <!-- files: src/models/user.py, tests/test_user.py -->
@@ -649,7 +550,6 @@ class TestTaskWithTargetFiles:
         assert tasks[0].target_files == ["src/models/user.py", "tests/test_user.py"]
 
     def test_parse_task_list_handles_multiple_tasks_with_files(self):
-        """parse_task_list handles multiple tasks with different target files."""
         content = """## Fundamental Tasks
 <!-- category: fundamental, order: 1 -->
 <!-- files: src/db/schema.py -->
@@ -672,16 +572,8 @@ class TestTaskWithTargetFiles:
         assert tasks[2].target_files == ["src/api/register.py", "tests/api/test_register.py"]
 
 
-# =============================================================================
-# Tests for get_fundamental_tasks
-# =============================================================================
-
-
 class TestGetFundamentalTasks:
-    """Tests for get_fundamental_tasks function."""
-
     def test_returns_only_fundamental_tasks(self):
-        """Filters to fundamental category only."""
         from ingot.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
@@ -696,7 +588,6 @@ class TestGetFundamentalTasks:
         assert all(t.category == TaskCategory.FUNDAMENTAL for t in result)
 
     def test_returns_empty_when_none_exist(self):
-        """Returns empty list when no fundamental tasks."""
         from ingot.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
@@ -709,7 +600,6 @@ class TestGetFundamentalTasks:
         assert result == []
 
     def test_preserves_order(self):
-        """Tasks returned in dependency_order."""
         from ingot.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
@@ -723,16 +613,8 @@ class TestGetFundamentalTasks:
         assert [t.name for t in result] == ["First", "Second", "Third"]
 
 
-# =============================================================================
-# Tests for get_independent_tasks
-# =============================================================================
-
-
 class TestGetIndependentTasks:
-    """Tests for get_independent_tasks function."""
-
     def test_returns_only_independent_tasks(self):
-        """Filters to independent category only."""
         from ingot.workflow.tasks import Task, TaskCategory, get_independent_tasks
 
         tasks = [
@@ -747,7 +629,6 @@ class TestGetIndependentTasks:
         assert all(t.category == TaskCategory.INDEPENDENT for t in result)
 
     def test_returns_empty_when_none_exist(self):
-        """Returns empty list when no independent tasks."""
         from ingot.workflow.tasks import Task, TaskCategory, get_independent_tasks
 
         tasks = [
@@ -760,16 +641,8 @@ class TestGetIndependentTasks:
         assert result == []
 
 
-# =============================================================================
-# Tests for get_pending_fundamental_tasks
-# =============================================================================
-
-
 class TestGetPendingFundamentalTasks:
-    """Tests for get_pending_fundamental_tasks function."""
-
     def test_excludes_completed_tasks(self):
-        """Only returns non-completed fundamental tasks."""
         from ingot.workflow.tasks import (
             Task,
             TaskCategory,
@@ -788,7 +661,6 @@ class TestGetPendingFundamentalTasks:
         assert result[0].name == "Pending"
 
     def test_excludes_independent_tasks(self):
-        """Only returns fundamental tasks, not independent."""
         from ingot.workflow.tasks import (
             Task,
             TaskCategory,
@@ -807,16 +679,8 @@ class TestGetPendingFundamentalTasks:
         assert result[0].name == "Fundamental"
 
 
-# =============================================================================
-# Tests for get_pending_independent_tasks
-# =============================================================================
-
-
 class TestGetPendingIndependentTasks:
-    """Tests for get_pending_independent_tasks function."""
-
     def test_excludes_completed_tasks(self):
-        """Only returns non-completed independent tasks."""
         from ingot.workflow.tasks import (
             Task,
             TaskCategory,
@@ -837,10 +701,7 @@ class TestGetPendingIndependentTasks:
 
 
 class TestFundamentalTaskOrdering:
-    """Tests for stable ordering of fundamental tasks."""
-
     def test_sorts_by_dependency_order_then_line_number(self):
-        """Fundamental tasks sort by dependency_order, then line_number."""
         from ingot.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
@@ -867,7 +728,6 @@ class TestFundamentalTaskOrdering:
         assert result[3].name == "Task D"  # order=2, line=5
 
     def test_stable_ordering_with_same_values(self):
-        """Tasks with same dependency_order and line_number maintain stable order."""
         from ingot.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         # All tasks have same dependency_order and line_number
@@ -892,7 +752,6 @@ class TestFundamentalTaskOrdering:
         assert result[2].name == "Third"
 
     def test_explicit_order_comes_before_order_zero(self):
-        """Tasks with explicit order (>0) come before tasks with order=0."""
         from ingot.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
@@ -926,7 +785,6 @@ class TestFundamentalTaskOrdering:
         assert result[3].name == "NoOrder2"  # order=0, line=30 (implicit order)
 
     def test_mixed_explicit_and_implicit_ordering(self):
-        """Mixed explicit and implicit orders produce correct sequence."""
         from ingot.workflow.tasks import Task, TaskCategory, get_fundamental_tasks
 
         tasks = [
@@ -981,11 +839,6 @@ class TestFundamentalTaskOrdering:
         ]
 
 
-# =============================================================================
-# Tests for normalize_path and deduplicate_paths (Path Normalization & Security)
-# =============================================================================
-
-
 class TestNormalizePath:
     """Tests for normalize_path function.
 
@@ -994,14 +847,12 @@ class TestNormalizePath:
     """
 
     def test_trims_whitespace(self, tmp_path):
-        """Trims leading and trailing whitespace."""
         from ingot.workflow.tasks import normalize_path
 
         assert normalize_path("  src/file.py  ", repo_root=tmp_path) == "src/file.py"
         assert normalize_path("\tsrc/file.py\n", repo_root=tmp_path) == "src/file.py"
 
     def test_standardizes_separators(self, tmp_path):
-        """Converts backslashes to forward slashes."""
         from ingot.workflow.tasks import normalize_path
 
         assert normalize_path("src\\utils\\file.py", repo_root=tmp_path) == "src/utils/file.py"
@@ -1010,14 +861,12 @@ class TestNormalizePath:
         )
 
     def test_resolves_dot_components(self, tmp_path):
-        """Resolves ./ and removes it."""
         from ingot.workflow.tasks import normalize_path
 
         assert normalize_path("./src/file.py", repo_root=tmp_path) == "src/file.py"
         assert normalize_path("src/./utils/./file.py", repo_root=tmp_path) == "src/utils/file.py"
 
     def test_resolves_double_dot_components(self, tmp_path):
-        """Resolves ../ components in paths that stay within repo."""
         from ingot.workflow.tasks import normalize_path
 
         # Create directories so paths resolve correctly
@@ -1028,7 +877,6 @@ class TestNormalizePath:
         assert normalize_path("src/utils/../file.py", repo_root=tmp_path) == "src/file.py"
 
     def test_empty_path_returns_empty_string(self, tmp_path):
-        """Empty or whitespace-only paths return empty string."""
         from ingot.workflow.tasks import normalize_path
 
         assert normalize_path("", repo_root=tmp_path) == ""
@@ -1036,7 +884,6 @@ class TestNormalizePath:
         assert normalize_path("\t\n", repo_root=tmp_path) == ""
 
     def test_equivalent_paths_normalize_same(self, tmp_path):
-        """Equivalent paths normalize to the same string."""
         from ingot.workflow.tasks import normalize_path
 
         # Create src directory
@@ -1050,10 +897,7 @@ class TestNormalizePath:
 
 
 class TestNormalizePathWithRepoRoot:
-    """Tests for normalize_path with repo_root (jail check)."""
-
     def test_resolves_relative_to_repo_root(self, tmp_path):
-        """Resolves relative paths against repo_root."""
         from ingot.workflow.tasks import normalize_path
 
         # Create a file structure
@@ -1064,7 +908,6 @@ class TestNormalizePathWithRepoRoot:
         assert result == "src/file.py"
 
     def test_jail_check_raises_on_escape(self, tmp_path):
-        """Raises PathSecurityError when path escapes repo_root."""
         from ingot.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError) as exc_info:
@@ -1074,14 +917,12 @@ class TestNormalizePathWithRepoRoot:
         assert "escapes repository root" in str(exc_info.value)
 
     def test_jail_check_on_deeply_nested_escape(self, tmp_path):
-        """Raises PathSecurityError on deeply nested escape attempt."""
         from ingot.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
             normalize_path("src/../../../../../../etc/passwd", repo_root=tmp_path)
 
     def test_jail_check_allows_valid_nested_paths(self, tmp_path):
-        """Allows valid nested paths that stay within repo."""
         from ingot.workflow.tasks import normalize_path
 
         # Path that goes up and back down but stays within repo
@@ -1092,7 +933,6 @@ class TestNormalizePathWithRepoRoot:
         assert result == "lib/file.py"
 
     def test_jail_check_on_absolute_path_outside_repo(self, tmp_path):
-        """Raises PathSecurityError on absolute path outside repo."""
         from ingot.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
@@ -1107,7 +947,6 @@ class TestDeduplicatePaths:
     """
 
     def test_removes_exact_duplicates(self, tmp_path):
-        """Removes exact duplicate paths."""
         from ingot.workflow.tasks import deduplicate_paths
 
         paths = ["src/file.py", "src/other.py", "src/file.py"]
@@ -1116,7 +955,6 @@ class TestDeduplicatePaths:
         assert result == ["src/file.py", "src/other.py"]
 
     def test_removes_equivalent_duplicates(self, tmp_path):
-        """Removes duplicates that differ only by normalization."""
         from ingot.workflow.tasks import deduplicate_paths
 
         # Create src directory
@@ -1129,7 +967,6 @@ class TestDeduplicatePaths:
         assert result[0] == "src/file.py"
 
     def test_preserves_order(self, tmp_path):
-        """Preserves insertion order of first occurrence."""
         from ingot.workflow.tasks import deduplicate_paths
 
         paths = ["z_file.py", "a_file.py", "m_file.py"]
@@ -1138,7 +975,6 @@ class TestDeduplicatePaths:
         assert result == ["z_file.py", "a_file.py", "m_file.py"]
 
     def test_removes_empty_paths(self, tmp_path):
-        """Removes empty strings from result."""
         from ingot.workflow.tasks import deduplicate_paths
 
         paths = ["src/file.py", "", "  ", "src/other.py"]
@@ -1147,13 +983,11 @@ class TestDeduplicatePaths:
         assert result == ["src/file.py", "src/other.py"]
 
     def test_handles_empty_list(self, tmp_path):
-        """Handles empty input list."""
         from ingot.workflow.tasks import deduplicate_paths
 
         assert deduplicate_paths([], repo_root=tmp_path) == []
 
     def test_deduplicates_with_repo_root(self, tmp_path):
-        """Deduplicates using repo_root for normalization."""
         from ingot.workflow.tasks import deduplicate_paths
 
         (tmp_path / "src").mkdir()
@@ -1165,7 +999,6 @@ class TestDeduplicatePaths:
         assert result[0] == "src/file.py"
 
     def test_raises_on_security_violation(self, tmp_path):
-        """Raises PathSecurityError if any path escapes repo."""
         from ingot.workflow.tasks import PathSecurityError, deduplicate_paths
 
         paths = ["src/file.py", "../outside.py"]
@@ -1175,10 +1008,7 @@ class TestDeduplicatePaths:
 
 
 class TestPathSecurityError:
-    """Tests for PathSecurityError exception."""
-
     def test_exception_attributes(self):
-        """Exception stores path and repo_root attributes."""
         from ingot.workflow.tasks import PathSecurityError
 
         error = PathSecurityError("../bad/path.txt", "/repo/root")
@@ -1187,7 +1017,6 @@ class TestPathSecurityError:
         assert error.repo_root == "/repo/root"
 
     def test_exception_message(self):
-        """Exception message contains path and repo info."""
         from ingot.workflow.tasks import PathSecurityError
 
         error = PathSecurityError("../escape.txt", "/my/repo")
@@ -1197,16 +1026,8 @@ class TestPathSecurityError:
         assert "Security violation" in str(error)
 
 
-# =============================================================================
-# Tests for Multiline Metadata Parsing
-# =============================================================================
-
-
 class TestMultilineMetadataParsing:
-    """Tests for multiline HTML comment metadata parsing."""
-
     def test_parses_multiline_files_comment(self):
-        """Parses files metadata spanning multiple lines."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -1226,7 +1047,6 @@ class TestMultilineMetadataParsing:
         ]
 
     def test_parses_multiline_category_and_files(self):
-        """Parses multiline comment with both category and files."""
         from ingot.workflow.tasks import TaskCategory, _parse_task_metadata
 
         lines = [
@@ -1243,7 +1063,6 @@ class TestMultilineMetadataParsing:
         assert target_files == ["src/api/endpoint.py"]
 
     def test_parses_files_with_newline_separators(self):
-        """Parses files separated by newlines with trailing commas."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         # Note: When files are on separate lines, trailing commas are recommended
@@ -1262,7 +1081,6 @@ class TestMultilineMetadataParsing:
         assert target_files == ["src/file1.py", "src/file2.py", "src/file3.py"]
 
     def test_parses_three_plus_line_comment(self):
-        """Parses metadata block spanning 3+ lines (required test case)."""
         from ingot.workflow.tasks import parse_task_list
 
         content = """## Tasks
@@ -1288,7 +1106,6 @@ class TestMultilineMetadataParsing:
         assert "tests/module/test_helper.py" in task.target_files
 
     def test_handles_mixed_single_and_multiline_comments(self):
-        """Handles mix of single-line and multi-line comments."""
         from ingot.workflow.tasks import parse_task_list
 
         content = """## Tasks
@@ -1317,7 +1134,6 @@ class TestMultilineMetadataParsing:
         assert len(tasks[1].target_files) == 2
 
     def test_multiline_with_blank_lines_above_task(self):
-        """Handles multiline comment with blank lines before task."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -1332,16 +1148,8 @@ class TestMultilineMetadataParsing:
         assert target_files == ["src/file.py"]
 
 
-# =============================================================================
-# Tests for Round-Trip Persistence (Parse -> Format -> Parse)
-# =============================================================================
-
-
 class TestRoundTripPersistence:
-    """Tests for round-trip integrity: parse -> format -> parse preserves data."""
-
     def test_round_trip_preserves_target_files(self):
-        """Parse -> format -> parse preserves target_files exactly."""
         from ingot.workflow.tasks import format_task_list, parse_task_list
 
         original_content = """## Tasks
@@ -1371,7 +1179,6 @@ class TestRoundTripPersistence:
         assert tasks2[1].target_files == tasks1[1].target_files
 
     def test_round_trip_preserves_category_and_order(self):
-        """Parse -> format -> parse preserves category and order."""
         from ingot.workflow.tasks import TaskCategory, format_task_list, parse_task_list
 
         original_content = """## Fundamental Tasks
@@ -1402,7 +1209,6 @@ class TestRoundTripPersistence:
         assert tasks2[2].group_id == "features"
 
     def test_round_trip_preserves_task_status(self):
-        """Parse -> format -> parse preserves complete/pending status."""
         from ingot.workflow.tasks import TaskStatus, format_task_list, parse_task_list
 
         original_content = """<!-- category: fundamental, order: 1 -->
@@ -1419,7 +1225,6 @@ class TestRoundTripPersistence:
         assert tasks2[1].status == TaskStatus.PENDING
 
     def test_round_trip_preserves_indentation(self):
-        """Parse -> format -> parse preserves task indentation."""
         from ingot.workflow.tasks import format_task_list, parse_task_list
 
         original_content = """<!-- category: fundamental -->
@@ -1438,7 +1243,6 @@ class TestRoundTripPersistence:
         assert tasks2[2].indent_level == 2
 
     def test_round_trip_with_empty_target_files(self):
-        """Parse -> format -> parse handles tasks with no target_files."""
         from ingot.workflow.tasks import format_task_list, parse_task_list
 
         original_content = """<!-- category: fundamental, order: 1 -->
@@ -1455,7 +1259,6 @@ class TestRoundTripPersistence:
         assert tasks2[0].target_files == []
 
     def test_round_trip_preserves_all_metadata_fields(self):
-        """Full round-trip test preserving all metadata fields."""
         from ingot.workflow.tasks import TaskCategory, format_task_list, parse_task_list
 
         original_content = """<!-- category: independent, group: batch -->
@@ -1480,7 +1283,6 @@ class TestRoundTripPersistence:
         ]
 
     def test_format_includes_category_metadata(self):
-        """format_task_list includes category metadata in output."""
         from ingot.workflow.tasks import Task, TaskCategory, format_task_list
 
         tasks = [
@@ -1502,7 +1304,6 @@ class TestRoundTripPersistence:
         assert "<!-- category: independent, group: utils -->" in result
 
     def test_format_includes_files_metadata(self):
-        """format_task_list includes files metadata in output."""
         from ingot.workflow.tasks import Task, TaskCategory, format_task_list
 
         tasks = [
@@ -1518,16 +1319,10 @@ class TestRoundTripPersistence:
         assert "<!-- files: src/file1.py, src/file2.py -->" in result
 
 
-# =============================================================================
-# Tests for Metadata Bleed Prevention
-# =============================================================================
-
-
 class TestMetadataBleedPrevention:
     """Tests to ensure metadata doesn't 'bleed' to unrelated tasks."""
 
     def test_metadata_followed_by_text_then_task(self):
-        """Metadata followed by text paragraph, then task - metadata should NOT attach."""
         from ingot.workflow.tasks import parse_task_list
 
         content = """## Tasks
@@ -1551,7 +1346,6 @@ It should prevent the metadata from attaching to the task.
         # Note: depending on implementation, this might vary
 
     def test_metadata_immediately_before_task(self):
-        """Metadata immediately before task should attach correctly."""
         from ingot.workflow.tasks import parse_task_list
 
         content = """## Tasks
@@ -1569,7 +1363,6 @@ It should prevent the metadata from attaching to the task.
         assert task.group_id == "api"
 
     def test_metadata_with_blank_lines_still_attaches(self):
-        """Metadata with only blank lines before task should still attach."""
         from ingot.workflow.tasks import parse_task_list
 
         content = """## Tasks
@@ -1587,7 +1380,6 @@ It should prevent the metadata from attaching to the task.
         assert task.target_files == ["src/api/endpoint.py"]
 
     def test_text_between_metadata_and_task_blocks_attachment(self):
-        """Text content between metadata and task blocks attachment."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -1604,7 +1396,6 @@ It should prevent the metadata from attaching to the task.
         assert target_files == []
 
     def test_multiple_tasks_each_get_own_metadata(self):
-        """Each task gets only its own metadata, not from other tasks."""
         from ingot.workflow.tasks import parse_task_list
 
         content = """## Tasks
@@ -1629,7 +1420,6 @@ It should prevent the metadata from attaching to the task.
         assert tasks[1].target_files == ["src/file2.py"]
 
     def test_orphan_metadata_does_not_attach_to_later_task(self):
-        """Orphan metadata (no task after) doesn't attach to later tasks."""
         from ingot.workflow.tasks import parse_task_list
 
         content = """## Section 1
@@ -1649,7 +1439,6 @@ It should prevent the metadata from attaching to the task.
         assert task.group_id is None
 
     def test_heading_between_metadata_and_task_blocks_attachment(self):
-        """Heading between metadata and task blocks attachment."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -1666,7 +1455,6 @@ It should prevent the metadata from attaching to the task.
         assert target_files == []
 
     def test_code_block_between_metadata_and_task_blocks_attachment(self):
-        """Code block between metadata and task blocks attachment."""
         from ingot.workflow.tasks import _parse_task_metadata
 
         lines = [
@@ -1686,11 +1474,6 @@ It should prevent the metadata from attaching to the task.
         assert target_files == []
 
 
-# =============================================================================
-# Security Regression Tests (Predictive Context)
-# =============================================================================
-
-
 class TestSecurityRegressions:
     """Security regression tests for path normalization and jail check.
 
@@ -1702,7 +1485,6 @@ class TestSecurityRegressions:
     """
 
     def test_malicious_path_traversal_raises_security_error(self, tmp_path):
-        """SECURITY: Malicious path ../outside.py with repo_root raises PathSecurityError."""
         from ingot.workflow.tasks import PathSecurityError, normalize_path
 
         # Attempt directory traversal attack
@@ -1715,14 +1497,12 @@ class TestSecurityRegressions:
         assert exc_info.value.path == "../outside.py"
 
     def test_deeply_nested_traversal_attack(self, tmp_path):
-        """SECURITY: Deeply nested traversal ../../../../../../etc/passwd is blocked."""
         from ingot.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
             normalize_path("src/../../../../../../etc/passwd", repo_root=tmp_path)
 
     def test_path_normalization_detects_collision(self, tmp_path):
-        """SECURITY: src/foo.py and ./src/foo.py normalize to same path (collision detection)."""
         from ingot.workflow.tasks import normalize_path
 
         # Create src directory
@@ -1735,7 +1515,6 @@ class TestSecurityRegressions:
         assert path1 == path2 == "src/foo.py"
 
     def test_deduplicate_detects_normalized_collision(self, tmp_path):
-        """SECURITY: deduplicate_paths treats ./src/foo.py and src/foo.py as same file."""
         from ingot.workflow.tasks import deduplicate_paths
 
         # Create src directory
@@ -1750,15 +1529,12 @@ class TestSecurityRegressions:
         assert "src/bar.py" in result
 
     def test_absolute_path_outside_repo_blocked(self, tmp_path):
-        """SECURITY: Absolute paths outside repo are blocked."""
         from ingot.workflow.tasks import PathSecurityError, normalize_path
 
         with pytest.raises(PathSecurityError):
             normalize_path("/etc/passwd", repo_root=tmp_path)
 
     def test_symlink_escape_attempt_blocked(self, tmp_path):
-        """SECURITY: Symlink-based escape attempts are blocked by resolve()."""
-
         from ingot.workflow.tasks import PathSecurityError, normalize_path
 
         # Create a symlink pointing outside the repo
@@ -1777,7 +1553,6 @@ class TestSecurityRegressions:
             normalize_path("escape_link/secret.txt", repo_root=tmp_path)
 
     def test_repo_root_is_required_not_optional(self, tmp_path):
-        """SECURITY: normalize_path requires repo_root (no default None)."""
         import inspect
 
         from ingot.workflow.tasks import normalize_path
@@ -1792,7 +1567,6 @@ class TestSecurityRegressions:
         ), "repo_root must be required (no default) for security"
 
     def test_deduplicate_paths_repo_root_is_required(self, tmp_path):
-        """SECURITY: deduplicate_paths requires repo_root (no default None)."""
         import inspect
 
         from ingot.workflow.tasks import deduplicate_paths

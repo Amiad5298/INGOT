@@ -255,7 +255,7 @@ class NonInteractiveUserInteraction(UserInteractionInterface):
         """Return default or raise if required and fail_on_interaction is True."""
         if required and not default and self.fail_on_interaction:
             raise RuntimeError(
-                f"Required text input but running in non-interactive mode. " f"Prompt: {message}"
+                f"Required text input but running in non-interactive mode. Prompt: {message}"
             )
         return default
 

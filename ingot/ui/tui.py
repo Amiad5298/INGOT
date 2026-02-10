@@ -70,14 +70,7 @@ MAX_LIVENESS_WIDTH = 70
 
 
 def _should_use_tui(override: bool | None = None) -> bool:
-    """Determine if TUI should be used.
-
-    Args:
-        override: Explicit override from CLI. None means auto-detect.
-
-    Returns:
-        True if TUI should be used.
-    """
+    """Determine if TUI should be used based on CLI override or TTY auto-detection."""
     # CLI override takes precedence
     if override is not None:
         return override
@@ -105,19 +98,7 @@ def render_task_list(
     parallel_mode: bool = False,
     spinners: dict[int, Spinner] | None = None,
 ) -> Panel:
-    """Render the task list panel with parallel execution support.
-
-    Args:
-        records: List of task run records.
-        selected_index: Index of currently selected task (-1 for none).
-        ticket_id: Ticket ID for header display.
-        parallel_mode: Whether parallel execution mode is enabled.
-        spinners: Optional cache of spinner objects keyed by task index.
-            If provided, spinners are reused to maintain animation state.
-
-    Returns:
-        Rich Panel containing the task table.
-    """
+    """Render the task list panel with parallel execution support."""
     table = Table(
         show_header=False,
         box=None,
@@ -200,17 +181,7 @@ def render_log_panel(
     follow_mode: bool = True,
     num_lines: int = DEFAULT_LOG_TAIL_LINES,
 ) -> Panel:
-    """Render the log output panel.
-
-    Args:
-        log_buffer: Task log buffer to display.
-        task_name: Name of the task for the header.
-        follow_mode: Whether auto-scroll is enabled.
-        num_lines: Number of log lines to show.
-
-    Returns:
-        Rich Panel containing log output.
-    """
+    """Render the log output panel."""
     # Get log lines
     if log_buffer is not None:
         lines = log_buffer.get_tail(num_lines)
@@ -240,17 +211,7 @@ def render_status_bar(
     parallel_mode: bool = False,
     running_count: int = 0,
 ) -> Text:
-    """Render the keyboard shortcuts status bar.
-
-    Args:
-        running: Whether a task is currently running.
-        verbose_mode: Whether verbose mode is enabled.
-        parallel_mode: Whether parallel execution mode is enabled.
-        running_count: Number of currently running tasks in parallel mode.
-
-    Returns:
-        Rich Text with keyboard shortcuts.
-    """
+    """Render the keyboard shortcuts status bar."""
     shortcuts = [
         ("[↑↓]", "Navigate"),
         ("[Enter]", "View logs"),
@@ -288,15 +249,6 @@ class TaskRunnerUI:
     Manages Rich Live display, handles keyboard input,
     and orchestrates layout updates based on task events.
 
-    Attributes:
-        ticket_id: Ticket identifier for display.
-        records: List of task run records (multi-task mode).
-        selected_index: Currently selected task index.
-        follow_mode: Whether log auto-scroll is enabled.
-        verbose_mode: Whether verbose mode is enabled.
-        parallel_mode: Whether multiple tasks can run simultaneously.
-        single_operation_mode: If True, use simplified single-spinner display.
-        status_message: Message to display next to spinner (single-operation mode).
     """
 
     ticket_id: str = ""
@@ -339,30 +291,18 @@ class TaskRunnerUI:
     _spinners: dict[int, Spinner] = field(default_factory=dict, init=False, repr=False)
 
     def initialize_records(self, task_names: list[str]) -> None:
-        """Initialize task run records from task names.
-
-        Args:
-            task_names: List of task names to create records for.
-        """
+        """Initialize task run records from task names."""
         self.records = [
             TaskRunRecord(task_index=i, task_name=name) for i, name in enumerate(task_names)
         ]
         self._spinners.clear()  # Clear spinner cache for new run
 
     def set_log_dir(self, log_dir: Path) -> None:
-        """Set the log directory for this run (multi-task mode).
-
-        Args:
-            log_dir: Path to the log directory.
-        """
+        """Set the log directory for this run (multi-task mode)."""
         self._log_dir = log_dir
 
     def set_log_path(self, path: Path) -> None:
-        """Set log file path and create buffer (single-operation mode).
-
-        Args:
-            path: Path to the log file.
-        """
+        """Set log file path and create buffer (single-operation mode)."""
         self._log_path = path
         self._log_buffer = TaskLogBuffer(log_path=path)
 
@@ -375,9 +315,6 @@ class TaskRunnerUI:
         3. Triggers a display refresh to show the updated liveness text
 
         Thread-safe: can be called from any thread.
-
-        Args:
-            line: A single line of AI output (without trailing newline).
         """
         # Write to log buffer
         if self._log_buffer is not None:
@@ -392,32 +329,17 @@ class TaskRunnerUI:
         self.refresh()
 
     def set_parallel_mode(self, enabled: bool) -> None:
-        """Enable or disable parallel execution display mode.
-
-        Args:
-            enabled: Whether parallel mode should be enabled.
-        """
+        """Enable or disable parallel execution display mode."""
         self.parallel_mode = enabled
 
     def get_record(self, task_index: int) -> TaskRunRecord | None:
-        """Get a task record by index.
-
-        Args:
-            task_index: Zero-based task index.
-
-        Returns:
-            TaskRunRecord or None if not found.
-        """
+        """Get a task record by index."""
         if 0 <= task_index < len(self.records):
             return self.records[task_index]
         return None
 
     def get_current_log_buffer(self) -> TaskLogBuffer | None:
-        """Get the log buffer for the currently selected or running task.
-
-        Returns:
-            TaskLogBuffer or None.
-        """
+        """Get the log buffer for the currently selected or running task."""
         with self._state_lock:
             # Prefer selected task, fall back to running task
             index = self.selected_index if self.selected_index >= 0 else self._current_task_index
@@ -431,11 +353,7 @@ class TaskRunnerUI:
             return record.log_buffer if record else None
 
     def get_current_task_name(self) -> str:
-        """Get the name of the currently displayed task.
-
-        Returns:
-            Task name or empty string.
-        """
+        """Get the name of the currently displayed task."""
         with self._state_lock:
             index = self.selected_index if self.selected_index >= 0 else self._current_task_index
 
@@ -448,11 +366,7 @@ class TaskRunnerUI:
             return record.task_name if record else ""
 
     def _get_running_count(self) -> int:
-        """Get the number of currently running tasks.
-
-        Returns:
-            Number of running tasks (from set in parallel mode, or 1/0 in sequential).
-        """
+        """Get the number of currently running tasks."""
         with self._state_lock:
             if self.parallel_mode:
                 return len(self._running_task_indices)
@@ -469,12 +383,6 @@ class TaskRunnerUI:
 
         If Task 5 finishes and Tasks 1, 2 are running:
         - Returns 1 (wraps around to beginning)
-
-        Args:
-            finished_index: Index of the task that just finished.
-
-        Returns:
-            Index of the next running task to select.
 
         Precondition:
             self._running_task_indices must not be empty.
@@ -495,9 +403,6 @@ class TaskRunnerUI:
         Renders different layouts based on mode:
         - Single-operation mode: Simple spinner with liveness indicator
         - Multi-task mode: Task list with log panel
-
-        Returns:
-            Rich Group containing all panels.
         """
         # Single-operation mode: simplified layout
         if self.single_operation_mode:
@@ -507,11 +412,7 @@ class TaskRunnerUI:
         return self._render_multi_task_layout()
 
     def _render_single_operation_layout(self) -> Group:
-        """Render simplified layout for single-operation mode.
-
-        Returns:
-            Rich Group with spinner panel and status bar.
-        """
+        """Render simplified layout for single-operation mode."""
         with self._state_lock:
             verbose_mode_snapshot = self.verbose_mode
             latest_line = self._latest_output_line
@@ -531,11 +432,7 @@ class TaskRunnerUI:
         return Group(*elements)
 
     def _render_multi_task_layout(self) -> Group:
-        """Render full layout for multi-task mode.
-
-        Returns:
-            Rich Group with task panel, log panel, and status bar.
-        """
+        """Render full layout for multi-task mode."""
         # Snapshot ALL state under lock once to avoid races and redundant locking
         with self._state_lock:
             selected_idx = self.selected_index

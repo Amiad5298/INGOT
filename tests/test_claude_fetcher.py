@@ -71,58 +71,46 @@ def mock_config_manager_jira_only():
 
 
 class TestClaudeMediatedFetcherInstantiation:
-    """Tests for ClaudeMediatedFetcher initialization."""
-
     def test_init_with_backend_only(self, mock_backend):
-        """Can initialize with just AIBackend."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         assert fetcher._backend is mock_backend
         assert fetcher._config is None
 
     def test_init_with_config_manager(self, mock_backend, mock_config_manager):
-        """Can initialize with AIBackend and ConfigManager."""
         fetcher = ClaudeMediatedFetcher(mock_backend, mock_config_manager)
 
         assert fetcher._backend is mock_backend
         assert fetcher._config is mock_config_manager
 
     def test_name_property(self, mock_backend):
-        """Name property returns 'Claude MCP Fetcher'."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         assert fetcher.name == "Claude MCP Fetcher"
 
 
 class TestClaudeMediatedFetcherPlatformSupport:
-    """Tests for supports_platform method."""
-
     def test_supports_platform_jira(self, mock_backend):
-        """Jira is supported without config."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
 
     def test_supports_platform_linear(self, mock_backend):
-        """Linear is supported without config."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.LINEAR) is True
 
     def test_supports_platform_github(self, mock_backend):
-        """GitHub is supported without config."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.GITHUB) is True
 
     def test_supports_platform_azure_devops_unsupported(self, mock_backend):
-        """Azure DevOps is not supported."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         assert fetcher.supports_platform(Platform.AZURE_DEVOPS) is False
 
     def test_supports_platform_with_config_enabled(self, mock_backend, mock_config_manager):
-        """Respects AgentConfig when platform is enabled."""
         fetcher = ClaudeMediatedFetcher(mock_backend, mock_config_manager)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
@@ -132,7 +120,6 @@ class TestClaudeMediatedFetcherPlatformSupport:
     def test_supports_platform_with_config_disabled(
         self, mock_backend, mock_config_manager_jira_only
     ):
-        """Respects AgentConfig when platform is disabled."""
         fetcher = ClaudeMediatedFetcher(mock_backend, mock_config_manager_jira_only)
 
         assert fetcher.supports_platform(Platform.JIRA) is True
@@ -140,7 +127,6 @@ class TestClaudeMediatedFetcherPlatformSupport:
         assert fetcher.supports_platform(Platform.GITHUB) is False
 
     def test_supports_platform_no_config_defaults_true(self, mock_backend):
-        """Without config, supported platforms default to True."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         for platform in SUPPORTED_PLATFORMS:
@@ -148,10 +134,7 @@ class TestClaudeMediatedFetcherPlatformSupport:
 
 
 class TestClaudeMediatedFetcherPromptTemplates:
-    """Tests for _get_prompt_template method."""
-
     def test_get_prompt_template_jira(self, mock_backend):
-        """Returns Jira template with {ticket_id} placeholder."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         template = fetcher._get_prompt_template(Platform.JIRA)
@@ -161,7 +144,6 @@ class TestClaudeMediatedFetcherPromptTemplates:
         assert "JSON" in template
 
     def test_get_prompt_template_linear(self, mock_backend):
-        """Returns Linear template with {ticket_id} placeholder."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         template = fetcher._get_prompt_template(Platform.LINEAR)
@@ -171,7 +153,6 @@ class TestClaudeMediatedFetcherPromptTemplates:
         assert "JSON" in template
 
     def test_get_prompt_template_github(self, mock_backend):
-        """Returns GitHub template with {ticket_id} placeholder."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         template = fetcher._get_prompt_template(Platform.GITHUB)
@@ -181,7 +162,6 @@ class TestClaudeMediatedFetcherPromptTemplates:
         assert "JSON" in template
 
     def test_get_prompt_template_unsupported_raises(self, mock_backend):
-        """Raises AgentIntegrationError for unsupported platform."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         with pytest.raises(AgentIntegrationError) as exc_info:
@@ -191,7 +171,6 @@ class TestClaudeMediatedFetcherPromptTemplates:
         assert "AZURE_DEVOPS" in str(exc_info.value)
 
     def test_all_supported_platforms_have_templates(self, mock_backend):
-        """All platforms in SUPPORTED_PLATFORMS have templates."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         for platform in SUPPORTED_PLATFORMS:
@@ -200,17 +179,14 @@ class TestClaudeMediatedFetcherPromptTemplates:
             assert "{ticket_id}" in template
 
     def test_templates_exist_for_all_supported_platforms(self):
-        """All SUPPORTED_PLATFORMS have corresponding templates."""
         for platform in SUPPORTED_PLATFORMS:
             assert platform in PLATFORM_PROMPT_TEMPLATES
 
     def test_templates_have_ticket_id_placeholder(self):
-        """All templates have {ticket_id} placeholder."""
         for platform, template in PLATFORM_PROMPT_TEMPLATES.items():
             assert "{ticket_id}" in template, f"Template for {platform} missing {{ticket_id}}"
 
     def test_templates_request_json_only(self):
-        """All templates instruct to return only JSON."""
         for platform, template in PLATFORM_PROMPT_TEMPLATES.items():
             assert "JSON" in template, f"Template for {platform} should mention JSON"
             assert (
@@ -219,11 +195,8 @@ class TestClaudeMediatedFetcherPromptTemplates:
 
 
 class TestClaudeMediatedFetcherFetchRaw:
-    """Integration tests for fetch_raw method."""
-
     @pytest.mark.asyncio
     async def test_fetch_raw_jira_success(self, mock_backend):
-        """Full flow with mocked backend returning JSON for Jira."""
         mock_backend.run_print_quiet.return_value = (
             '{"key": "PROJ-123", "summary": "Test issue", "status": "Open"}'
         )
@@ -235,7 +208,6 @@ class TestClaudeMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_linear_success(self, mock_backend):
-        """Full flow with mocked backend returning JSON for Linear."""
         mock_backend.run_print_quiet.return_value = (
             '{"identifier": "TEAM-42", "title": "Linear issue"}'
         )
@@ -247,7 +219,6 @@ class TestClaudeMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_github_success(self, mock_backend):
-        """Full flow with mocked backend returning JSON for GitHub."""
         mock_backend.run_print_quiet.return_value = (
             '{"number": 123, "title": "GitHub issue", "state": "open"}'
         )
@@ -259,7 +230,6 @@ class TestClaudeMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_unsupported_platform_raises(self, mock_backend):
-        """Raises PlatformNotSupportedError for unsupported platform."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         with pytest.raises(PlatformNotSupportedError) as exc_info:
@@ -270,7 +240,6 @@ class TestClaudeMediatedFetcherFetchRaw:
 
     @pytest.mark.asyncio
     async def test_fetch_raw_parses_json_from_markdown_block(self, mock_backend):
-        """Parses JSON from markdown code block in response."""
         mock_backend.run_print_quiet.return_value = """Here is the ticket:
 
 ```json
@@ -286,7 +255,6 @@ Let me know if you need more info."""
 
     @pytest.mark.asyncio
     async def test_fetch_raw_prompt_contains_ticket_id(self, mock_backend):
-        """Prompt sent to backend contains the ticket ID."""
         mock_backend.run_print_quiet.return_value = '{"key": "ABC-999", "summary": "Test issue"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -297,11 +265,8 @@ Let me know if you need more info."""
 
 
 class TestClaudeMediatedFetcherFetch:
-    """Tests for fetch() method with string platform parameter."""
-
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_jira(self, mock_backend):
-        """Can fetch using platform string 'jira'."""
         mock_backend.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test issue"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -311,7 +276,6 @@ class TestClaudeMediatedFetcherFetch:
 
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_linear(self, mock_backend):
-        """Can fetch using platform string 'linear'."""
         mock_backend.run_print_quiet.return_value = (
             '{"identifier": "TEAM-42", "title": "Linear issue"}'
         )
@@ -323,7 +287,6 @@ class TestClaudeMediatedFetcherFetch:
 
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_github(self, mock_backend):
-        """Can fetch using platform string 'github'."""
         mock_backend.run_print_quiet.return_value = '{"number": 123, "title": "GitHub issue"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -333,7 +296,6 @@ class TestClaudeMediatedFetcherFetch:
 
     @pytest.mark.asyncio
     async def test_fetch_with_string_platform_case_insensitive(self, mock_backend):
-        """Platform string is case-insensitive."""
         mock_backend.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -345,7 +307,6 @@ class TestClaudeMediatedFetcherFetch:
 
     @pytest.mark.asyncio
     async def test_fetch_with_invalid_platform_string_raises(self, mock_backend):
-        """Raises AgentIntegrationError for unknown platform string."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         with pytest.raises(AgentIntegrationError) as exc_info:
@@ -356,7 +317,6 @@ class TestClaudeMediatedFetcherFetch:
 
     @pytest.mark.asyncio
     async def test_fetch_with_timeout_override(self, mock_backend):
-        """Can override timeout in fetch() call."""
         mock_backend.run_print_quiet.return_value = '{"key": "PROJ-123", "summary": "Test"}'
         fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=30.0)
 
@@ -367,7 +327,6 @@ class TestClaudeMediatedFetcherFetch:
 
     @pytest.mark.asyncio
     async def test_fetch_with_unsupported_platform_enum_raises(self, mock_backend):
-        """Raises AgentIntegrationError for known but unsupported platform enum."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         with pytest.raises(AgentIntegrationError) as exc_info:
@@ -378,24 +337,19 @@ class TestClaudeMediatedFetcherFetch:
 
 
 class TestClaudeMediatedFetcherTimeout:
-    """Tests for timeout functionality."""
-
     def test_timeout_default_value(self, mock_backend):
-        """Default timeout is DEFAULT_TIMEOUT_SECONDS."""
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
         assert fetcher._timeout_seconds == DEFAULT_TIMEOUT_SECONDS
         assert fetcher._timeout_seconds == 60.0
 
     def test_timeout_custom_value_in_init(self, mock_backend):
-        """Can set custom timeout in __init__."""
         fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=120.0)
 
         assert fetcher._timeout_seconds == 120.0
 
     @pytest.mark.asyncio
     async def test_timeout_raises_agent_fetch_error(self, mock_backend):
-        """BackendTimeoutError from backend becomes AgentFetchError."""
         mock_backend.run_print_quiet.side_effect = BackendTimeoutError(
             "Operation timed out after 30.0s", timeout_seconds=30.0
         )
@@ -409,7 +363,6 @@ class TestClaudeMediatedFetcherTimeout:
 
     @pytest.mark.asyncio
     async def test_timeout_passed_to_backend(self, mock_backend):
-        """Effective timeout is forwarded to backend.run_print_quiet()."""
         mock_backend.run_print_quiet.return_value = '{"key": "X-1", "summary": "T"}'
         fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=42.0)
 
@@ -420,7 +373,6 @@ class TestClaudeMediatedFetcherTimeout:
 
     @pytest.mark.asyncio
     async def test_fetch_passes_timeout_through_without_resolving(self, mock_backend):
-        """fetch() passes timeout_seconds directly without resolving to instance default."""
         mock_backend.run_print_quiet.return_value = '{"key": "X-1", "summary": "T"}'
         fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=60.0)
 
@@ -431,7 +383,6 @@ class TestClaudeMediatedFetcherTimeout:
 
     @pytest.mark.asyncio
     async def test_fetch_none_timeout_uses_instance_default(self, mock_backend):
-        """fetch() with no timeout_seconds uses instance default via _execute_fetch_prompt."""
         mock_backend.run_print_quiet.return_value = '{"key": "X-1", "summary": "T"}'
         fetcher = ClaudeMediatedFetcher(mock_backend, timeout_seconds=99.0)
 
@@ -442,11 +393,8 @@ class TestClaudeMediatedFetcherTimeout:
 
 
 class TestClaudeMediatedFetcherValidation:
-    """Tests for response validation."""
-
     @pytest.mark.asyncio
     async def test_validation_passes_with_required_fields_jira(self, mock_backend):
-        """Validation passes when all required Jira fields present."""
         mock_backend.run_print_quiet.return_value = (
             '{"key": "PROJ-123", "summary": "Test", "status": "Open"}'
         )
@@ -459,7 +407,6 @@ class TestClaudeMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_passes_with_required_fields_linear(self, mock_backend):
-        """Validation passes when all required Linear fields present."""
         mock_backend.run_print_quiet.return_value = (
             '{"identifier": "TEAM-42", "title": "Linear issue"}'
         )
@@ -472,7 +419,6 @@ class TestClaudeMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_passes_with_required_fields_github(self, mock_backend):
-        """Validation passes when all required GitHub fields present."""
         mock_backend.run_print_quiet.return_value = '{"number": 123, "title": "GitHub issue"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -483,7 +429,6 @@ class TestClaudeMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_fails_missing_jira_key(self, mock_backend):
-        """Raises AgentResponseParseError when Jira 'key' missing."""
         mock_backend.run_print_quiet.return_value = '{"summary": "Test issue"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -495,7 +440,6 @@ class TestClaudeMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_fails_missing_linear_identifier(self, mock_backend):
-        """Raises AgentResponseParseError when Linear 'identifier' missing."""
         mock_backend.run_print_quiet.return_value = '{"title": "Linear issue"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -507,7 +451,6 @@ class TestClaudeMediatedFetcherValidation:
 
     @pytest.mark.asyncio
     async def test_validation_fails_missing_github_number(self, mock_backend):
-        """Raises AgentResponseParseError when GitHub 'number' missing."""
         mock_backend.run_print_quiet.return_value = '{"title": "GitHub issue"}'
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -518,18 +461,14 @@ class TestClaudeMediatedFetcherValidation:
         assert "number" in str(exc_info.value)
 
     def test_required_fields_defined_for_all_supported_platforms(self):
-        """REQUIRED_FIELDS has entries for all SUPPORTED_PLATFORMS."""
         for platform in SUPPORTED_PLATFORMS:
             assert platform in REQUIRED_FIELDS, f"Missing REQUIRED_FIELDS for {platform}"
             assert len(REQUIRED_FIELDS[platform]) > 0, f"Empty REQUIRED_FIELDS for {platform}"
 
 
 class TestClaudeMediatedFetcherExceptionTaxonomy:
-    """Tests for correct exception types in fetch_raw."""
-
     @pytest.mark.asyncio
     async def test_agent_fetch_error_not_rewrapped(self, mock_backend):
-        """AgentFetchError from _execute_fetch_prompt is NOT wrapped into AgentIntegrationError."""
         mock_backend.run_print_quiet.side_effect = RuntimeError("connection refused")
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -542,7 +481,6 @@ class TestClaudeMediatedFetcherExceptionTaxonomy:
 
     @pytest.mark.asyncio
     async def test_agent_response_parse_error_not_rewrapped(self, mock_backend):
-        """AgentResponseParseError is NOT wrapped into another exception type."""
         mock_backend.run_print_quiet.return_value = "not valid json at all"
         fetcher = ClaudeMediatedFetcher(mock_backend)
 
@@ -551,7 +489,6 @@ class TestClaudeMediatedFetcherExceptionTaxonomy:
 
     @pytest.mark.asyncio
     async def test_agent_integration_error_passes_through(self, mock_backend):
-        """AgentIntegrationError from _execute_fetch_prompt passes through unchanged."""
         mock_backend.run_print_quiet.side_effect = AgentIntegrationError(
             message="MCP tool not available", agent_name="test"
         )
@@ -564,7 +501,6 @@ class TestClaudeMediatedFetcherExceptionTaxonomy:
 
     @pytest.mark.asyncio
     async def test_unexpected_exception_becomes_agent_fetch_error(self, mock_backend):
-        """Unexpected exceptions become AgentFetchError (not AgentIntegrationError)."""
         mock_backend.run_print_quiet.side_effect = ValueError("unexpected error")
         fetcher = ClaudeMediatedFetcher(mock_backend)
 

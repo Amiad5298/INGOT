@@ -77,37 +77,20 @@ def sample_task():
     )
 
 
-# =============================================================================
-# Tests for _get_log_base_dir()
-# =============================================================================
-
-
 class TestGetLogBaseDir:
-    """Tests for _get_log_base_dir function."""
-
     def test_default_returns_spec_runs(self, monkeypatch):
-        """Default returns Path('.ingot/runs')."""
         monkeypatch.delenv("INGOT_LOG_DIR", raising=False)
         result = _get_log_base_dir()
         assert result == Path(".ingot/runs")
 
     def test_respects_environment_variable(self, monkeypatch):
-        """Respects INGOT_LOG_DIR environment variable."""
         monkeypatch.setenv("INGOT_LOG_DIR", "/custom/log/dir")
         result = _get_log_base_dir()
         assert result == Path("/custom/log/dir")
 
 
-# =============================================================================
-# Tests for _create_run_log_dir()
-# =============================================================================
-
-
 class TestCreateRunLogDir:
-    """Tests for _create_run_log_dir function."""
-
     def test_creates_timestamped_directory(self, tmp_path, monkeypatch):
-        """Creates timestamped directory."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         result = _create_run_log_dir("TEST-123")
@@ -117,7 +100,6 @@ class TestCreateRunLogDir:
         assert "TEST-123" in str(result)
 
     def test_creates_parent_directories(self, tmp_path, monkeypatch):
-        """Creates parent directories."""
         log_dir = tmp_path / "deep" / "nested" / "path"
         monkeypatch.setenv("INGOT_LOG_DIR", str(log_dir))
 
@@ -127,7 +109,6 @@ class TestCreateRunLogDir:
         assert "TEST-456" in str(result)
 
     def test_returns_correct_path(self, tmp_path, monkeypatch):
-        """Returns correct Path object."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         result = _create_run_log_dir("PROJ-789")
@@ -136,16 +117,8 @@ class TestCreateRunLogDir:
         assert result.parent.name == "PROJ-789"
 
 
-# =============================================================================
-# Tests for _cleanup_old_runs()
-# =============================================================================
-
-
 class TestCleanupOldRuns:
-    """Tests for _cleanup_old_runs function."""
-
     def test_removes_directories_beyond_keep_count(self, tmp_path, monkeypatch):
-        """Removes directories beyond keep_count."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
         ticket_dir = tmp_path / "TEST-123"
         ticket_dir.mkdir()
@@ -161,7 +134,6 @@ class TestCleanupOldRuns:
         assert len(remaining) == 2
 
     def test_keeps_newest_directories(self, tmp_path, monkeypatch):
-        """Keeps newest directories."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
         ticket_dir = tmp_path / "TEST-123"
         ticket_dir.mkdir()
@@ -178,14 +150,12 @@ class TestCleanupOldRuns:
         assert remaining == new_dirs
 
     def test_handles_nonexistent_ticket_directory(self, tmp_path, monkeypatch):
-        """Handles non-existent ticket directory gracefully."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         # Should not raise any exception
         _cleanup_old_runs("NONEXISTENT-123", keep_count=2)
 
     def test_ignores_cleanup_errors(self, tmp_path, monkeypatch):
-        """Ignores cleanup errors gracefully."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
         ticket_dir = tmp_path / "TEST-123"
         ticket_dir.mkdir()
@@ -200,16 +170,8 @@ class TestCleanupOldRuns:
             _cleanup_old_runs("TEST-123", keep_count=1)
 
 
-# =============================================================================
-# Tests for _build_task_prompt()
-# =============================================================================
-
-
 class TestBuildTaskPrompt:
-    """Tests for _build_task_prompt function."""
-
     def test_includes_task_name(self, sample_task, tmp_path):
-        """Prompt includes task name."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan content")
 
@@ -218,7 +180,6 @@ class TestBuildTaskPrompt:
         assert "Implement feature" in result
 
     def test_includes_parallel_mode_no(self, sample_task, tmp_path):
-        """Prompt includes Parallel mode: NO when not parallel."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
 
@@ -227,7 +188,6 @@ class TestBuildTaskPrompt:
         assert "Parallel mode: NO" in result
 
     def test_includes_parallel_mode_yes(self, sample_task, tmp_path):
-        """Prompt includes Parallel mode: YES when parallel."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
 
@@ -236,7 +196,6 @@ class TestBuildTaskPrompt:
         assert "Parallel mode: YES" in result
 
     def test_includes_plan_path_when_exists(self, sample_task, tmp_path):
-        """Prompt includes plan path when file exists."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
 
@@ -246,7 +205,6 @@ class TestBuildTaskPrompt:
         assert "codebase-retrieval" in result
 
     def test_excludes_plan_path_when_not_exists(self, sample_task, tmp_path):
-        """Prompt excludes plan path when file does not exist."""
         plan_path = tmp_path / "nonexistent.md"
 
         result = _build_task_prompt(sample_task, plan_path)
@@ -255,7 +213,6 @@ class TestBuildTaskPrompt:
         assert "codebase-retrieval" in result
 
     def test_does_not_include_full_plan_content(self, sample_task, tmp_path):
-        """Prompt does NOT include full plan content - only path reference."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("UNIQUE_PLAN_CONTENT_MARKER_12345")
 
@@ -267,7 +224,6 @@ class TestBuildTaskPrompt:
         assert str(plan_path) in result
 
     def test_includes_no_commit_constraint(self, sample_task, tmp_path):
-        """Prompt includes constraint about not committing."""
         plan_path = tmp_path / "plan.md"
 
         result = _build_task_prompt(sample_task, plan_path)
@@ -275,7 +231,6 @@ class TestBuildTaskPrompt:
         assert "Do NOT commit" in result
 
     def test_includes_target_files_when_present(self, tmp_path):
-        """Prompt includes target files when task has them."""
         task = Task(name="Fix module", target_files=["src/foo.py", "src/bar.py"])
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
@@ -288,7 +243,6 @@ class TestBuildTaskPrompt:
         assert "Focus your changes on these files" in result
 
     def test_excludes_target_files_when_empty(self, sample_task, tmp_path):
-        """Prompt does not include target files section when list is empty."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
 
@@ -297,7 +251,6 @@ class TestBuildTaskPrompt:
         assert "Target files for this task:" not in result
 
     def test_includes_user_context_when_provided(self, sample_task, tmp_path):
-        """Prompt includes user context when non-empty."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
 
@@ -309,7 +262,6 @@ class TestBuildTaskPrompt:
         assert "Use the new API v2 endpoints" in result
 
     def test_excludes_user_context_when_empty(self, sample_task, tmp_path):
-        """Prompt does not include user context section when empty."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
 
@@ -318,7 +270,6 @@ class TestBuildTaskPrompt:
         assert "Additional Context:" not in result
 
     def test_includes_both_target_files_and_user_context(self, tmp_path):
-        """Prompt includes both target files and user context, in correct order."""
         task = Task(name="Update handler", target_files=["handler.py"])
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
@@ -333,7 +284,6 @@ class TestBuildTaskPrompt:
         assert target_pos < context_pos
 
     def test_excludes_user_context_when_whitespace_only(self, sample_task, tmp_path):
-        """Prompt does not include user context section when whitespace only."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
 
@@ -342,7 +292,6 @@ class TestBuildTaskPrompt:
         assert "Additional Context:" not in result
 
     def test_no_commit_constraint_last_with_all_sections(self, tmp_path):
-        """No-commit constraint is still present with all optional sections."""
         task = Task(name="Update handler", target_files=["handler.py"])
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan")
@@ -356,16 +305,8 @@ class TestBuildTaskPrompt:
         assert commit_pos > context_pos
 
 
-# =============================================================================
-# Tests for _execute_task()
-# =============================================================================
-
-
 class TestExecuteTask:
-    """Tests for _execute_task function."""
-
     def test_returns_true_on_success(self, mock_backend, workflow_state, sample_task):
-        """Returns True on backend success."""
         mock_backend.run_with_callback.return_value = (True, "Output")
 
         result = _execute_task(
@@ -375,7 +316,6 @@ class TestExecuteTask:
         assert result is True
 
     def test_returns_false_on_failure(self, mock_backend, workflow_state, sample_task):
-        """Returns False on backend failure."""
         mock_backend.run_with_callback.return_value = (False, "Error")
 
         result = _execute_task(
@@ -385,7 +325,6 @@ class TestExecuteTask:
         assert result is False
 
     def test_returns_false_on_exception(self, mock_backend, workflow_state, sample_task):
-        """Returns False on exception."""
         mock_backend.run_with_callback.side_effect = RuntimeError("Connection failed")
 
         result = _execute_task(
@@ -395,7 +334,6 @@ class TestExecuteTask:
         assert result is False
 
     def test_uses_spec_implementer_agent(self, mock_backend, workflow_state, sample_task):
-        """Uses state.subagent_names implementer agent."""
         mock_backend.run_with_callback.return_value = (True, "Output")
 
         _execute_task(workflow_state, sample_task, workflow_state.get_plan_path(), mock_backend)
@@ -406,7 +344,6 @@ class TestExecuteTask:
         assert call_kwargs["dont_save_session"] is True
 
     def test_propagates_user_context_to_prompt(self, mock_backend, workflow_state, sample_task):
-        """User context from state appears in prompt passed to backend."""
         mock_backend.run_with_callback.return_value = (True, "Output")
         workflow_state.user_context = "Use the legacy API adapter"
 
@@ -417,16 +354,8 @@ class TestExecuteTask:
         assert "Use the legacy API adapter" in prompt
 
 
-# =============================================================================
-# Tests for _execute_task_with_callback()
-# =============================================================================
-
-
 class TestExecuteTaskWithCallback:
-    """Tests for _execute_task_with_callback function."""
-
     def test_returns_true_on_success(self, mock_backend, workflow_state, sample_task):
-        """Returns True on success."""
         mock_backend.run_with_callback.return_value = (True, "Output")
 
         callback = MagicMock()
@@ -441,7 +370,6 @@ class TestExecuteTaskWithCallback:
         assert result is True
 
     def test_returns_false_on_failure(self, mock_backend, workflow_state, sample_task):
-        """Returns False on failure."""
         mock_backend.run_with_callback.return_value = (False, "Error")
 
         callback = MagicMock()
@@ -456,8 +384,6 @@ class TestExecuteTaskWithCallback:
         assert result is False
 
     def test_callback_receives_output(self, mock_backend, workflow_state, sample_task):
-        """Callback is called with output lines."""
-
         # Simulate callback being invoked during run_with_callback
         def call_callback(prompt, *, subagent, output_callback, dont_save_session):
             output_callback("Line 1")
@@ -480,7 +406,6 @@ class TestExecuteTaskWithCallback:
         callback.assert_any_call("Line 2")
 
     def test_callback_receives_error_on_exception(self, mock_backend, workflow_state, sample_task):
-        """Callback receives error message on exception."""
         mock_backend.run_with_callback.side_effect = RuntimeError("Connection failed")
 
         callback = MagicMock()
@@ -500,7 +425,6 @@ class TestExecuteTaskWithCallback:
         assert "Connection failed" in error_call
 
     def test_uses_spec_implementer_agent(self, mock_backend, workflow_state, sample_task):
-        """Uses state.subagent_names implementer agent."""
         mock_backend.run_with_callback.return_value = (True, "Output")
 
         callback = MagicMock()
@@ -518,7 +442,6 @@ class TestExecuteTaskWithCallback:
         assert call_kwargs["dont_save_session"] is True
 
     def test_propagates_user_context_to_prompt(self, mock_backend, workflow_state, sample_task):
-        """User context from state appears in prompt passed to backend."""
         mock_backend.run_with_callback.return_value = (True, "Output")
         workflow_state.user_context = "Prefer functional style"
 
@@ -536,18 +459,10 @@ class TestExecuteTaskWithCallback:
         assert "Prefer functional style" in prompt
 
 
-# =============================================================================
-# Tests for _show_summary()
-# =============================================================================
-
-
 class TestShowSummary:
-    """Tests for _show_summary function."""
-
     @patch("ingot.workflow.step3_execute.console")
     @patch("ingot.workflow.step3_execute.get_current_branch")
     def test_displays_ticket_id(self, mock_branch, mock_console, workflow_state):
-        """Displays ticket ID."""
         mock_branch.return_value = "main"
 
         _show_summary(workflow_state)
@@ -559,7 +474,6 @@ class TestShowSummary:
     @patch("ingot.workflow.step3_execute.console")
     @patch("ingot.workflow.step3_execute.get_current_branch")
     def test_displays_branch_name(self, mock_branch, mock_console, workflow_state):
-        """Displays branch name."""
         workflow_state.branch_name = "feature/test-branch"
         mock_branch.return_value = "main"
 
@@ -571,7 +485,6 @@ class TestShowSummary:
     @patch("ingot.workflow.step3_execute.console")
     @patch("ingot.workflow.step3_execute.get_current_branch")
     def test_displays_completed_task_count(self, mock_branch, mock_console, workflow_state):
-        """Displays completed task count."""
         mock_branch.return_value = "main"
         workflow_state.completed_tasks = ["Task 1", "Task 2"]
 
@@ -583,7 +496,6 @@ class TestShowSummary:
     @patch("ingot.workflow.step3_execute.console")
     @patch("ingot.workflow.step3_execute.get_current_branch")
     def test_displays_checkpoint_count(self, mock_branch, mock_console, workflow_state):
-        """Displays checkpoint count."""
         mock_branch.return_value = "main"
         workflow_state.checkpoint_commits = ["abc123", "def456"]
 
@@ -595,7 +507,6 @@ class TestShowSummary:
     @patch("ingot.workflow.step3_execute.console")
     @patch("ingot.workflow.step3_execute.get_current_branch")
     def test_displays_failed_tasks_when_present(self, mock_branch, mock_console, workflow_state):
-        """Displays failed task names when present."""
         mock_branch.return_value = "main"
 
         _show_summary(workflow_state, failed_tasks=["Failed Task 1", "Failed Task 2"])
@@ -605,17 +516,9 @@ class TestShowSummary:
         assert any("issues" in c.lower() for c in calls)
 
 
-# =============================================================================
-# Tests for _run_post_implementation_tests()
-# =============================================================================
-
-
 class TestRunPostImplementationTests:
-    """Tests for _run_post_implementation_tests function."""
-
     @patch("ingot.workflow.step3_execute.prompt_confirm")
     def test_prompts_user_to_run_tests(self, mock_confirm, mock_backend, workflow_state):
-        """Prompts user to run tests."""
         mock_confirm.return_value = True
         mock_backend.run_with_callback.return_value = (True, "Tests passed")
 
@@ -626,7 +529,6 @@ class TestRunPostImplementationTests:
 
     @patch("ingot.workflow.step3_execute.prompt_confirm")
     def test_skips_when_user_declines(self, mock_confirm, mock_backend, workflow_state):
-        """Skips when user declines."""
         mock_confirm.return_value = False
 
         _run_post_implementation_tests(workflow_state, mock_backend)
@@ -638,7 +540,6 @@ class TestRunPostImplementationTests:
     def test_runs_auggie_with_test_prompt(
         self, mock_confirm, mock_ui_class, mock_backend, workflow_state
     ):
-        """Runs backend with test prompt using StreamingOperationUI."""
         mock_confirm.return_value = True
         mock_backend.run_with_callback.return_value = (True, "Tests passed")
 
@@ -660,7 +561,6 @@ class TestRunPostImplementationTests:
     def test_handles_auggie_exceptions(
         self, mock_confirm, mock_ui_class, mock_backend, workflow_state
     ):
-        """Handles backend exceptions gracefully."""
         mock_confirm.return_value = True
         mock_backend.run_with_callback.side_effect = RuntimeError("Connection error")
 
@@ -675,18 +575,10 @@ class TestRunPostImplementationTests:
         _run_post_implementation_tests(workflow_state, mock_backend)
 
 
-# =============================================================================
-# Tests for _offer_commit_instructions()
-# =============================================================================
-
-
 class TestOfferCommitInstructions:
-    """Tests for _offer_commit_instructions function."""
-
     @patch("ingot.workflow.step3_execute.console")
     @patch("ingot.workflow.step3_execute.is_dirty")
     def test_does_nothing_when_no_dirty_files(self, mock_is_dirty, mock_console, workflow_state):
-        """Does nothing when no dirty files."""
         mock_is_dirty.return_value = False
 
         _offer_commit_instructions(workflow_state)
@@ -701,7 +593,6 @@ class TestOfferCommitInstructions:
     def test_prompts_user_for_instructions(
         self, mock_is_dirty, mock_confirm, mock_console, workflow_state
     ):
-        """Prompts user for instructions."""
         mock_is_dirty.return_value = True
         mock_confirm.return_value = False
 
@@ -715,7 +606,6 @@ class TestOfferCommitInstructions:
     def test_does_nothing_when_user_declines(
         self, mock_is_dirty, mock_confirm, mock_console, workflow_state
     ):
-        """Does nothing when user declines."""
         mock_is_dirty.return_value = True
         mock_confirm.return_value = False
 
@@ -730,7 +620,6 @@ class TestOfferCommitInstructions:
     def test_prints_commit_commands_when_accepted(
         self, mock_is_dirty, mock_confirm, mock_console, workflow_state
     ):
-        """Prints commit commands when accepted."""
         mock_is_dirty.return_value = True
         mock_confirm.return_value = True
         workflow_state.completed_tasks = ["Task 1"]
@@ -741,21 +630,13 @@ class TestOfferCommitInstructions:
         assert any("git" in c for c in calls)
 
 
-# =============================================================================
-# Tests for _execute_fallback()
-# =============================================================================
-
-
 class TestExecuteFallback:
-    """Tests for _execute_fallback function."""
-
     @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     def test_executes_tasks_sequentially(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Executes tasks sequentially."""
         mock_execute.return_value = True
 
         tasks = [
@@ -782,7 +663,6 @@ class TestExecuteFallback:
     def test_marks_tasks_complete_on_success(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Marks tasks complete on success."""
         mock_execute.return_value = True
 
         tasks = [Task(name="Task 1", status=TaskStatus.PENDING)]
@@ -807,7 +687,6 @@ class TestExecuteFallback:
     def test_tracks_failed_tasks(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Tracks failed tasks."""
         mock_execute.side_effect = [True, False, True]
 
         tasks = [
@@ -835,7 +714,6 @@ class TestExecuteFallback:
     def test_calls_capture_task_memory_on_success(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Calls capture_task_memory on success."""
         mock_execute.return_value = True
 
         tasks = [Task(name="Task 1", status=TaskStatus.PENDING)]
@@ -859,7 +737,6 @@ class TestExecuteFallback:
     def test_handles_capture_task_memory_exceptions(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Handles capture_task_memory exceptions gracefully."""
         mock_execute.return_value = True
         mock_capture.side_effect = RuntimeError("Memory capture failed")
 
@@ -885,7 +762,6 @@ class TestExecuteFallback:
     def test_respects_fail_fast_option(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Respects fail_fast option."""
         mock_execute.side_effect = [True, False, True]
         workflow_state.fail_fast = True
 
@@ -916,7 +792,6 @@ class TestExecuteFallback:
     def test_returns_list_of_failed_task_names(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Returns list of failed task names."""
         mock_execute.side_effect = [False, True, False]
 
         tasks = [
@@ -939,14 +814,7 @@ class TestExecuteFallback:
         assert failed == ["Failed 1", "Failed 2"]
 
 
-# =============================================================================
-# Tests for _execute_with_tui()
-# =============================================================================
-
-
 class TestExecuteWithTui:
-    """Tests for _execute_with_tui function."""
-
     @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
@@ -961,7 +829,6 @@ class TestExecuteWithTui:
         workflow_state,
         tmp_path,
     ):
-        """Initializes TUI correctly."""
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
@@ -998,7 +865,6 @@ class TestExecuteWithTui:
         workflow_state,
         tmp_path,
     ):
-        """Marks tasks complete on success."""
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
@@ -1035,7 +901,6 @@ class TestExecuteWithTui:
         workflow_state,
         tmp_path,
     ):
-        """Tracks failed tasks."""
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
@@ -1074,7 +939,6 @@ class TestExecuteWithTui:
         workflow_state,
         tmp_path,
     ):
-        """Respects fail_fast option."""
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_tui.get_record.return_value = MagicMock(elapsed_time=1.0, log_buffer=None)
@@ -1117,7 +981,6 @@ class TestExecuteWithTui:
         workflow_state,
         tmp_path,
     ):
-        """Handles capture_task_memory exceptions gracefully."""
         mock_tui = MagicMock()
         mock_tui.check_quit_requested.return_value = False
         mock_record = MagicMock(elapsed_time=1.0)
@@ -1144,16 +1007,8 @@ class TestExecuteWithTui:
         assert failed == []  # Task still counts as success
 
 
-# =============================================================================
-# Tests for step_3_execute()
-# =============================================================================
-
-
 class TestStep3Execute:
-    """Tests for step_3_execute function."""
-
     def test_returns_false_when_tasklist_not_found(self, ticket, tmp_path):
-        """Returns False when tasklist not found."""
         state = WorkflowState(ticket=ticket)
         # Don't create tasklist file
         state.tasklist_file = tmp_path / "nonexistent.md"
@@ -1176,7 +1031,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Returns True when all tasks already complete."""
         mock_baseline.return_value = True
         # Create tasklist with all completed tasks
         tasklist = tmp_path / "specs" / "TEST-123-tasklist.md"
@@ -1214,7 +1068,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Calls _execute_with_tui when TUI mode."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = True
@@ -1246,7 +1099,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Calls _execute_fallback when non-TUI mode."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
@@ -1280,7 +1132,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Prompts user on task failures."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
@@ -1313,7 +1164,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Returns True when all tasks succeed."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
@@ -1347,7 +1197,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Returns False when user declines after task failures."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
@@ -1380,7 +1229,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Calls _show_summary."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
@@ -1412,7 +1260,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Calls _run_post_implementation_tests."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
@@ -1444,7 +1291,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Calls _offer_commit_instructions."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         mock_should_tui.return_value = False
@@ -1470,7 +1316,6 @@ class TestStep3Execute:
         workflow_state,
         tmp_path,
     ):
-        """Stops execution when user requests quit via TUI."""
         # Setup
         mock_tui = MagicMock()
         # Simulate quit requested before the second task
@@ -1507,14 +1352,7 @@ class TestStep3Execute:
         mock_tui.mark_remaining_skipped.assert_called()
 
 
-# =============================================================================
-# Tests for Two-Phase Execution
-# =============================================================================
-
-
 class TestTwoPhaseExecution:
-    """Tests for two-phase execution model."""
-
     @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
@@ -1539,7 +1377,6 @@ class TestTwoPhaseExecution:
         workflow_state,
         tmp_path,
     ):
-        """Fundamental tasks run before independent tasks."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         (tmp_path / "logs").mkdir()
@@ -1591,7 +1428,6 @@ class TestTwoPhaseExecution:
         workflow_state,
         tmp_path,
     ):
-        """Fundamental tasks execute one at a time (not in parallel)."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         (tmp_path / "logs").mkdir()
@@ -1643,7 +1479,6 @@ class TestTwoPhaseExecution:
         workflow_state,
         tmp_path,
     ):
-        """Independent tasks execute concurrently."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         (tmp_path / "logs").mkdir()
@@ -1695,7 +1530,6 @@ class TestTwoPhaseExecution:
         workflow_state,
         tmp_path,
     ):
-        """Respects parallel_execution_enabled=False."""
         mock_baseline.return_value = True
         mock_log_dir.return_value = tmp_path / "logs"
         (tmp_path / "logs").mkdir()
@@ -1725,21 +1559,13 @@ class TestTwoPhaseExecution:
         assert mock_execute_fallback.called
 
 
-# =============================================================================
-# Tests for Parallel Execution
-# =============================================================================
-
-
 class TestParallelExecution:
-    """Tests for parallel task execution."""
-
     @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_uses_thread_pool_executor(
         self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Uses ThreadPoolExecutor for concurrent execution."""
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute_retry.return_value = True
@@ -1771,7 +1597,6 @@ class TestParallelExecution:
     def test_respects_max_parallel_tasks(
         self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Limits concurrent workers to max_parallel_tasks."""
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute_retry.return_value = True
@@ -1800,7 +1625,6 @@ class TestParallelExecution:
     def test_collects_failed_tasks(
         self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Collects names of failed tasks."""
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
         # First task succeeds, second fails
@@ -1832,7 +1656,6 @@ class TestParallelExecution:
     def test_marks_successful_tasks_complete(
         self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Marks completed tasks in tasklist."""
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute_retry.return_value = True
@@ -1856,17 +1679,9 @@ class TestParallelExecution:
         mock_mark.assert_called_once()
 
 
-# =============================================================================
-# Tests for Task Retry
-# =============================================================================
-
-
 class TestTaskRetry:
-    """Tests for task retry with rate limit handling."""
-
     @patch("ingot.workflow.step3_execute._execute_task")
     def test_skips_retry_when_disabled(self, mock_execute, mock_backend, workflow_state, tmp_path):
-        """Skips retry wrapper when max_retries=0."""
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
 
@@ -1885,7 +1700,6 @@ class TestTaskRetry:
     def test_uses_callback_when_provided(
         self, mock_execute_callback, mock_backend, workflow_state, tmp_path
     ):
-        """Uses callback version when callback provided."""
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
 
@@ -1907,7 +1721,6 @@ class TestTaskRetry:
 
     @patch("ingot.workflow.step3_execute._execute_task")
     def test_returns_false_on_failure(self, mock_execute, mock_backend, workflow_state, tmp_path):
-        """Returns False when task execution fails."""
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
 
@@ -1925,7 +1738,6 @@ class TestTaskRetry:
     def test_retries_on_rate_limit_error(
         self, mock_execute, mock_backend, workflow_state, tmp_path
     ):
-        """Retries execution on rate limit errors."""
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
 
@@ -1947,7 +1759,6 @@ class TestTaskRetry:
     def test_rate_limit_error_returns_false_when_retries_disabled(
         self, mock_execute, mock_backend, workflow_state, tmp_path
     ):
-        """BackendRateLimitError returns False (not raises) when max_retries=0."""
         from ingot.integrations.backends.errors import BackendRateLimitError
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
@@ -1965,21 +1776,13 @@ class TestTaskRetry:
         assert result is False
 
 
-# =============================================================================
-# Tests for Parallel Execution Enhancements
-# =============================================================================
-
-
 class TestParallelTaskMemorySkipped:
-    """Tests for memory capture being skipped in parallel mode."""
-
     @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_parallel_fallback_skips_memory_capture(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Parallel fallback does not call capture_task_memory."""
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute.return_value = True
@@ -2006,7 +1809,6 @@ class TestParallelTaskMemorySkipped:
     def test_sequential_fallback_calls_memory_capture(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Sequential fallback calls capture_task_memory."""
         mock_execute.return_value = True
 
         tasks = [Task(name="Sequential Task 1", status=TaskStatus.PENDING)]
@@ -2027,15 +1829,12 @@ class TestParallelTaskMemorySkipped:
 
 
 class TestParallelFailFast:
-    """Tests for fail_fast semantics in parallel execution."""
-
     @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_fail_fast_stops_pending_tasks(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Fail-fast stops pending tasks when one fails."""
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
         # First task fails, second should be skipped
@@ -2069,7 +1868,6 @@ class TestParallelFailFast:
     def test_no_fail_fast_continues_after_failure(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Without fail-fast, execution continues after failure."""
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
         mock_execute.side_effect = [False, True, True]
@@ -2103,12 +1901,6 @@ class TestParallelFailFast:
     def test_stop_flag_prevents_new_task_execution(
         self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
     ):
-        """Stop flag prevents tasks that haven't started from executing.
-
-        Uses a threading.Event to simulate the stop_flag being set during
-        execution. The mock checks a shared event to simulate the stop_flag
-        behavior that would occur in real execution with delays.
-        """
         import threading
 
         from ingot.workflow.step3_execute import _execute_parallel_fallback
@@ -2164,12 +1956,9 @@ class TestParallelFailFast:
 
 
 class TestExecuteTaskWithCallbackRateLimit:
-    """Tests for rate limit detection in _execute_task_with_callback."""
-
     def test_raises_rate_limit_error_on_rate_limit_output(
         self, mock_backend, workflow_state, sample_task
     ):
-        """Raises BackendRateLimitError when output indicates rate limit."""
         from ingot.integrations.backends.errors import BackendRateLimitError
 
         # Simulate rate limit in output
@@ -2190,7 +1979,6 @@ class TestExecuteTaskWithCallbackRateLimit:
     def test_returns_false_on_non_rate_limit_failure(
         self, mock_backend, workflow_state, sample_task
     ):
-        """Returns False on non-rate-limit failure."""
         mock_backend.run_with_callback.return_value = (False, "Some other error")
         mock_backend.detect_rate_limit.return_value = False
 
@@ -2210,7 +1998,6 @@ class TestRateLimitFlowWithFakeBackend:
     """End-to-end rate limit retry flow tests using FakeBackend."""
 
     def test_full_rate_limit_retry_flow(self, workflow_state):
-        """Rate-limited backend retries and eventually succeeds."""
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
         from tests.fakes.fake_backend import make_rate_limited_backend
@@ -2237,7 +2024,6 @@ class TestRateLimitFlowWithFakeBackend:
         assert backend.call_count == 3
 
     def test_rate_limit_exhaustion_with_fake_backend(self, workflow_state):
-        """More failures than retries exhausts retries and returns False."""
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
         from tests.fakes.fake_backend import FakeBackend
@@ -2265,7 +2051,6 @@ class TestRateLimitFlowWithFakeBackend:
         assert result is False
 
     def test_non_callback_path_retries_on_rate_limit(self, workflow_state):
-        """Non-callback path (_execute_task) also triggers retry on rate limit."""
         from ingot.workflow.state import RateLimitConfig
         from ingot.workflow.step3_execute import _execute_task_with_retry
         from tests.fakes.fake_backend import make_rate_limited_backend
@@ -2292,10 +2077,7 @@ class TestRateLimitFlowWithFakeBackend:
 
 
 class TestFakeBackendConfiguration:
-    """Tests for FakeBackend configurability."""
-
     def test_check_installed_default_true(self):
-        """FakeBackend reports installed by default."""
         from tests.fakes.fake_backend import FakeBackend
 
         backend = FakeBackend([(True, "ok")])
@@ -2303,7 +2085,6 @@ class TestFakeBackendConfiguration:
         assert installed is True
 
     def test_check_installed_false(self):
-        """FakeBackend can simulate not-installed state."""
         from tests.fakes.fake_backend import FakeBackend
 
         backend = FakeBackend([(True, "ok")], installed=False)
@@ -2312,7 +2093,6 @@ class TestFakeBackendConfiguration:
         assert "not installed" in msg.lower()
 
     def test_custom_platform(self):
-        """FakeBackend can use a custom platform."""
         from ingot.config.fetch_config import AgentPlatform
         from tests.fakes.fake_backend import FakeBackend
 
@@ -2321,15 +2101,12 @@ class TestFakeBackendConfiguration:
 
 
 class TestCaptureBaselineForDiffs:
-    """Tests for _capture_baseline_for_diffs function."""
-
     @patch("ingot.workflow.step3_execute.capture_baseline")
     @patch("ingot.workflow.step3_execute.check_dirty_working_tree")
     @patch("ingot.workflow.step3_execute.print_info")
     def test_captures_baseline_successfully(
         self, mock_print, mock_check_dirty, mock_capture, workflow_state
     ):
-        """Captures baseline and returns True on success."""
         from ingot.workflow.step3_execute import _capture_baseline_for_diffs
 
         mock_check_dirty.return_value = True
@@ -2347,7 +2124,6 @@ class TestCaptureBaselineForDiffs:
     def test_continues_with_dirty_tree_on_warn_policy(
         self, mock_info, mock_warning, mock_check_dirty, mock_capture, workflow_state
     ):
-        """Continues with dirty tree when policy allows."""
         from ingot.workflow.step3_execute import _capture_baseline_for_diffs
 
         mock_check_dirty.return_value = False  # Dirty but not raising
@@ -2363,7 +2139,6 @@ class TestCaptureBaselineForDiffs:
     def test_returns_false_on_dirty_tree_fail_fast(
         self, mock_error, mock_check_dirty, workflow_state
     ):
-        """Returns False when dirty tree check raises DirtyWorkingTreeError."""
         from ingot.workflow.git_utils import DirtyWorkingTreeError
         from ingot.workflow.step3_execute import _capture_baseline_for_diffs
 
@@ -2380,7 +2155,6 @@ class TestCaptureBaselineForDiffs:
     def test_returns_false_on_capture_failure(
         self, mock_error, mock_check_dirty, mock_capture, workflow_state
     ):
-        """Returns False when baseline capture fails."""
         from ingot.workflow.step3_execute import _capture_baseline_for_diffs
 
         mock_check_dirty.return_value = True

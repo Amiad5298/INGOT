@@ -15,44 +15,34 @@ from ingot.integrations.agents import (
 
 
 class TestCheckGitignoreHasPattern:
-    """Tests for _check_gitignore_has_pattern helper function."""
-
     def test_finds_exact_pattern_match(self):
-        """Returns True when pattern exists exactly."""
         content = "*.pyc\n.ingot/\n__pycache__/"
         assert _check_gitignore_has_pattern(content, ".ingot/") is True
 
     def test_finds_pattern_with_surrounding_whitespace(self):
-        """Returns True when pattern has leading/trailing whitespace."""
         content = "*.pyc\n  .ingot/  \n__pycache__/"
         assert _check_gitignore_has_pattern(content, ".ingot/") is True
 
     def test_does_not_match_partial_pattern(self):
-        """Returns False when pattern is substring of another."""
         content = "*.pyc\n.ingot-backup/\n__pycache__/"
         assert _check_gitignore_has_pattern(content, ".ingot/") is False
 
     def test_does_not_match_commented_pattern(self):
-        """Returns False when pattern is in a comment."""
         content = "*.pyc\n# .ingot/\n__pycache__/"
         assert _check_gitignore_has_pattern(content, ".ingot/") is False
 
     def test_finds_log_pattern(self):
-        """Returns True for *.log pattern."""
         content = "*.pyc\n*.log\n__pycache__/"
         assert _check_gitignore_has_pattern(content, "*.log") is True
 
     def test_returns_false_for_missing_pattern(self):
-        """Returns False when pattern is not in file."""
         content = "*.pyc\n__pycache__/"
         assert _check_gitignore_has_pattern(content, ".ingot/") is False
 
     def test_handles_empty_content(self):
-        """Returns False for empty content."""
         assert _check_gitignore_has_pattern("", ".ingot/") is False
 
     def test_handles_only_comments(self):
-        """Returns False when file has only comments."""
         content = "# Python\n# Ignore pyc files"
         assert _check_gitignore_has_pattern(content, ".ingot/") is False
 
@@ -66,34 +56,22 @@ class TestGitignorePatternsConfiguration:
     """
 
     def test_patterns_include_spec_directory(self):
-        """The .ingot/ directory should be ignored (runtime state/logs)."""
         assert ".ingot/" in INGOT_GITIGNORE_PATTERNS
 
     def test_patterns_include_log_files(self):
-        """Log files (*.log) should be ignored."""
         assert "*.log" in INGOT_GITIGNORE_PATTERNS
 
     def test_patterns_do_not_include_specs_directory(self):
-        """REGRESSION TEST: specs/ must NOT be ignored.
-
-        The specs/ directory contains plan and tasklist .md files that users
-        need to see and review. Previously, specs/ was incorrectly added to
-        gitignore patterns, causing users to not see their plan files.
-        """
         assert "specs/" not in INGOT_GITIGNORE_PATTERNS
         assert "specs" not in INGOT_GITIGNORE_PATTERNS
 
     def test_patterns_only_contain_expected_entries(self):
-        """Verify the exact patterns list to catch unexpected additions."""
         expected_patterns = [".ingot/", "*.log"]
         assert INGOT_GITIGNORE_PATTERNS == expected_patterns
 
 
 class TestEnsureGitignoreConfigured:
-    """Tests for ensure_gitignore_configured function."""
-
     def test_creates_gitignore_if_not_exists(self, tmp_path, monkeypatch):
-        """Creates .gitignore with INGOT patterns if file doesn't exist."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -111,7 +89,6 @@ class TestEnsureGitignoreConfigured:
             assert pattern in content
 
     def test_appends_to_existing_gitignore(self, tmp_path, monkeypatch):
-        """Appends INGOT patterns to existing .gitignore."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -135,7 +112,6 @@ class TestEnsureGitignoreConfigured:
             assert pattern in content
 
     def test_idempotent_does_not_duplicate(self, tmp_path, monkeypatch):
-        """Running multiple times does not duplicate patterns."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -154,7 +130,6 @@ class TestEnsureGitignoreConfigured:
             assert second_content.count(pattern) == 1
 
     def test_preserves_existing_content_exactly(self, tmp_path, monkeypatch):
-        """Existing content is preserved without modification."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -176,7 +151,6 @@ __pycache__/
         assert content.startswith(existing_content.rstrip())
 
     def test_skips_if_patterns_already_exist(self, tmp_path, monkeypatch):
-        """Does nothing if all patterns already exist."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -193,7 +167,6 @@ __pycache__/
         assert content == existing_content
 
     def test_adds_only_missing_patterns(self, tmp_path, monkeypatch):
-        """Only adds patterns that are missing."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -212,7 +185,6 @@ __pycache__/
         assert "*.log" in content
 
     def test_handles_file_without_trailing_newline(self, tmp_path, monkeypatch):
-        """Handles existing file that doesn't end with newline."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -234,7 +206,6 @@ __pycache__/
             assert pattern in lines or any(line.strip() == pattern for line in lines)
 
     def test_adds_marker_comment_only_once(self, tmp_path, monkeypatch):
-        """INGOT marker comment is added only once."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -253,7 +224,6 @@ __pycache__/
         assert "*.log" in content
 
     def test_returns_true_when_already_configured(self, tmp_path, monkeypatch):
-        """Returns True when .gitignore is already properly configured."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -265,7 +235,6 @@ __pycache__/
 
     @patch("ingot.integrations.agents.print_info")
     def test_prints_info_when_not_quiet(self, mock_print, tmp_path, monkeypatch):
-        """Prints info message when quiet=False and patterns are added."""
         monkeypatch.chdir(tmp_path)
 
         ensure_gitignore_configured(quiet=False)
@@ -276,7 +245,6 @@ __pycache__/
         assert "INGOT" in call_args
 
     def test_does_not_modify_patterns_in_comments(self, tmp_path, monkeypatch):
-        """Patterns in comments are not considered as existing."""
         monkeypatch.chdir(tmp_path)
         gitignore_path = tmp_path / ".gitignore"
 
@@ -296,10 +264,7 @@ __pycache__/
 
 
 class TestRepoRootDetection:
-    """Tests for git repository root detection in gitignore configuration."""
-
     def test_updates_gitignore_at_repo_root_from_subdir(self, tmp_path, monkeypatch):
-        """When running from a subdirectory, .gitignore is updated at repo root."""
         # Create a git repo structure
         repo_root = tmp_path / "my-repo"
         repo_root.mkdir()
@@ -327,7 +292,6 @@ class TestRepoRootDetection:
         assert not (subdir / ".gitignore").exists()
 
     def test_falls_back_to_cwd_when_not_in_git_repo(self, tmp_path, monkeypatch):
-        """When not in a git repo, .gitignore is created in current directory."""
         # Create a directory without .git
         no_git_dir = tmp_path / "no-git-project"
         no_git_dir.mkdir()

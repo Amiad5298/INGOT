@@ -68,35 +68,13 @@ def run_ingot_workflow(
     2. Create task list with approval
     3. Execute tasks with clean loop
     4. Update documentation based on code changes
-
-    Args:
-        ticket: Ticket information (platform-agnostic GenericTicket)
-        config: Configuration manager
-        backend: AI backend instance for all agent interactions
-        planning_model: Model for planning phases
-        implementation_model: Model for implementation phase
-        skip_clarification: Skip clarification step
-        squash_at_end: Squash commits at end
-        use_tui: Override for TUI mode. None = auto-detect.
-        verbose: Enable verbose mode in TUI (expanded log panel).
-        parallel_execution_enabled: Enable parallel execution of independent tasks.
-        max_parallel_tasks: Maximum number of parallel tasks (1-5).
-        fail_fast: Stop on first task failure.
-        rate_limit_config: Rate limit retry configuration.
-        enable_phase_review: Enable phase reviews after task execution.
-        dirty_tree_policy: Policy for handling dirty working tree at Step 3 start.
-        auto_update_docs: Enable automatic documentation updates after Step 3.
-
-    Returns:
-        True if workflow completed successfully
     """
     # Guardrails: Handle potentially incomplete ticket data
     # Tickets may lack title if fetched without enrichment
     display_name = ticket.title or ticket.branch_summary or ticket.id
     if not ticket.title:
         print_warning(
-            f"Ticket '{ticket.id}' is missing title. "
-            f"Using '{display_name}' for display purposes."
+            f"Ticket '{ticket.id}' is missing title. Using '{display_name}' for display purposes."
         )
 
     print_header(f"Starting Workflow: {ticket.id}")
@@ -229,16 +207,7 @@ def run_ingot_workflow(
 def _setup_branch(
     state: WorkflowState, ticket: GenericTicket, branch_prefix: str = "feature"
 ) -> bool:
-    """Set up the feature branch for the workflow.
-
-    Args:
-        state: Workflow state
-        ticket: Ticket information (platform-agnostic)
-        branch_prefix: Prefix for the branch name (default: "feature")
-
-    Returns:
-        True if branch was set up successfully
-    """
+    """Set up the feature branch for the workflow."""
     current_branch = get_current_branch()
 
     # Use GenericTicket's branch_slug and prepend the prefix
@@ -268,11 +237,7 @@ def _setup_branch(
 
 
 def _show_completion(state: WorkflowState) -> None:
-    """Show workflow completion message.
-
-    Args:
-        state: Workflow state
-    """
+    """Show workflow completion message."""
     console.print()
     print_header("Workflow Complete!")
 
@@ -301,13 +266,6 @@ def workflow_cleanup(
 
     Handles cleanup when workflow is interrupted or fails.
     Ensures backend resources are released.
-
-    Args:
-        state: Workflow state
-        backend: Optional AI backend to close on cleanup
-
-    Yields:
-        None
     """
     original_branch = get_current_branch()
 
@@ -331,12 +289,7 @@ def workflow_cleanup(
 
 
 def _offer_cleanup(state: WorkflowState, original_branch: str) -> None:
-    """Offer cleanup options after workflow failure.
-
-    Args:
-        state: Workflow state
-        original_branch: Branch before workflow started
-    """
+    """Offer cleanup options after workflow failure."""
     console.print()
     print_warning("Workflow did not complete successfully.")
 

@@ -69,8 +69,6 @@ def linear_ticket():
 
 
 class TestCacheKey:
-    """Test CacheKey dataclass."""
-
     def test_string_representation(self):
         key = CacheKey(Platform.JIRA, "PROJ-123")
         assert str(key) == "JIRA:PROJ-123"
@@ -92,11 +90,6 @@ class TestCacheKey:
         assert key1 != key2
 
     def test_string_encoding_with_colon(self):
-        """P2 Fix: Verify ticket IDs with colons are URL-encoded.
-
-        This prevents parsing issues when the ticket_id contains the same
-        separator character as the platform:ticket_id format.
-        """
         key = CacheKey(Platform.JIRA, "PROJ:SUB:123")
         key_str = str(key)
         # Platform separator colon should be first
@@ -105,7 +98,6 @@ class TestCacheKey:
         assert "PROJ%3ASUB%3A123" in key_str
 
     def test_string_encoding_with_slash(self):
-        """P2 Fix: Verify ticket IDs with slashes are URL-encoded."""
         key = CacheKey(Platform.GITHUB, "owner/repo#42")
         key_str = str(key)
         assert key_str.startswith("GITHUB:")
@@ -114,7 +106,6 @@ class TestCacheKey:
         assert "%23" in key_str  # encoded hash
 
     def test_string_encoding_special_characters(self):
-        """P2 Fix: Verify various special characters are properly encoded."""
         key = CacheKey(Platform.LINEAR, "test ticket?id=123&foo=bar")
         key_str = str(key)
         assert key_str.startswith("LINEAR:")
@@ -125,8 +116,6 @@ class TestCacheKey:
 
 
 class TestCachedTicket:
-    """Test CachedTicket dataclass."""
-
     def test_is_expired_false(self, sample_ticket):
         now = datetime.now(UTC)
         cached = CachedTicket(
@@ -166,8 +155,6 @@ class TestCachedTicket:
 
 
 class TestInMemoryTicketCache:
-    """Test InMemoryTicketCache implementation."""
-
     @pytest.fixture
     def cache(self):
         return InMemoryTicketCache(default_ttl=timedelta(hours=1))
@@ -261,7 +248,6 @@ class TestInMemoryTicketCache:
         assert stats["LINEAR"] == 1
 
     def test_get_returns_copy_not_reference(self, cache, sample_ticket):
-        """Test that get() returns a copy, preventing mutation of cached data."""
         cache.set(sample_ticket)
         key = CacheKey.from_ticket(sample_ticket)
 
@@ -279,10 +265,6 @@ class TestInMemoryTicketCache:
         assert retrieved2.title == original_title
 
     def test_thread_safety_no_exceptions(self, cache, sample_ticket):
-        """Test concurrent access doesn't raise exceptions.
-
-        Uses queue.Queue for thread-safe error collection.
-        """
         error_queue: queue.Queue[Exception] = queue.Queue()
 
         def cache_operations() -> None:
@@ -304,10 +286,6 @@ class TestInMemoryTicketCache:
         assert error_queue.empty(), f"Errors occurred: {list(error_queue.queue)}"
 
     def test_thread_safety_data_integrity(self):
-        """Test concurrent writes maintain data integrity.
-
-        Uses queue.Queue for thread-safe result collection.
-        """
         cache = InMemoryTicketCache(default_ttl=timedelta(hours=1))
         result_queue: queue.Queue[tuple[int, int]] = queue.Queue()
         num_threads = 10
@@ -372,8 +350,6 @@ class TestInMemoryTicketCache:
 
 
 class TestFileBasedTicketCache:
-    """Test FileBasedTicketCache implementation."""
-
     @pytest.fixture
     def cache(self, tmp_path):
         return FileBasedTicketCache(
@@ -451,14 +427,6 @@ class TestFileBasedTicketCache:
         assert cache.get_etag(key) == "file-etag-123"
 
     def test_lru_eviction(self, sample_ticket, tmp_path):
-        """Test LRU eviction using deterministic file timestamps.
-
-        Uses os.utime() for explicit timestamp control instead of time.sleep()
-        to avoid flaky tests.
-
-        Note: With max_size=2 and threshold=math.ceil(2*1.1)=3, we need 4 items
-        to exceed the threshold and trigger eviction.
-        """
         cache = FileBasedTicketCache(
             cache_dir=tmp_path,
             default_ttl=timedelta(hours=1),
@@ -507,7 +475,6 @@ class TestFileBasedTicketCache:
         assert remaining_count == 2, f"Expected 2 remaining tickets, got {remaining_count}"
 
     def test_corrupted_json_file_returns_none(self, cache, sample_ticket):
-        """Test that corrupted JSON files are handled gracefully."""
         from ingot.integrations.cache import CacheKey
 
         cache.set(sample_ticket)
@@ -523,10 +490,6 @@ class TestFileBasedTicketCache:
         assert not path.exists()
 
     def test_thread_safety_file_cache(self, tmp_path, sample_ticket):
-        """Test concurrent access to file-based cache.
-
-        Uses queue.Queue for thread-safe error collection.
-        """
         cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
         error_queue: queue.Queue[Exception] = queue.Queue()
 
@@ -563,12 +526,6 @@ class TestFileBasedTicketCache:
         assert error_queue.empty(), f"Errors occurred: {list(error_queue.queue)}"
 
     def test_non_serializable_metadata_normalized_and_cached(self, tmp_path):
-        """Test that non-serializable platform_metadata is normalized and cached.
-
-        P1 Fix: platform_metadata is now recursively normalized to JSON-safe
-        types using _normalize_for_json(), so tickets with sets, datetimes,
-        custom objects, etc. can now be successfully cached.
-        """
         cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
 
         # Create a ticket with previously non-serializable platform_metadata
@@ -610,11 +567,6 @@ class TestFileBasedTicketCache:
         assert metadata["custom_obj"]["__non_serializable__"] is True
 
     def test_atomic_write_cleans_up_on_json_dump_type_error(self, tmp_path, sample_ticket):
-        """Test that _atomic_write cleans up temp files when json.dump raises TypeError.
-
-        P0 Fix: Uses unittest.mock to directly mock json.dump to raise TypeError,
-        ensuring the cleanup path in _atomic_write's finally block is exercised.
-        """
         from unittest.mock import patch
 
         cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
@@ -636,11 +588,6 @@ class TestFileBasedTicketCache:
         assert len(json_files) == 0, f"Unexpected cache files found: {json_files}"
 
     def test_atomic_write_raises_and_cleans_up_on_type_error(self, tmp_path):
-        """Test that _atomic_write raises TypeError but still cleans up temp files.
-
-        This test directly calls _atomic_write to verify the exception bubbles up
-        while temp files are still cleaned.
-        """
         from unittest.mock import patch
 
         cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
@@ -661,12 +608,6 @@ class TestFileBasedTicketCache:
         assert not test_path.exists()
 
     def test_eviction_threshold_with_small_max_size(self, tmp_path):
-        """Test that math.ceil correctly provides buffer for small max_size values.
-
-        P2 Fix: Ensures int(max_size * 1.1) doesn't round down to max_size
-        for small values like max_size=2 (int(2.2) == 2, no buffer).
-        Using math.ceil(2 * 1.1) = 3 ensures proper headroom.
-        """
         # Create RNG that never triggers lazy eviction (always > 0.1 threshold)
         # This ensures all 4 tickets are written before any eviction occurs
         no_evict_rng = random.Random(42)
@@ -721,16 +662,6 @@ class TestFileBasedTicketCache:
         assert cache.get(CacheKey(Platform.JIRA, "THRESH-3")) is not None
 
     def test_eviction_threshold_boundary_max_size_5(self, tmp_path):
-        """Test eviction threshold boundary: max_size=5, threshold=ceil(5*1.1)=6.
-
-        Verifies:
-        - Eviction does NOT trigger when count is 5 (at max_size)
-        - Eviction does NOT trigger when count is 6 (at threshold)
-        - Eviction DOES trigger when count exceeds 6 (> threshold)
-
-        Uses mock to disable probabilistic lazy eviction during set() calls,
-        ensuring only force_evict() triggers eviction for deterministic testing.
-        """
         from unittest.mock import patch
 
         cache = FileBasedTicketCache(
@@ -796,13 +727,6 @@ class TestFileBasedTicketCache:
                 ), f"BOUND-{i} should remain"
 
     def test_eviction_handles_file_deletion_race(self, tmp_path):
-        """Test that eviction handles files being deleted during scan.
-
-        P1 Fix: Uses os.scandir with proper exception handling to avoid
-        FileNotFoundError when a file is deleted between listing and stat.
-
-        The main goal is to verify eviction doesn't crash when files disappear.
-        """
         cache = FileBasedTicketCache(
             cache_dir=tmp_path,
             default_ttl=timedelta(hours=1),
@@ -849,12 +773,6 @@ class TestFileBasedTicketCache:
         ), f"Cache size {final_size} should be reasonable after eviction"
 
     def test_eviction_handles_stat_race_with_mock(self, tmp_path):
-        """Test that eviction handles FileNotFoundError during stat() with mock.
-
-        P1 Fix: Uses unittest.mock to simulate a FileNotFoundError occurring
-        when stat() is called on an entry during the scandir iteration.
-        This tests the try/except FileNotFoundError block in _evict_lru.
-        """
         from unittest.mock import MagicMock, patch
 
         cache = FileBasedTicketCache(
@@ -923,14 +841,6 @@ class TestFileBasedTicketCache:
         assert cache.size() >= 0
 
     def test_atomic_write_cleanup_on_serialization_error(self, tmp_path, sample_ticket):
-        """Test that serialization errors don't leave orphaned .tmp files.
-
-        P0 Fix Verification: This test mocks json.dump to raise TypeError and
-        verifies that:
-        1. The TypeError is caught and logged (not raised to caller from set())
-        2. No .tmp files are left behind in the cache directory
-        3. The cache directory is empty (no partial writes)
-        """
         from unittest.mock import patch
 
         cache = FileBasedTicketCache(cache_dir=tmp_path, default_ttl=timedelta(hours=1))
@@ -952,11 +862,6 @@ class TestFileBasedTicketCache:
         assert len(all_files) == 0, f"Cache directory should be empty but contains: {all_files}"
 
     def test_deterministic_eviction_with_injectable_rng(self, tmp_path):
-        """P2 Fix: Verify eviction behavior is reproducible with seeded RNG.
-
-        This test demonstrates that passing a seeded Random instance to the
-        cache constructor makes eviction behavior deterministic for testing.
-        """
         import random as rand_module
 
         run_counter = [0]  # Use list to allow mutation in nested function
@@ -1017,8 +922,6 @@ class TestFileBasedTicketCache:
 
 
 class TestGlobalCache:
-    """Test global cache singleton functions (internal APIs)."""
-
     def test_get_global_cache_singleton(self):
         _clear_global_cache()
         cache1 = _get_global_cache()
@@ -1057,7 +960,6 @@ class TestGlobalCache:
         _clear_global_cache()
 
     def test_get_global_cache_type_mismatch_strict_raises(self, tmp_path):
-        """Test that strict mode raises CacheConfigurationError on type mismatch."""
         _clear_global_cache()
         # Initialize as memory cache
         cache1 = _get_global_cache(cache_type="memory")
@@ -1071,7 +973,6 @@ class TestGlobalCache:
         _clear_global_cache()
 
     def test_get_global_cache_type_mismatch_non_strict_warning(self, tmp_path, caplog):
-        """Test that non-strict mode logs warning on type mismatch."""
         import logging
 
         _clear_global_cache()
@@ -1089,7 +990,6 @@ class TestGlobalCache:
         _clear_global_cache()
 
     def test_get_global_cache_kwargs_mismatch_strict_raises(self):
-        """Test that strict mode raises CacheConfigurationError on kwargs mismatch."""
         _clear_global_cache()
         # Initialize with max_size=100
         cache1 = _get_global_cache(cache_type="memory", max_size=100)
@@ -1103,7 +1003,6 @@ class TestGlobalCache:
         _clear_global_cache()
 
     def test_set_global_cache_updates_type(self, tmp_path, caplog):
-        """Test that _set_global_cache correctly updates the cache type."""
         import logging
 
         _clear_global_cache()
@@ -1128,12 +1027,6 @@ class TestGlobalCache:
         _clear_global_cache()
 
     def test_clear_global_cache_resets_kwargs_to_empty_dict(self):
-        """P1 Fix: Verify _global_cache_kwargs is reset to {} (not None) after clear.
-
-        This ensures consistent mismatch comparison logic - comparing {} to {}
-        works correctly, whereas comparing {} to None could cause confusion
-        or unexpected behavior in logging/error messages.
-        """
         import ingot.integrations.cache as cache_module
 
         _clear_global_cache()
@@ -1161,11 +1054,6 @@ class TestGlobalCache:
         _clear_global_cache()
 
     def test_global_cache_kwargs_mismatch_after_clear_and_reinit(self):
-        """Test that kwargs mismatch detection works correctly after clear.
-
-        P1 Fix verification: After clearing and reinitializing with new kwargs,
-        subsequent calls with different kwargs should still raise/warn correctly.
-        """
         _clear_global_cache()
 
         # Initialize with max_size=100

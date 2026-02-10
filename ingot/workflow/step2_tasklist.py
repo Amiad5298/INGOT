@@ -33,12 +33,6 @@ def step_2_create_tasklist(state: WorkflowState, backend: AIBackend) -> bool:
     3. Allows user to review and approve/edit/regenerate
     4. Saves the approved task list
 
-    Args:
-        state: Current workflow state
-        backend: AI backend instance for agent interactions
-
-    Returns:
-        True if task list was created and approved
     """
     print_header("Step 2: Create Task List")
 
@@ -129,14 +123,6 @@ def _parse_add_tasks_line(raw_task_text: str) -> tuple[str | None, str]:
     The regex is designed to handle edge cases:
     - Task names containing "DESCRIPTION" (e.g., "Fix DESCRIPTION field bug")
     - Task names containing "NAME" (e.g., "Update NAME validation")
-
-    Args:
-        raw_task_text: Raw text from checkbox line (after [ ] or [x])
-
-    Returns:
-        Tuple of (category_metadata, clean_task_name) where:
-        - category_metadata: HTML comment like "<!-- category: fundamental -->" or None
-        - clean_task_name: The task name with UUID/DESCRIPTION/category prefix stripped
     """
     match = ADD_TASKS_TOOL_PATTERN.match(raw_task_text.strip())
 
@@ -173,12 +159,6 @@ def _extract_tasklist_from_output(output: str, ticket_id: str) -> str | None:
     - Edge-case safe: Handles task names containing "DESCRIPTION" or "NAME"
     - Preserves subtasks: Non-checkbox bullets under tasks are kept
 
-    Args:
-        output: AI output text that may contain task list
-        ticket_id: Ticket ID for the header (platform-agnostic)
-
-    Returns:
-        Formatted task list content, or None if no tasks found
     """
     # Pattern for checkbox task lines: optional indent, optional bullet, checkbox, content
     task_pattern = re.compile(r"^(\s*)[-*]?\s*\[([xX ])\]\s*(.+)$")
@@ -283,15 +263,6 @@ def _generate_tasklist(
 
     Captures AI output and persists the task list to disk, even if the AI
     does not create/write the file itself.
-
-    Args:
-        state: Current workflow state
-        plan_path: Path to implementation plan
-        tasklist_path: Path to save task list
-        backend: AI backend instance for agent interactions
-
-    Returns:
-        True if task list was generated and contains valid tasks
     """
     plan_content = plan_path.read_text()
 
@@ -379,12 +350,6 @@ def _fundamental_section_has_test_keywords(content: str) -> bool:
 
     This is an optimization to skip the expensive AI call when there are
     no test-related items to extract from FUNDAMENTAL tasks.
-
-    Args:
-        content: Full task list content
-
-    Returns:
-        True if test keywords are found in the Fundamental section
     """
     # Extract the Fundamental section
     content_lower = content.lower()
@@ -419,14 +384,6 @@ def _post_process_tasklist(state: WorkflowState, tasklist_path: Path, backend: A
     3. Rewrite the task list with proper separation
 
     This is a best-effort operation - if it fails, the original task list is preserved.
-
-    Args:
-        state: Current workflow state
-        tasklist_path: Path to the task list file
-        backend: AI backend instance for agent interactions
-
-    Returns:
-        True if post-processing succeeded, False otherwise
     """
     tasklist_content = tasklist_path.read_text()
     original_length = len(tasklist_content)
@@ -505,12 +462,7 @@ Output ONLY the refined task list markdown."""
 
 
 def _create_default_tasklist(tasklist_path: Path, state: WorkflowState) -> None:
-    """Create a default task list template.
-
-    Args:
-        tasklist_path: Path to save task list
-        state: Current workflow state
-    """
+    """Create a default task list template."""
     template = f"""# Task List: {state.ticket.id}
 
 ## Implementation Tasks
@@ -528,11 +480,7 @@ Each task should leave the codebase in a working state.
 
 
 def _display_tasklist(tasklist_path: Path) -> None:
-    """Display the task list.
-
-    Args:
-        tasklist_path: Path to task list file
-    """
+    """Display the task list."""
     content = tasklist_path.read_text()
     tasks = parse_task_list(content)
 
@@ -546,11 +494,7 @@ def _display_tasklist(tasklist_path: Path) -> None:
 
 
 def _edit_tasklist(tasklist_path: Path) -> None:
-    """Allow user to edit the task list.
-
-    Args:
-        tasklist_path: Path to task list file
-    """
+    """Allow user to edit the task list."""
     import os
     import subprocess
 

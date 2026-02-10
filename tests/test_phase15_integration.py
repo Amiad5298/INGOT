@@ -27,17 +27,13 @@ from ingot.utils.errors import IngotError
 
 
 class TestPhase15ImportChain:
-    """Verify all Phase 1.5 imports work without circular dependencies."""
-
     def test_create_ticket_service_from_config_importable(self):
-        """create_ticket_service_from_config can be imported from ingot.cli."""
         from ingot.cli import create_ticket_service_from_config
 
         assert create_ticket_service_from_config is not None
         assert callable(create_ticket_service_from_config)
 
     def test_all_phase15_modules_import_without_circular_deps(self):
-        """All Phase 1.5 modules can be imported in sequence without errors."""
         # Order: errors → base → factory → resolver → fetcher → ticket_service → cli
         from ingot.cli import create_ticket_service_from_config
         from ingot.config.backend_resolver import resolve_backend_platform
@@ -60,7 +56,6 @@ class TestPhase15ImportChain:
         )
 
     def test_backend_errors_importable(self):
-        """Backend errors can be imported standalone."""
         from ingot.integrations.backends.errors import (
             BackendNotConfiguredError,
             BackendNotInstalledError,
@@ -78,28 +73,20 @@ class TestPhase15ImportChain:
         )
 
     def test_ticket_service_factory_importable(self):
-        """create_ticket_service factory is importable from ticket_service module."""
         from ingot.integrations.ticket_service import create_ticket_service
 
         assert create_ticket_service is not None
         assert callable(create_ticket_service)
 
     def test_auggie_fetcher_importable(self):
-        """AuggieMediatedFetcher is importable from fetchers module."""
         from ingot.integrations.fetchers.auggie_fetcher import AuggieMediatedFetcher
 
         assert AuggieMediatedFetcher is not None
 
 
 class TestPhase15FactoryFlow:
-    """Test the full Phase 1.5 factory flow: resolve → create → wire."""
-
     @pytest.mark.asyncio
     async def test_full_resolution_to_service_creation_flow(self):
-        """Chain: resolve_backend_platform → BackendFactory.create → create_ticket_service.
-
-        Patches fetcher constructors to prevent external API calls.
-        """
         from ingot.config.backend_resolver import resolve_backend_platform
         from ingot.integrations.backends.factory import BackendFactory
 
@@ -140,7 +127,6 @@ class TestPhase15FactoryFlow:
             assert service is not None
 
     def test_full_flow_no_backend_raises_not_configured(self):
-        """No config → BackendNotConfiguredError at resolver level."""
         from ingot.config.backend_resolver import resolve_backend_platform
 
         mock_config = MagicMock()
@@ -151,7 +137,6 @@ class TestPhase15FactoryFlow:
 
     @pytest.mark.asyncio
     async def test_create_ticket_service_from_config_wires_dependencies(self):
-        """Verify all dependencies wired correctly through the DI helper."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -198,23 +183,18 @@ class TestPhase15FactoryFlow:
 
 
 class TestPhase15ErrorPropagation:
-    """Test that Phase 1.5 errors propagate correctly through the stack."""
-
     def test_backend_not_configured_is_spec_error(self):
-        """BackendNotConfiguredError is a IngotError subclass."""
         error = BackendNotConfiguredError("No backend configured")
         assert isinstance(error, IngotError)
         assert isinstance(error, Exception)
 
     def test_backend_not_installed_is_spec_error(self):
-        """BackendNotInstalledError is a IngotError subclass."""
         error = BackendNotInstalledError("CLI not installed")
         assert isinstance(error, IngotError)
         assert isinstance(error, Exception)
 
     @pytest.mark.asyncio
     async def test_error_propagates_unchanged_through_factory_function(self):
-        """Errors from resolver/factory propagate unchanged through create_ticket_service_from_config."""
         from ingot.cli import create_ticket_service_from_config
 
         mock_config = MagicMock()
@@ -232,10 +212,7 @@ class TestPhase15ErrorPropagation:
 
 
 class TestPhase15RegressionChecks:
-    """Verify Phase 1.5 doesn't break Phase 1 or baseline behaviors."""
-
     def test_phase1_imports_still_work(self):
-        """All Phase 1 backend module imports still work."""
         from ingot.config.backend_resolver import resolve_backend_platform
         from ingot.integrations.backends.auggie import AuggieBackend
         from ingot.integrations.backends.base import AIBackend, BaseBackend
@@ -262,29 +239,26 @@ class TestPhase15RegressionChecks:
         )
 
     def test_create_ticket_service_signature_has_backend_param(self):
-        """create_ticket_service has 'backend' parameter (Phase 1.5 addition)."""
         from ingot.integrations.ticket_service import create_ticket_service
 
         sig = inspect.signature(create_ticket_service)
         param_names = list(sig.parameters.keys())
 
-        assert "backend" in param_names, (
-            f"create_ticket_service missing 'backend' parameter. " f"Found: {param_names}"
-        )
+        assert (
+            "backend" in param_names
+        ), f"create_ticket_service missing 'backend' parameter. Found: {param_names}"
 
     def test_auggie_fetcher_signature_has_backend_param(self):
-        """AuggieMediatedFetcher.__init__ has 'backend' parameter (Phase 1.5 addition)."""
         from ingot.integrations.fetchers.auggie_fetcher import AuggieMediatedFetcher
 
         sig = inspect.signature(AuggieMediatedFetcher.__init__)
         param_names = list(sig.parameters.keys())
 
-        assert "backend" in param_names, (
-            f"AuggieMediatedFetcher.__init__ missing 'backend' parameter. " f"Found: {param_names}"
-        )
+        assert (
+            "backend" in param_names
+        ), f"AuggieMediatedFetcher.__init__ missing 'backend' parameter. Found: {param_names}"
 
     def test_baseline_auggie_behavior_compatible(self):
-        """AuggieClient is still importable (baseline compatibility)."""
         from ingot.integrations.auggie import AuggieClient
 
         assert AuggieClient is not None
@@ -301,15 +275,8 @@ integration_tests_enabled = os.environ.get("INGOT_INTEGRATION_TESTS") == "1"
     reason="Integration tests require INGOT_INTEGRATION_TESTS=1",
 )
 class TestPhase15IntegrationWithRealCLI:
-    """Integration tests with real backend (gated behind INGOT_INTEGRATION_TESTS=1)."""
-
     @pytest.mark.asyncio
     async def test_create_ticket_service_from_config_with_real_backend(self):
-        """create_ticket_service_from_config creates a real service when backend is configured.
-
-        This test requires a real AI backend to be installed and configured.
-        It verifies that the full DI wiring produces a working TicketService.
-        """
         from ingot.cli import create_ticket_service_from_config
         from ingot.config.manager import ConfigManager
 

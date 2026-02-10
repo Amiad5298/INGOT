@@ -13,72 +13,57 @@ from ingot.integrations.jira import (
 
 
 class TestParseJiraTicket:
-    """Tests for parse_jira_ticket function."""
-
     def test_parse_url(self):
-        """Extracts ticket ID from URL."""
         result = parse_jira_ticket("https://jira.example.com/browse/PROJECT-123")
 
         assert result.ticket_id == "PROJECT-123"
         assert result.ticket_url == "https://jira.example.com/browse/PROJECT-123"
 
     def test_parse_url_with_path(self):
-        """Extracts ticket ID from URL with additional path."""
         result = parse_jira_ticket("https://jira.example.com/browse/PROJ-456/details")
 
         assert result.ticket_id == "PROJ-456"
 
     def test_parse_ticket_id_uppercase(self):
-        """Parses uppercase ticket ID."""
         result = parse_jira_ticket("PROJECT-123")
 
         assert result.ticket_id == "PROJECT-123"
 
     def test_parse_ticket_id_lowercase(self):
-        """Normalizes lowercase ticket ID to uppercase."""
         result = parse_jira_ticket("project-456")
 
         assert result.ticket_id == "PROJECT-456"
 
     def test_parse_ticket_id_mixed_case(self):
-        """Normalizes mixed case ticket ID."""
         result = parse_jira_ticket("Project-789")
 
         assert result.ticket_id == "PROJECT-789"
 
     def test_parse_numeric_with_default(self):
-        """Parses numeric ID with default project."""
         result = parse_jira_ticket("789", default_project="MYPROJ")
 
         assert result.ticket_id == "MYPROJ-789"
 
     def test_parse_numeric_without_default(self):
-        """Raises error for numeric-only IDs without default project."""
         with pytest.raises(ValueError, match="default project"):
             parse_jira_ticket("789")
 
     def test_parse_invalid_format(self):
-        """Raises error for invalid format."""
         with pytest.raises(ValueError, match="Invalid ticket format"):
             parse_jira_ticket("not-a-ticket!")
 
     def test_parse_invalid_url(self):
-        """Raises error for URL without ticket ID."""
         with pytest.raises(ValueError, match="Could not extract"):
             parse_jira_ticket("https://jira.example.com/browse/")
 
     def test_parse_strips_whitespace(self):
-        """Strips whitespace from input."""
         result = parse_jira_ticket("  PROJECT-123  ")
 
         assert result.ticket_id == "PROJECT-123"
 
 
 class TestCheckJiraIntegration:
-    """Tests for check_jira_integration function."""
-
     def test_uses_cached_result(self):
-        """Uses cached result within 24 hours."""
         import time
 
         mock_config = MagicMock()
@@ -96,7 +81,6 @@ class TestCheckJiraIntegration:
         mock_auggie.run_print_quiet.assert_not_called()
 
     def test_force_bypasses_cache(self):
-        """Force flag bypasses cache."""
         import time
 
         mock_config = MagicMock()
@@ -108,40 +92,44 @@ class TestCheckJiraIntegration:
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = "YES, Jira is available"
 
-        with patch("ingot.integrations.jira.print_info"), patch(
-            "ingot.integrations.jira.print_success"
-        ), patch("ingot.integrations.jira.print_step"):
+        with (
+            patch("ingot.integrations.jira.print_info"),
+            patch("ingot.integrations.jira.print_success"),
+            patch("ingot.integrations.jira.print_step"),
+        ):
             check_jira_integration(mock_config, mock_auggie, force=True)
 
         mock_auggie.run_print_quiet.assert_called_once()
 
     def test_detects_working_integration(self):
-        """Detects working Jira integration."""
         mock_config = MagicMock()
         mock_config.get.return_value = ""
 
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = "YES, Jira is available"
 
-        with patch("ingot.integrations.jira.print_info"), patch(
-            "ingot.integrations.jira.print_success"
-        ), patch("ingot.integrations.jira.print_step"):
+        with (
+            patch("ingot.integrations.jira.print_info"),
+            patch("ingot.integrations.jira.print_success"),
+            patch("ingot.integrations.jira.print_step"),
+        ):
             result = check_jira_integration(mock_config, mock_auggie)
 
         assert result is True
         mock_config.save.assert_any_call("JIRA_INTEGRATION_STATUS", "working")
 
     def test_detects_not_configured(self):
-        """Detects Jira not configured."""
         mock_config = MagicMock()
         mock_config.get.return_value = ""
 
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = "Jira is not configured"
 
-        with patch("ingot.integrations.jira.print_info"), patch(
-            "ingot.integrations.jira.print_warning"
-        ), patch("ingot.integrations.jira.print_step"):
+        with (
+            patch("ingot.integrations.jira.print_info"),
+            patch("ingot.integrations.jira.print_warning"),
+            patch("ingot.integrations.jira.print_step"),
+        ):
             result = check_jira_integration(mock_config, mock_auggie)
 
         assert result is False
@@ -149,10 +137,7 @@ class TestCheckJiraIntegration:
 
 
 class TestFetchTicketInfo:
-    """Tests for fetch_ticket_info function."""
-
     def test_parses_branch_summary(self):
-        """Parses branch summary from response."""
         ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123")
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = """
@@ -167,7 +152,6 @@ DESCRIPTION: Implement user login and registration.
         assert result.title == "Add User Authentication"
 
     def test_sanitizes_branch_summary(self):
-        """Sanitizes branch summary for git."""
         ticket = JiraTicket(ticket_id="TEST-123", ticket_url="TEST-123")
         mock_auggie = MagicMock()
         mock_auggie.run_print_quiet.return_value = """
@@ -191,24 +175,17 @@ class TestNumericIdWithConfiguredDefaultProject:
     """
 
     def test_parse_numeric_id_with_configured_default_project(self):
-        """Numeric ID works when default_project is explicitly passed.
-
-        This is the core regression test: verify that parse_jira_ticket
-        correctly handles numeric IDs when given a default_project.
-        """
         result = parse_jira_ticket("456", default_project="CONFIGURED")
 
         assert result.ticket_id == "CONFIGURED-456"
         assert result.ticket_url == "CONFIGURED-456"
 
     def test_parse_numeric_id_normalizes_project_to_uppercase(self):
-        """Default project is normalized to uppercase."""
         result = parse_jira_ticket("789", default_project="lowercase")
 
         assert result.ticket_id == "LOWERCASE-789"
 
     def test_parse_numeric_id_without_default_raises_helpful_error(self):
-        """Numeric ID without default_project raises a helpful error message."""
         with pytest.raises(ValueError) as exc_info:
             parse_jira_ticket("123")
 
@@ -246,14 +223,6 @@ class TestProviderRegistryConfigWiring:
         ProviderRegistry.reset_instances()
 
     def test_set_config_injects_default_project_to_jira_provider(self):
-        """ProviderRegistry.set_config passes default_jira_project to JiraProvider.
-
-        This is the core wiring test: verify that calling set_config with
-        default_jira_project causes the JiraProvider instance to use that
-        value for numeric ID parsing.
-
-        Tests public behavior: parse_input() and can_handle() for numeric IDs.
-        """
         from ingot.integrations.providers.base import Platform
         from ingot.integrations.providers.registry import ProviderRegistry
 
@@ -271,11 +240,6 @@ class TestProviderRegistryConfigWiring:
         assert ticket_id == "TESTPROJ-456"
 
     def test_numeric_id_can_handle_with_config(self):
-        """JiraProvider.can_handle returns True for numeric IDs when config is set.
-
-        When default_jira_project is configured, JiraProvider should be able
-        to handle numeric-only ticket IDs.
-        """
         from ingot.integrations.providers.base import Platform
         from ingot.integrations.providers.registry import ProviderRegistry
 
@@ -292,13 +256,6 @@ class TestProviderRegistryConfigWiring:
         assert provider.parse_input("123") == "MYPROJ-123"
 
     def test_no_config_numeric_ids_not_handled(self):
-        """Without set_config, JiraProvider cannot handle numeric-only IDs.
-
-        When no config is provided and no env var is set, numeric-only IDs
-        are rejected by can_handle() to prevent ambiguous platform detection.
-
-        Tests public behavior: can_handle() returns False for numeric IDs.
-        """
         import os
 
         from ingot.integrations.providers.base import Platform
@@ -323,11 +280,6 @@ class TestProviderRegistryConfigWiring:
                 os.environ["JIRA_DEFAULT_PROJECT"] = old_env
 
     def test_reset_instances_allows_config_change(self):
-        """reset_instances() allows changing config without re-registering providers.
-
-        After reset_instances(), setting new config should create a new provider
-        instance with the new config values, without needing to re-register.
-        """
         from ingot.integrations.providers.base import Platform
         from ingot.integrations.providers.registry import ProviderRegistry
 

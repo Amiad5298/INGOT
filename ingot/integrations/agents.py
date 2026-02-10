@@ -967,8 +967,7 @@ def ensure_agents_installed(quiet: bool = False) -> bool:
                             f"New version saved to {new_path}"
                         )
                     log_message(
-                        f"Agent {meta['name']} has customizations, "
-                        f"created {new_path} for review"
+                        f"Agent {meta['name']} has customizations, created {new_path} for review"
                     )
             else:
                 # Safe to update - file matches old default

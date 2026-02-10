@@ -29,11 +29,6 @@ def render_to_string(renderable) -> str:
     return console.file.getvalue()
 
 
-# =============================================================================
-# Fixtures
-# =============================================================================
-
-
 @pytest.fixture
 def tui():
     """Create a TaskRunnerUI instance for testing."""
@@ -52,31 +47,20 @@ def records():
     ]
 
 
-# =============================================================================
-# Tests for TUI Parallel Mode
-# =============================================================================
-
-
 class TestTuiParallelMode:
-    """Tests for TaskRunnerUI parallel mode functionality."""
-
     def test_parallel_mode_defaults_to_false(self, tui):
-        """parallel_mode defaults to False."""
         assert tui.parallel_mode is False
 
     def test_set_parallel_mode_enables(self, tui):
-        """set_parallel_mode(True) enables parallel mode."""
         tui.set_parallel_mode(True)
         assert tui.parallel_mode is True
 
     def test_set_parallel_mode_disables(self, tui):
-        """set_parallel_mode(False) disables parallel mode."""
         tui.set_parallel_mode(True)
         tui.set_parallel_mode(False)
         assert tui.parallel_mode is False
 
     def test_running_task_indices_tracked(self, tui):
-        """Running task indices are tracked in parallel mode."""
         tui.set_parallel_mode(True)
         # Simulate adding running tasks
         tui._running_task_indices.add(0)
@@ -87,7 +71,6 @@ class TestTuiParallelMode:
         assert len(tui._running_task_indices) == 2
 
     def test_get_running_count_returns_correct_count(self, tui):
-        """_get_running_count returns correct count in parallel mode."""
         tui.set_parallel_mode(True)
         tui._running_task_indices.add(0)
         tui._running_task_indices.add(1)
@@ -95,30 +78,20 @@ class TestTuiParallelMode:
         assert tui._get_running_count() == 2
 
 
-# =============================================================================
-# Tests for render_task_list with Parallel Mode
-# =============================================================================
-
-
 class TestRenderTaskListParallel:
-    """Tests for render_task_list with parallel mode."""
-
     def test_shows_parallel_indicator_for_running_tasks(self, records):
-        """Shows ⚡ indicator for running tasks in parallel mode."""
         panel = render_task_list(records, parallel_mode=True)
         # The panel should contain the parallel indicator
         panel_str = render_to_string(panel)
         assert "⚡" in panel_str
 
     def test_no_indicator_in_sequential_mode(self, records):
-        """Shows 'Running' text in sequential mode."""
         panel = render_task_list(records, parallel_mode=False)
         panel_str = render_to_string(panel)
         # Should show "Running" text, not parallel indicator
         assert "Running" in panel_str
 
     def test_multiple_running_tasks_shown(self):
-        """Multiple running tasks are displayed correctly."""
         records = [
             TaskRunRecord(task_index=0, task_name="Task 1", status=TaskRunStatus.RUNNING),
             TaskRunRecord(task_index=1, task_name="Task 2", status=TaskRunStatus.RUNNING),
@@ -130,16 +103,8 @@ class TestRenderTaskListParallel:
         assert "parallel" in panel_str
 
 
-# =============================================================================
-# Tests for render_status_bar with Parallel Mode
-# =============================================================================
-
-
 class TestRenderStatusBarParallel:
-    """Tests for render_status_bar with parallel mode."""
-
     def test_shows_parallel_task_count(self):
-        """Shows parallel task count in status bar."""
         text = render_status_bar(
             running=True,
             parallel_mode=True,
@@ -149,7 +114,6 @@ class TestRenderStatusBarParallel:
         assert "3 tasks running" in text_str
 
     def test_singular_task_count(self):
-        """Shows singular form for 1 task."""
         text = render_status_bar(
             running=True,
             parallel_mode=True,
@@ -160,16 +124,8 @@ class TestRenderStatusBarParallel:
         assert "1 tasks running" in text_str
 
 
-# =============================================================================
-# Tests for Thread-Safe Event Queue
-# =============================================================================
-
-
 class TestTuiEventQueue:
-    """Tests for TaskRunnerUI thread-safe event queue."""
-
     def test_tui_post_event_thread_safe(self, tui):
-        """post_event is thread-safe: multiple threads can queue events."""
         num_threads = 10
         events_per_thread = 5
         barrier = threading.Barrier(num_threads)
@@ -198,7 +154,6 @@ class TestTuiEventQueue:
         assert event_count == num_threads * events_per_thread
 
     def test_tui_drain_queue_on_refresh(self, tui):
-        """refresh() drains the event queue before updating display."""
         # Post several events
         tui.post_event(create_task_started_event(0, "Task 1"))
         tui.post_event(create_task_output_event(0, "Task 1", "Output line 1"))
@@ -219,7 +174,6 @@ class TestTuiEventQueue:
         assert record.status == TaskRunStatus.SUCCESS
 
     def test_apply_event_processes_task_started(self, tui):
-        """_apply_event correctly processes TASK_STARTED events."""
         event = create_task_started_event(1, "Task 2")
         tui._apply_event(event)
 
@@ -228,7 +182,6 @@ class TestTuiEventQueue:
         assert record.start_time == event.timestamp
 
     def test_apply_event_processes_task_finished_success(self, tui):
-        """_apply_event correctly processes TASK_FINISHED with success status."""
         # First start the task
         tui._apply_event(create_task_started_event(0, "Task 1"))
 
@@ -241,7 +194,6 @@ class TestTuiEventQueue:
         assert record.end_time == finish_event.timestamp
 
     def test_apply_event_processes_task_finished_failed(self, tui):
-        """_apply_event correctly processes TASK_FINISHED with failed status."""
         tui._apply_event(create_task_started_event(1, "Task 2"))
         finish_event = create_task_finished_event(1, "Task 2", "failed", 1.0, error="Error!")
         tui._apply_event(finish_event)
@@ -251,7 +203,6 @@ class TestTuiEventQueue:
         assert record.error == "Error!"
 
     def test_apply_event_processes_task_finished_skipped(self, tui):
-        """_apply_event correctly processes TASK_FINISHED with skipped status."""
         finish_event = create_task_finished_event(2, "Task 3", "skipped", 0.0)
         tui._apply_event(finish_event)
 
@@ -260,17 +211,8 @@ class TestTuiEventQueue:
         assert record.error is None
 
 
-# =============================================================================
-# Tests for Log Buffer Cleanup on Task Finished
-# =============================================================================
-
-
 class TestLogBufferCleanup:
-    """Tests for log buffer cleanup on task completion."""
-
     def test_log_buffer_closed_on_success(self, tui):
-        """Log buffer is closed when task finishes with success."""
-
         # Create a mock log buffer
         class MockLogBuffer:
             def __init__(self):
@@ -290,8 +232,6 @@ class TestLogBufferCleanup:
         assert record.log_buffer is None
 
     def test_log_buffer_closed_on_failure(self, tui):
-        """Log buffer is closed when task finishes with failure."""
-
         class MockLogBuffer:
             def __init__(self):
                 self.closed = False
@@ -309,8 +249,6 @@ class TestLogBufferCleanup:
         assert record.log_buffer is None
 
     def test_log_buffer_closed_on_skipped(self, tui):
-        """Log buffer is closed when task finishes with skipped status."""
-
         class MockLogBuffer:
             def __init__(self):
                 self.closed = False
@@ -328,8 +266,6 @@ class TestLogBufferCleanup:
         assert record.log_buffer is None
 
     def test_log_buffer_close_exception_ignored(self, tui):
-        """Exceptions during log buffer close are caught and ignored."""
-
         class FailingLogBuffer:
             def close(self):
                 raise RuntimeError("Close failed!")
@@ -344,16 +280,8 @@ class TestLogBufferCleanup:
         assert record.log_buffer is None
 
 
-# =============================================================================
-# Tests for Auto-Switch Selection on Task Finish in Parallel Mode
-# =============================================================================
-
-
 class TestAutoSwitchOnTaskFinish:
-    """Tests for auto-switching to another running task when selected task finishes."""
-
     def test_auto_switch_to_running_task_when_selected_finishes(self, tui):
-        """When selected task finishes in parallel mode, auto-switch to another running task."""
         tui.set_parallel_mode(True)
         tui.follow_mode = True
 
@@ -377,7 +305,6 @@ class TestAutoSwitchOnTaskFinish:
         assert 1 in tui._running_task_indices
 
     def test_no_auto_switch_when_follow_mode_disabled(self, tui):
-        """No auto-switch when follow_mode is disabled."""
         tui.set_parallel_mode(True)
         tui.follow_mode = False  # User disabled follow mode
 
@@ -395,7 +322,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 0
 
     def test_no_auto_switch_when_different_task_selected(self, tui):
-        """No auto-switch when a different task (not the finishing one) is selected."""
         tui.set_parallel_mode(True)
         tui.follow_mode = True
 
@@ -414,7 +340,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 1
 
     def test_no_auto_switch_when_no_other_running_tasks(self, tui):
-        """No auto-switch when no other tasks are running."""
         tui.set_parallel_mode(True)
         tui.follow_mode = True
 
@@ -430,7 +355,6 @@ class TestAutoSwitchOnTaskFinish:
         assert len(tui._running_task_indices) == 0
 
     def test_auto_switch_uses_next_neighbor_logic(self, tui):
-        """Auto-switch uses 'Next Neighbor' logic: picks next running task after finished one."""
         tui.set_parallel_mode(True)
         tui.follow_mode = True
 
@@ -449,7 +373,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 1
 
     def test_auto_switch_next_neighbor_middle_task(self):
-        """Next Neighbor: when middle task finishes, switch to next task, not first."""
         # Need 4 tasks for this test
         tui = TaskRunnerUI(ticket_id="TEST-123")
         tui.initialize_records(["Task 1", "Task 2", "Task 3", "Task 4"])
@@ -472,7 +395,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 2
 
     def test_auto_switch_next_neighbor_wraps_around(self, tui):
-        """Next Neighbor: when last task finishes, wrap around to first running task."""
         tui.set_parallel_mode(True)
         tui.follow_mode = True
 
@@ -491,7 +413,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 0
 
     def test_auto_switch_next_neighbor_with_gaps(self):
-        """Next Neighbor: handles non-contiguous running task indices correctly."""
         # Need 5 tasks for this test
         tui = TaskRunnerUI(ticket_id="TEST-123")
         tui.initialize_records(["Task 1", "Task 2", "Task 3", "Task 4", "Task 5"])
@@ -513,7 +434,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 2
 
     def test_auto_switch_works_with_failed_task(self, tui):
-        """Auto-switch also works when selected task fails."""
         tui.set_parallel_mode(True)
         tui.follow_mode = True
 
@@ -529,7 +449,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 1
 
     def test_auto_switch_works_with_skipped_task(self, tui):
-        """Auto-switch also works when selected task is skipped."""
         tui.set_parallel_mode(True)
         tui.follow_mode = True
 
@@ -545,7 +464,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 1
 
     def test_no_auto_switch_in_sequential_mode(self, tui):
-        """Auto-switch does not happen in sequential mode (parallel_mode=False)."""
         tui.set_parallel_mode(False)  # Sequential mode
         tui.follow_mode = True
 
@@ -560,11 +478,6 @@ class TestAutoSwitchOnTaskFinish:
         assert tui.selected_index == 0
 
 
-# =============================================================================
-# Tests for Spinner Caching
-# =============================================================================
-
-
 class TestSpinnerCaching:
     """Tests for spinner caching to maintain animation state.
 
@@ -575,8 +488,6 @@ class TestSpinnerCaching:
     """
 
     def test_spinner_reuse_for_running_task(self, tui):
-        """Spinner objects are reused for running tasks across renders."""
-
         # Start task via event - this creates the spinner
         tui._apply_event(create_task_started_event(1, "Task 2"))
         assert 1 in tui._spinners
@@ -592,7 +503,6 @@ class TestSpinnerCaching:
         assert first_spinner is second_spinner
 
     def test_spinner_cleanup_when_task_finishes(self, tui):
-        """Spinner is removed from cache when task finishes via event handler."""
         # Start task - creates spinner
         tui._apply_event(create_task_started_event(1, "Task 2"))
         assert 1 in tui._spinners
@@ -602,7 +512,6 @@ class TestSpinnerCaching:
         assert 1 not in tui._spinners
 
     def test_spinner_cleanup_on_failed_task(self, tui):
-        """Spinner is removed when task fails via event handler."""
         # Start task - creates spinner
         tui._apply_event(create_task_started_event(0, "Task 1"))
         assert 0 in tui._spinners
@@ -612,7 +521,6 @@ class TestSpinnerCaching:
         assert 0 not in tui._spinners
 
     def test_spinner_cleanup_on_skipped_task(self, tui):
-        """Spinner is removed when task is skipped via event handler."""
         # Start task - creates spinner
         tui._apply_event(create_task_started_event(0, "Task 1"))
         assert 0 in tui._spinners
@@ -622,7 +530,6 @@ class TestSpinnerCaching:
         assert 0 not in tui._spinners
 
     def test_multiple_spinners_tracked_in_parallel_mode(self, tui):
-        """Multiple running tasks each have their own cached spinner."""
         tui.set_parallel_mode(True)
 
         # Start all three tasks via events
@@ -641,7 +548,6 @@ class TestSpinnerCaching:
         assert tui._spinners[1] is not tui._spinners[2]
 
     def test_spinner_cache_partial_cleanup(self, tui):
-        """Only finished tasks are removed from spinner cache."""
         tui.set_parallel_mode(True)
 
         # Start all three tasks via events
@@ -664,13 +570,6 @@ class TestSpinnerCaching:
         assert tui._spinners[1] is spinner_1
 
     def test_spinner_cache_none_uses_static_fallback(self, records):
-        """When spinners=None, static Text fallback is used (prevents animation freeze).
-
-        This test verifies that when no spinner cache is provided, the render
-        function uses a static Text icon instead of creating a new Spinner.
-        Creating a new Spinner each render would reset the frame counter and
-        freeze the animation.
-        """
         from io import StringIO
 
         from rich.console import Console
@@ -692,7 +591,6 @@ class TestSpinnerCaching:
         )
 
     def test_spinner_cache_empty_uses_static_fallback(self, records):
-        """When spinner cache is empty, static Text fallback is used."""
         from io import StringIO
 
         from rich.console import Console
@@ -710,7 +608,6 @@ class TestSpinnerCaching:
         assert "⟳" in output, f"Expected running icon '⟳' in rendered output. Got:\n{output}"
 
     def test_spinner_cache_hit_uses_cached_spinner(self, records):
-        """When spinner is in cache, the cached Spinner instance is used."""
         from unittest.mock import patch
 
         from rich.spinner import Spinner
@@ -756,7 +653,6 @@ class TestSpinnerCaching:
         assert not isinstance(pending_status_cell, Spinner), "Pending task should not use Spinner"
 
     def test_tui_uses_spinner_cache(self, tui):
-        """TaskRunnerUI maintains spinner cache across refreshes."""
         tui.set_parallel_mode(True)
 
         # Start two tasks via events - this creates the spinners
@@ -789,16 +685,8 @@ class TestSpinnerCaching:
         assert tui._spinners[1] is spinner_1
 
 
-# =============================================================================
-# Tests for Thread Safety Enhancements
-# =============================================================================
-
-
 class TestThreadSafetyEnhancements:
-    """Tests for thread-safe state access methods."""
-
     def test_check_quit_requested_thread_safe(self, tui):
-        """check_quit_requested() provides thread-safe read access."""
         assert tui.check_quit_requested() is False
 
         # Set quit flag
@@ -807,7 +695,6 @@ class TestThreadSafetyEnhancements:
         assert tui.check_quit_requested() is True
 
     def test_clear_quit_request_thread_safe(self, tui):
-        """clear_quit_request() provides thread-safe write access."""
         # Set quit flag
         tui._handle_quit()
         assert tui.check_quit_requested() is True
@@ -817,19 +704,16 @@ class TestThreadSafetyEnhancements:
         assert tui.check_quit_requested() is False
 
     def test_toggle_follow_mode_thread_safe(self, tui):
-        """_toggle_follow_mode uses lock for consistency."""
         initial = tui.follow_mode
         tui._toggle_follow_mode()
         assert tui.follow_mode != initial
 
     def test_toggle_verbose_mode_thread_safe(self, tui):
-        """_toggle_verbose_mode uses lock for consistency."""
         initial = tui.verbose_mode
         tui._toggle_verbose_mode()
         assert tui.verbose_mode != initial
 
     def test_concurrent_quit_requests(self, tui):
-        """Multiple threads can safely request quit."""
         num_threads = 10
         barrier = threading.Barrier(num_threads)
 
@@ -850,16 +734,8 @@ class TestThreadSafetyEnhancements:
         assert tui.check_quit_requested() is True
 
 
-# =============================================================================
-# Tests for Keyboard Module
-# =============================================================================
-
-
 class TestKeyEnum:
-    """Tests for Key enum."""
-
     def test_key_values(self):
-        """Key enum has expected values."""
         assert Key.UP.value == "up"
         assert Key.DOWN.value == "down"
         assert Key.ENTER.value == "enter"
@@ -874,19 +750,14 @@ class TestKeyEnum:
 
 
 class TestCharMappings:
-    """Tests for character mappings."""
-
     def test_enter_mappings(self):
-        """Enter key is mapped correctly."""
         assert _CHAR_MAPPINGS["\r"] == Key.ENTER
         assert _CHAR_MAPPINGS["\n"] == Key.ENTER
 
     def test_escape_mapping(self):
-        """Escape key is mapped correctly."""
         assert _CHAR_MAPPINGS["\x1b"] == Key.ESCAPE
 
     def test_letter_mappings_case_insensitive(self):
-        """Letter keys are mapped case-insensitively."""
         assert _CHAR_MAPPINGS["q"] == Key.Q
         assert _CHAR_MAPPINGS["Q"] == Key.Q
         assert _CHAR_MAPPINGS["f"] == Key.F
@@ -902,30 +773,22 @@ class TestCharMappings:
 
 
 class TestEscapeSequences:
-    """Tests for escape sequence mappings."""
-
     def test_arrow_up_sequences(self):
-        """Arrow up sequences are mapped correctly."""
         assert _ESCAPE_SEQUENCES["[A"] == Key.UP
         assert _ESCAPE_SEQUENCES["OA"] == Key.UP
 
     def test_arrow_down_sequences(self):
-        """Arrow down sequences are mapped correctly."""
         assert _ESCAPE_SEQUENCES["[B"] == Key.DOWN
         assert _ESCAPE_SEQUENCES["OB"] == Key.DOWN
 
 
 class TestKeyboardReader:
-    """Tests for KeyboardReader class."""
-
     def test_init_state(self):
-        """KeyboardReader initializes with correct state."""
         reader = KeyboardReader()
         assert reader._old_settings is None
         assert reader._is_started is False
 
     def test_context_manager_protocol(self):
-        """KeyboardReader supports context manager protocol."""
         reader = KeyboardReader()
         with patch.object(reader, "start") as mock_start:
             with patch.object(reader, "stop") as mock_stop:
@@ -935,33 +798,28 @@ class TestKeyboardReader:
                 mock_stop.assert_called_once()
 
     def test_start_on_non_unix_does_nothing(self):
-        """start() does nothing on non-Unix systems."""
         reader = KeyboardReader()
         with patch("ingot.ui.keyboard._IS_UNIX", False):
             reader.start()
             assert reader._is_started is False
 
     def test_stop_on_non_unix_does_nothing(self):
-        """stop() does nothing on non-Unix systems."""
         reader = KeyboardReader()
         with patch("ingot.ui.keyboard._IS_UNIX", False):
             reader.stop()
             assert reader._is_started is False
 
     def test_read_key_returns_none_when_not_started(self):
-        """read_key() returns None when reader is not started."""
         reader = KeyboardReader()
         assert reader.read_key() is None
 
     def test_read_key_returns_none_on_non_unix(self):
-        """read_key() returns None on non-Unix systems."""
         reader = KeyboardReader()
         reader._is_started = True
         with patch("ingot.ui.keyboard._IS_UNIX", False):
             assert reader.read_key() is None
 
     def test_start_already_started_does_nothing(self):
-        """start() does nothing if already started."""
         reader = KeyboardReader()
         reader._is_started = True
         with patch("ingot.ui.keyboard._IS_UNIX", True):
@@ -969,7 +827,6 @@ class TestKeyboardReader:
             assert reader._is_started is True
 
     def test_stop_clears_state(self):
-        """stop() clears the started state."""
         reader = KeyboardReader()
         reader._is_started = True
         reader._old_settings = None
@@ -981,7 +838,6 @@ class TestKeyboardReader:
     @patch("ingot.ui.keyboard.select")
     @patch("ingot.ui.keyboard.sys")
     def test_read_key_returns_mapped_key(self, mock_sys, mock_select):
-        """read_key() returns mapped key for known characters."""
         reader = KeyboardReader()
         reader._is_started = True
 
@@ -998,7 +854,6 @@ class TestKeyboardReader:
     @patch("ingot.ui.keyboard.select")
     @patch("ingot.ui.keyboard.sys")
     def test_read_key_returns_unknown_for_unmapped(self, mock_sys, mock_select):
-        """read_key() returns UNKNOWN for unmapped characters."""
         reader = KeyboardReader()
         reader._is_started = True
 
@@ -1013,7 +868,6 @@ class TestKeyboardReader:
     @patch("ingot.ui.keyboard.select")
     @patch("ingot.ui.keyboard.sys")
     def test_read_key_returns_none_when_no_input(self, mock_sys, mock_select):
-        """read_key() returns None when no input available."""
         reader = KeyboardReader()
         reader._is_started = True
 
@@ -1028,7 +882,6 @@ class TestKeyboardReader:
     @patch("ingot.ui.keyboard.select")
     @patch("ingot.ui.keyboard.sys")
     def test_read_key_returns_none_on_empty_read(self, mock_sys, mock_select):
-        """read_key() returns None when read returns empty string."""
         reader = KeyboardReader()
         reader._is_started = True
 
@@ -1043,7 +896,6 @@ class TestKeyboardReader:
     @patch("ingot.ui.keyboard.select")
     @patch("ingot.ui.keyboard.sys")
     def test_read_key_handles_escape_sequence(self, mock_sys, mock_select):
-        """read_key() handles escape sequences for arrow keys."""
         reader = KeyboardReader()
         reader._is_started = True
 
@@ -1065,7 +917,6 @@ class TestKeyboardReader:
     @patch("ingot.ui.keyboard.select")
     @patch("ingot.ui.keyboard.sys")
     def test_read_key_returns_escape_when_alone(self, mock_sys, mock_select):
-        """read_key() returns ESCAPE when escape key pressed alone."""
         reader = KeyboardReader()
         reader._is_started = True
 
@@ -1081,7 +932,6 @@ class TestKeyboardReader:
 
     @patch("ingot.ui.keyboard._IS_UNIX", True)
     def test_read_key_handles_os_error(self):
-        """read_key() returns None on OSError."""
         import select as real_select
 
         reader = KeyboardReader()

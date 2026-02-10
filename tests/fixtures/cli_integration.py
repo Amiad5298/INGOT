@@ -25,10 +25,6 @@ from ingot.integrations.providers import (
 from ingot.integrations.providers.exceptions import TicketNotFoundError
 from tests.helpers.async_cm import make_async_context_manager
 
-# =============================================================================
-# Platform-specific raw data fixtures
-# =============================================================================
-
 
 @pytest.fixture
 def mock_jira_raw_data():
@@ -115,11 +111,6 @@ def mock_trello_raw_data():
         "members": [{"fullName": "Test User"}],
         "url": "https://trello.com/c/abc123/test-card",
     }
-
-
-# =============================================================================
-# Pre-built GenericTicket fixtures
-# =============================================================================
 
 
 @pytest.fixture
@@ -215,11 +206,6 @@ def mock_trello_ticket():
         assignee="Test User",
         labels=["Feature"],
     )
-
-
-# =============================================================================
-# Mock factory fixtures
-# =============================================================================
 
 
 @pytest.fixture

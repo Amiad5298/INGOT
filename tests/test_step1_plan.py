@@ -40,37 +40,20 @@ def mock_backend():
     return backend
 
 
-# =============================================================================
-# Tests for _get_log_base_dir()
-# =============================================================================
-
-
 class TestGetLogBaseDir:
-    """Tests for _get_log_base_dir function."""
-
     def test_default_returns_spec_runs(self, monkeypatch):
-        """Default returns Path('.ingot/runs')."""
         monkeypatch.delenv("INGOT_LOG_DIR", raising=False)
         result = _get_log_base_dir()
         assert result == Path(".ingot/runs")
 
     def test_respects_environment_variable(self, monkeypatch):
-        """Respects INGOT_LOG_DIR environment variable."""
         monkeypatch.setenv("INGOT_LOG_DIR", "/custom/log/dir")
         result = _get_log_base_dir()
         assert result == Path("/custom/log/dir")
 
 
-# =============================================================================
-# Tests for _create_plan_log_dir()
-# =============================================================================
-
-
 class TestCreatePlanLogDir:
-    """Tests for _create_plan_log_dir function."""
-
     def test_creates_directory_with_correct_structure(self, tmp_path, monkeypatch):
-        """Creates directory with correct structure ({base}/ticket_id/plan_generation)."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         result = _create_plan_log_dir("TEST-123")
@@ -81,7 +64,6 @@ class TestCreatePlanLogDir:
         assert result.parent.name == "TEST-123"
 
     def test_creates_parent_directories(self, tmp_path, monkeypatch):
-        """Creates parent directories with parents=True."""
         log_dir = tmp_path / "deep" / "nested" / "path"
         monkeypatch.setenv("INGOT_LOG_DIR", str(log_dir))
 
@@ -92,7 +74,6 @@ class TestCreatePlanLogDir:
         assert "plan_generation" in str(result)
 
     def test_returns_correct_path(self, tmp_path, monkeypatch):
-        """Returns correct Path object."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         result = _create_plan_log_dir("PROJ-789")
@@ -101,19 +82,11 @@ class TestCreatePlanLogDir:
         assert result == tmp_path / "PROJ-789" / "plan_generation"
 
 
-# =============================================================================
-# Tests for _generate_plan_with_tui()
-# =============================================================================
-
-
 class TestGeneratePlanWithTui:
-    """Tests for _generate_plan_with_tui function."""
-
     @patch("ingot.ui.tui.TaskRunnerUI")
     def test_returns_true_on_successful_generation(
         self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Returns True on successful generation."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
@@ -132,7 +105,6 @@ class TestGeneratePlanWithTui:
     def test_returns_false_when_user_requests_quit(
         self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Returns False when user requests quit (via ui.check_quit_requested())."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
@@ -151,7 +123,6 @@ class TestGeneratePlanWithTui:
     def test_log_path_is_set_on_ui(
         self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Log path is set on UI."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
@@ -173,7 +144,6 @@ class TestGeneratePlanWithTui:
     def test_auggie_client_uses_subagent(
         self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Backend is called with ingot-planner subagent."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
@@ -195,7 +165,6 @@ class TestGeneratePlanWithTui:
     def test_returns_false_on_auggie_failure(
         self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Returns False on backend failure."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
@@ -214,7 +183,6 @@ class TestGeneratePlanWithTui:
     def test_dont_save_session_flag_is_passed(
         self, mock_tui_class, workflow_state, tmp_path, monkeypatch, mock_backend
     ):
-        """Verifies dont_save_session=True is passed to backend."""
         monkeypatch.setenv("INGOT_LOG_DIR", str(tmp_path))
 
         mock_tui = MagicMock()
@@ -234,37 +202,26 @@ class TestGeneratePlanWithTui:
         assert call_kwargs["dont_save_session"] is True
 
 
-# =============================================================================
-# Tests for _build_minimal_prompt()
-# =============================================================================
-
-
 class TestBuildMinimalPrompt:
-    """Tests for _build_minimal_prompt function."""
-
     def test_prompt_includes_ticket_id(self, workflow_state, tmp_path):
-        """Prompt includes ticket ID."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         result = _build_minimal_prompt(workflow_state, plan_path)
 
         assert "TEST-123" in result
 
     def test_prompt_includes_ticket_title(self, workflow_state, tmp_path):
-        """Prompt includes ticket title."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         result = _build_minimal_prompt(workflow_state, plan_path)
 
         assert "Test Feature" in result
 
     def test_prompt_includes_ticket_description(self, workflow_state, tmp_path):
-        """Prompt includes ticket description."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         result = _build_minimal_prompt(workflow_state, plan_path)
 
         assert "Test description" in result
 
     def test_prompt_handles_empty_title(self, generic_ticket, tmp_path):
-        """Prompt handles empty title gracefully by falling back to branch_summary."""
         generic_ticket.title = None
         state = WorkflowState(ticket=generic_ticket)
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
@@ -276,7 +233,6 @@ class TestBuildMinimalPrompt:
         assert "TEST-123" in result
 
     def test_prompt_handles_empty_description(self, generic_ticket, tmp_path):
-        """Prompt handles empty description gracefully."""
         generic_ticket.description = None
         state = WorkflowState(ticket=generic_ticket)
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
@@ -286,7 +242,6 @@ class TestBuildMinimalPrompt:
         assert "Not available" in result
 
     def test_prompt_includes_user_context_when_provided(self, workflow_state, tmp_path):
-        """Prompt includes user context when provided."""
         workflow_state.user_context = "Additional context from the user about the implementation."
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
@@ -296,7 +251,6 @@ class TestBuildMinimalPrompt:
         assert "Additional Context" in result
 
     def test_prompt_excludes_user_context_section_when_not_provided(self, workflow_state, tmp_path):
-        """Prompt excludes user context section when not provided."""
         workflow_state.user_context = ""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
@@ -305,7 +259,6 @@ class TestBuildMinimalPrompt:
         assert "Additional Context" not in result
 
     def test_prompt_includes_plan_file_path(self, workflow_state, tmp_path):
-        """Prompt includes plan file path."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         result = _build_minimal_prompt(workflow_state, plan_path)
 
@@ -313,16 +266,8 @@ class TestBuildMinimalPrompt:
         assert str(plan_path) in result
 
 
-# =============================================================================
-# Tests for _save_plan_from_output()
-# =============================================================================
-
-
 class TestSavePlanFromOutput:
-    """Tests for _save_plan_from_output function."""
-
     def test_creates_template_with_ticket_id(self, workflow_state, tmp_path):
-        """Creates template with ticket ID."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         plan_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -332,7 +277,6 @@ class TestSavePlanFromOutput:
         assert "TEST-123" in content
 
     def test_writes_to_correct_path(self, workflow_state, tmp_path):
-        """Writes to correct path."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         plan_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -341,7 +285,6 @@ class TestSavePlanFromOutput:
         assert plan_path.exists()
 
     def test_includes_all_template_sections(self, workflow_state, tmp_path):
-        """Includes all template sections."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         plan_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -355,7 +298,6 @@ class TestSavePlanFromOutput:
         assert "## Notes" in content
 
     def test_includes_ticket_title_in_summary(self, workflow_state, tmp_path):
-        """Includes ticket title in summary."""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         plan_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -365,17 +307,9 @@ class TestSavePlanFromOutput:
         assert "Test Feature" in content
 
 
-# =============================================================================
-# Tests for _display_plan_summary()
-# =============================================================================
-
-
 class TestDisplayPlanSummary:
-    """Tests for _display_plan_summary function."""
-
     @patch("ingot.workflow.step1_plan.console")
     def test_reads_file_correctly(self, mock_console, tmp_path):
-        """Reads file correctly."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan\n\nThis is the plan content.")
 
@@ -386,7 +320,6 @@ class TestDisplayPlanSummary:
 
     @patch("ingot.workflow.step1_plan.console")
     def test_limits_preview_to_20_lines(self, mock_console, tmp_path):
-        """Limits preview to 20 lines."""
         plan_path = tmp_path / "plan.md"
         # Create a file with 50 lines
         lines = [f"Line {i}" for i in range(50)]
@@ -400,7 +333,6 @@ class TestDisplayPlanSummary:
 
     @patch("ingot.workflow.step1_plan.console")
     def test_handles_short_files(self, mock_console, tmp_path):
-        """Handles short files without truncation indicator."""
         plan_path = tmp_path / "plan.md"
         plan_path.write_text("# Plan\n\nShort content.")
 
@@ -410,19 +342,11 @@ class TestDisplayPlanSummary:
         assert mock_console.print.called
 
 
-# =============================================================================
-# Tests for _run_clarification()
-# =============================================================================
-
-
 class TestRunClarification:
-    """Tests for _run_clarification function."""
-
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     def test_returns_true_when_user_declines_clarification(
         self, mock_confirm, workflow_state, tmp_path
     ):
-        """Returns True when user declines clarification prompt."""
         mock_confirm.return_value = False  # User declines
 
         plan_path = tmp_path / "plan.md"
@@ -435,7 +359,6 @@ class TestRunClarification:
 
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     def test_runs_auggie_with_clarification_prompt(self, mock_confirm, workflow_state, tmp_path):
-        """Runs backend with correct clarification prompt."""
         mock_confirm.return_value = True  # User accepts
         mock_auggie = MagicMock()
         mock_auggie.run_streaming.return_value = (True, "output")
@@ -454,7 +377,6 @@ class TestRunClarification:
     def test_always_returns_true_even_on_auggie_failure(
         self, mock_confirm, workflow_state, tmp_path
     ):
-        """Always returns True (even on backend failure)."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
         mock_auggie.run_streaming.return_value = (False, "Error")
@@ -468,7 +390,6 @@ class TestRunClarification:
 
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     def test_uses_planner_subagent(self, mock_confirm, workflow_state, tmp_path):
-        """Uses ingot-planner subagent for clarification."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
         mock_auggie.run_streaming.return_value = (True, "output")
@@ -485,14 +406,7 @@ class TestRunClarification:
         assert call_kwargs["subagent"] == workflow_state.subagent_names["planner"]
 
 
-# =============================================================================
-# Tests for step_1_create_plan() - TUI mode
-# =============================================================================
-
-
 class TestStep1CreatePlanTuiMode:
-    """Tests for step_1_create_plan in TUI mode."""
-
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     @patch("ingot.workflow.step1_plan._display_plan_summary")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
@@ -507,7 +421,6 @@ class TestStep1CreatePlanTuiMode:
         tmp_path,
         monkeypatch,
     ):
-        """Creates specs directory if not exists."""
         monkeypatch.chdir(tmp_path)
         mock_should_tui.return_value = True
         mock_generate.return_value = True
@@ -535,7 +448,6 @@ class TestStep1CreatePlanTuiMode:
     def test_calls_generate_plan_with_tui(
         self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
-        """Calls _generate_plan_with_tui for plan generation."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
 
@@ -558,7 +470,6 @@ class TestStep1CreatePlanTuiMode:
     def test_returns_false_when_plan_generation_fails(
         self, mock_generate, workflow_state, tmp_path, monkeypatch
     ):
-        """Returns False when plan generation fails."""
         monkeypatch.chdir(tmp_path)
         mock_generate.return_value = False  # Generation fails
 
@@ -567,21 +478,13 @@ class TestStep1CreatePlanTuiMode:
         assert result is False
 
 
-# =============================================================================
-# Tests for step_1_create_plan() - Plan file handling
-# =============================================================================
-
-
 class TestStep1CreatePlanFileHandling:
-    """Tests for step_1_create_plan plan file handling."""
-
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     @patch("ingot.workflow.step1_plan._display_plan_summary")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_saves_plan_file_on_success(
         self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
-        """Saves plan file on success."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
 
@@ -615,7 +518,6 @@ class TestStep1CreatePlanFileHandling:
         tmp_path,
         monkeypatch,
     ):
-        """Calls _save_plan_from_output when plan file not created."""
         monkeypatch.chdir(tmp_path)
         mock_generate.return_value = True  # Success but no file
         mock_confirm.return_value = True
@@ -641,7 +543,6 @@ class TestStep1CreatePlanFileHandling:
     def test_returns_false_when_save_fails_to_create_file(
         self, mock_generate, mock_save_plan, mock_print_error, workflow_state, tmp_path, monkeypatch
     ):
-        """Returns False when _save_plan_from_output fails to create the file."""
         monkeypatch.chdir(tmp_path)
         mock_generate.return_value = True  # Generation succeeds but no file
 
@@ -665,14 +566,7 @@ class TestStep1CreatePlanFileHandling:
         assert "Plan file was not created" in mock_print_error.call_args[0][0]
 
 
-# =============================================================================
-# Tests for step_1_create_plan() - Clarification logic
-# =============================================================================
-
-
 class TestStep1CreatePlanClarification:
-    """Tests for step_1_create_plan clarification logic."""
-
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     @patch("ingot.workflow.step1_plan._display_plan_summary")
     @patch("ingot.workflow.step1_plan._run_clarification")
@@ -687,7 +581,6 @@ class TestStep1CreatePlanClarification:
         tmp_path,
         monkeypatch,
     ):
-        """Calls _run_clarification when skip_clarification=False."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
         mock_clarify.return_value = True
@@ -721,7 +614,6 @@ class TestStep1CreatePlanClarification:
         tmp_path,
         monkeypatch,
     ):
-        """Skips clarification when skip_clarification=True."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
 
@@ -754,7 +646,6 @@ class TestStep1CreatePlanClarification:
         tmp_path,
         monkeypatch,
     ):
-        """Returns False immediately when _run_clarification returns False."""
         monkeypatch.chdir(tmp_path)
         mock_clarify.return_value = False  # Clarification fails/aborts
 
@@ -779,21 +670,13 @@ class TestStep1CreatePlanClarification:
         mock_confirm.assert_not_called()
 
 
-# =============================================================================
-# Tests for step_1_create_plan() - Confirmation flow
-# =============================================================================
-
-
 class TestStep1CreatePlanConfirmation:
-    """Tests for step_1_create_plan confirmation flow."""
-
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     @patch("ingot.workflow.step1_plan._display_plan_summary")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_returns_true_when_plan_confirmed(
         self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
-        """Returns True when plan confirmed."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True  # User confirms
 
@@ -818,7 +701,6 @@ class TestStep1CreatePlanConfirmation:
     def test_returns_false_when_plan_rejected(
         self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
-        """Returns False when plan rejected."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = False  # User rejects
 
@@ -843,7 +725,6 @@ class TestStep1CreatePlanConfirmation:
     def test_updates_current_step_to_2_on_success(
         self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
-        """Updates state.current_step to 2 on success."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
 
@@ -870,7 +751,6 @@ class TestStep1CreatePlanConfirmation:
     def test_does_not_update_current_step_on_rejection(
         self, mock_generate, mock_display, mock_confirm, workflow_state, tmp_path, monkeypatch
     ):
-        """Does not update state.current_step when plan is rejected."""
         monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = False  # Rejected
 
@@ -892,19 +772,11 @@ class TestStep1CreatePlanConfirmation:
         assert workflow_state.current_step == 1  # Unchanged
 
 
-# =============================================================================
-# Tests for _run_clarification() with conflict detection
-# =============================================================================
-
-
 class TestRunClarificationWithConflict:
-    """Tests for _run_clarification conflict-aware behavior."""
-
     @patch("ingot.workflow.step1_plan.prompt_confirm")
     def test_includes_conflict_summary_in_prompt_when_conflict_detected(
         self, mock_confirm, workflow_state, tmp_path
     ):
-        """Prompt includes conflict summary when state.conflict_detected is True."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
         mock_auggie.run_streaming.return_value = (True, "output")
@@ -930,7 +802,6 @@ class TestRunClarificationWithConflict:
     def test_no_conflict_context_when_conflict_not_detected(
         self, mock_confirm, workflow_state, tmp_path
     ):
-        """Prompt does not include conflict context when state.conflict_detected is False."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
         mock_auggie.run_streaming.return_value = (True, "output")
@@ -955,7 +826,6 @@ class TestRunClarificationWithConflict:
     def test_no_conflict_context_when_detected_but_no_summary(
         self, mock_confirm, workflow_state, tmp_path
     ):
-        """Prompt does not include conflict context when conflict_detected but summary is empty."""
         mock_confirm.return_value = True
         mock_auggie = MagicMock()
         mock_auggie.run_streaming.return_value = (True, "output")

@@ -34,25 +34,8 @@ from tests.helpers.workflow import get_ticket_from_workflow_call
 runner = CliRunner()
 
 
-# =============================================================================
-# LAYER A: CLI Contract Tests (Mock at create_ticket_service_from_config factory)
-# =============================================================================
-
-
 class TestPlatformFlagValidation:
-    """Test --platform flag parsing and validation (Layer A: contract tests)."""
-
     def test_invalid_platform_shows_error(self):
-        """Invalid --platform value produces clear error message.
-
-        Note: This test doesn't need any mocks - validation fails before
-        TicketService is called.
-
-        Assertions are kept resilient to Click/Typer wording changes:
-        - Exit code 2 (standard Typer/Click usage error, not ExitCode.AUGGIE_NOT_INSTALLED)
-        - Output mentions "invalid" (case-insensitive)
-        - Output mentions at least some valid platforms
-        """
         # Typer/Click CLI usage error is conventionally exit code 2
         # Note: This is NOT the same as ExitCode.AUGGIE_NOT_INSTALLED (which is also 2)
         # We use a local constant to document this distinction
@@ -101,7 +84,6 @@ class TestPlatformFlagValidation:
         mock_ticket_service_factory,
         mock_jira_ticket,
     ):
-        """All 6 platform values are accepted by --platform flag."""
         mock_config = MagicMock()
         mock_config_class.return_value = mock_config
 
@@ -128,7 +110,6 @@ class TestPlatformFlagValidation:
         mock_ticket_service_factory,
         mock_jira_ticket,
     ):
-        """--platform flag is case-insensitive."""
         mock_config = MagicMock()
         mock_config_class.return_value = mock_config
 
@@ -156,7 +137,6 @@ class TestPlatformFlagValidation:
         mock_ticket_service_factory,
         mock_jira_ticket,
     ):
-        """-p shorthand works for all platform values."""
         mock_config = MagicMock()
         mock_config_class.return_value = mock_config
 
@@ -170,12 +150,9 @@ class TestPlatformFlagValidation:
 
 
 class TestDisambiguationFlow:
-    """Test disambiguation flow for ambiguous ticket IDs (Layer A)."""
-
     @patch("ingot.ui.prompts.prompt_select")
     @patch("ingot.cli.print_info")
     def test_disambiguation_prompts_user(self, mock_print, mock_prompt):
-        """Disambiguation prompts user to choose platform for ambiguous IDs."""
         from ingot.cli import _disambiguate_platform
 
         mock_config = MagicMock()
@@ -190,7 +167,6 @@ class TestDisambiguationFlow:
     @patch("ingot.ui.prompts.prompt_select")
     @patch("ingot.cli.print_info")
     def test_default_platform_skips_prompt(self, mock_print, mock_prompt):
-        """Default platform config skips user prompt for ambiguous IDs."""
         from ingot.cli import _disambiguate_platform
 
         mock_config = MagicMock()
@@ -214,7 +190,6 @@ class TestDisambiguationFlow:
         mock_ticket_service_factory,
         mock_jira_ticket,
     ):
-        """Ambiguous ticket ID triggers disambiguation when no default configured."""
         mock_config = MagicMock()
         mock_config.settings.get_default_platform.return_value = None
         mock_config_class.return_value = mock_config
@@ -242,7 +217,6 @@ class TestDisambiguationFlow:
         mock_ticket_service_factory,
         mock_jira_ticket,
     ):
-        """--platform flag bypasses disambiguation entirely."""
         mock_config = MagicMock()
         mock_config.settings.get_default_platform.return_value = None
         mock_config_class.return_value = mock_config
@@ -257,7 +231,6 @@ class TestDisambiguationFlow:
         mock_prompt.assert_not_called()
 
     def test_github_format_no_disambiguation(self):
-        """GitHub owner/repo#123 format is unambiguous - no disambiguation needed."""
         from ingot.cli import _is_ambiguous_ticket_id
 
         # GitHub format should not be considered ambiguous
@@ -267,7 +240,6 @@ class TestDisambiguationFlow:
     @patch("ingot.ui.prompts.prompt_select")
     @patch("ingot.cli.print_info")
     def test_config_default_platform_used(self, mock_print, mock_prompt):
-        """Configured default_platform is used for ambiguous IDs without prompting."""
         from ingot.cli import _disambiguate_platform
 
         mock_config = MagicMock()
@@ -277,15 +249,6 @@ class TestDisambiguationFlow:
 
         assert result == Platform.AZURE_DEVOPS
         mock_prompt.assert_not_called()
-
-
-# =============================================================================
-# LAYER B: CLI→Service Integration Tests (Mock at fetcher class boundaries)
-#
-# These tests exercise the REAL TicketService, ProviderRegistry, and Providers.
-# Only the AuggieMediatedFetcher and DirectAPIFetcher constructors are mocked
-# to return mock instances with stubbed .fetch() methods.
-# =============================================================================
 
 
 class TestCLIServiceIntegration:
@@ -352,18 +315,6 @@ class TestCLIServiceIntegration:
         mock_backend_resolution,
         request,
     ):
-        """Layer B: All 6 platforms work through CLI→TicketService→Provider chain.
-
-        Mocking boundaries:
-        - Fetcher constructors: AuggieMediatedFetcher and DirectAPIFetcher (SEPARATE instances)
-        - Backend resolution: resolve_backend_platform and BackendFactory.create
-        - Workflow runner: run_ingot_workflow
-        - ConfigManager, show_banner, _check_prerequisites (CLI infrastructure)
-
-        What runs real:
-        - CLI entry point, argument parsing
-        - TicketService, ProviderRegistry, Provider normalization
-        """
         test_data = self.PLATFORM_TEST_DATA[platform]
         raw_data = request.getfixturevalue(test_data["raw_fixture"])
 
@@ -386,12 +337,15 @@ class TestCLIServiceIntegration:
         mock_fallback_fetcher.close = AsyncMock()
 
         # Mock fetcher class constructors with DISTINCT instances
-        with patch(
-            "ingot.integrations.ticket_service.AuggieMediatedFetcher",
-            return_value=mock_primary_fetcher,
-        ), patch(
-            "ingot.integrations.ticket_service.DirectAPIFetcher",
-            return_value=mock_fallback_fetcher,
+        with (
+            patch(
+                "ingot.integrations.ticket_service.AuggieMediatedFetcher",
+                return_value=mock_primary_fetcher,
+            ),
+            patch(
+                "ingot.integrations.ticket_service.DirectAPIFetcher",
+                return_value=mock_fallback_fetcher,
+            ),
         ):
             # Use isolated_filesystem to prevent filesystem I/O flakiness
             with runner.isolated_filesystem():
@@ -453,14 +407,6 @@ class TestFallbackBehaviorViaCLI:
         mock_config_for_cli,
         mock_backend_resolution,
     ):
-        """Primary fetcher failure triggers fallback - both fetchers called.
-
-        Mocking boundaries:
-        - Primary fetcher: raises AgentIntegrationError
-        - Fallback fetcher: returns valid raw data
-        - Backend resolution: resolve_backend_platform and BackendFactory.create
-        - Workflow runner: mocked to verify ticket passed correctly
-        """
         from ingot.integrations.fetchers.exceptions import AgentIntegrationError
 
         mock_config_class.return_value = mock_config_for_cli
@@ -495,12 +441,15 @@ class TestFallbackBehaviorViaCLI:
         mock_fallback.fetch = AsyncMock(side_effect=fallback_fetch_side_effect)
 
         # Mock fetcher constructors to return SEPARATE mock instances
-        with patch(
-            "ingot.integrations.ticket_service.AuggieMediatedFetcher",
-            return_value=mock_primary,
-        ), patch(
-            "ingot.integrations.ticket_service.DirectAPIFetcher",
-            return_value=mock_fallback,
+        with (
+            patch(
+                "ingot.integrations.ticket_service.AuggieMediatedFetcher",
+                return_value=mock_primary,
+            ),
+            patch(
+                "ingot.integrations.ticket_service.DirectAPIFetcher",
+                return_value=mock_fallback,
+            ),
         ):
             with runner.isolated_filesystem():
                 result = runner.invoke(app, ["https://company.atlassian.net/browse/PROJ-123"])
@@ -555,13 +504,6 @@ class TestFallbackBehaviorViaCLI:
         mock_config_for_cli,
         mock_backend_resolution,
     ):
-        """When primary succeeds, fallback should NOT be called.
-
-        Mocking boundaries:
-        - Primary fetcher: returns valid raw data (success case)
-        - Fallback fetcher: should NOT be invoked
-        - Backend resolution: resolve_backend_platform and BackendFactory.create
-        """
         mock_config_class.return_value = mock_config_for_cli
         mock_resolve_backend.return_value = mock_backend_resolution["platform"]
         mock_backend_create.return_value = mock_backend_resolution["backend_instance"]
@@ -580,12 +522,15 @@ class TestFallbackBehaviorViaCLI:
         mock_fallback.fetch = AsyncMock(return_value=mock_jira_raw_data)
         mock_fallback.close = AsyncMock()
 
-        with patch(
-            "ingot.integrations.ticket_service.AuggieMediatedFetcher",
-            return_value=mock_primary,
-        ), patch(
-            "ingot.integrations.ticket_service.DirectAPIFetcher",
-            return_value=mock_fallback,
+        with (
+            patch(
+                "ingot.integrations.ticket_service.AuggieMediatedFetcher",
+                return_value=mock_primary,
+            ),
+            patch(
+                "ingot.integrations.ticket_service.DirectAPIFetcher",
+                return_value=mock_fallback,
+            ),
         ):
             with runner.isolated_filesystem():
                 result = runner.invoke(app, ["https://company.atlassian.net/browse/PROJ-123"])
@@ -619,10 +564,6 @@ class TestCLIErrorContract:
         mock_prereq,
         mock_banner,
     ):
-        """TicketNotFoundError surfaces with ticket ID in error message.
-
-        Mocking: create_ticket_service_from_config raises TicketNotFoundError
-        """
         from ingot.integrations.providers.exceptions import TicketNotFoundError
 
         mock_config = MagicMock()
@@ -664,10 +605,6 @@ class TestCLIErrorContract:
         mock_prereq,
         mock_banner,
     ):
-        """AuthenticationError surfaces with auth-related message.
-
-        Mocking: create_ticket_service_from_config raises AuthenticationError
-        """
         from ingot.integrations.providers.exceptions import AuthenticationError
 
         mock_config = MagicMock()
@@ -706,10 +643,6 @@ class TestCLIErrorContract:
         mock_prereq,
         mock_banner,
     ):
-        """Unconfigured platform error shows platform name and configuration hint.
-
-        Mocking: create_ticket_service_from_config raises PlatformNotSupportedError
-        """
         from ingot.integrations.fetchers.exceptions import (
             PlatformNotSupportedError as FetcherPlatformNotSupportedError,
         )
@@ -756,11 +689,6 @@ class TestCLIErrorContract:
         mock_prereq,
         mock_banner,
     ):
-        """BackendNotConfiguredError surfaces with backend/init message.
-
-        Mocking: create_ticket_service_from_config raises BackendNotConfiguredError
-        directly (error fires from factory function before TicketService is created).
-        """
         from ingot.integrations.backends.errors import BackendNotConfiguredError
 
         mock_config = MagicMock()
@@ -793,11 +721,6 @@ class TestCLIErrorContract:
         mock_prereq,
         mock_banner,
     ):
-        """BackendNotInstalledError surfaces with installation guidance.
-
-        Mocking: create_ticket_service_from_config raises BackendNotInstalledError
-        directly (error fires from factory function before TicketService is created).
-        """
         from ingot.integrations.backends.errors import BackendNotInstalledError
 
         mock_config = MagicMock()

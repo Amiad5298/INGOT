@@ -169,15 +169,7 @@ class MockJiraProviderWithConfig(IssueTrackerProvider):
 
 
 class TestProviderRegistryRegister:
-    """Tests for @ProviderRegistry.register decorator."""
-
     def test_register_decorator_adds_to_registry(self):
-        """Decorator adds provider class to registry.
-
-        Verified via public API: platform appears in list_platforms()
-        and get_provider() returns instance of registered class.
-        """
-
         @ProviderRegistry.register
         class TestProvider(MockJiraProvider):
             PLATFORM = Platform.JIRA
@@ -188,7 +180,6 @@ class TestProviderRegistryRegister:
         assert isinstance(provider, TestProvider)
 
     def test_register_without_platform_raises_typeerror(self):
-        """Missing PLATFORM attribute raises TypeError."""
         with pytest.raises(TypeError) as exc_info:
 
             @ProviderRegistry.register
@@ -199,7 +190,6 @@ class TestProviderRegistryRegister:
         assert "BadProvider" in str(exc_info.value)
 
     def test_register_with_invalid_platform_raises_typeerror(self):
-        """Non-Platform PLATFORM attribute raises TypeError."""
         with pytest.raises(TypeError) as exc_info:
 
             @ProviderRegistry.register
@@ -209,8 +199,6 @@ class TestProviderRegistryRegister:
         assert "Platform enum value" in str(exc_info.value)
 
     def test_register_returns_class_unchanged(self):
-        """Decorator returns the original class."""
-
         @ProviderRegistry.register
         class TestProvider(MockJiraProvider):
             PLATFORM = Platform.JIRA
@@ -220,11 +208,6 @@ class TestProviderRegistryRegister:
         assert instance.platform == Platform.JIRA
 
     def test_register_multiple_providers(self):
-        """Can register multiple providers for different platforms.
-
-        Verified via public API: both platforms in list_platforms().
-        """
-
         @ProviderRegistry.register
         class JiraProvider(MockJiraProvider):
             PLATFORM = Platform.JIRA
@@ -239,7 +222,6 @@ class TestProviderRegistryRegister:
         assert Platform.GITHUB in platforms
 
     def test_register_non_subclass_raises_typeerror(self):
-        """Non-IssueTrackerProvider subclass raises TypeError."""
         with pytest.raises(TypeError) as exc_info:
 
             @ProviderRegistry.register
@@ -249,10 +231,6 @@ class TestProviderRegistryRegister:
         assert "subclass of IssueTrackerProvider" in str(exc_info.value)
 
     def test_register_duplicate_same_class_is_noop(self):
-        """Re-registering the same class is a no-op.
-
-        Verified via public API: only one platform registered, same instance.
-        """
         ProviderRegistry.register(MockJiraProvider)
         provider1 = ProviderRegistry.get_provider(Platform.JIRA)
 
@@ -264,10 +242,6 @@ class TestProviderRegistryRegister:
         assert len(ProviderRegistry.list_platforms()) == 1
 
     def test_register_duplicate_different_class_replaces(self, caplog):
-        """Registering different class for same platform replaces it with warning.
-
-        Verified via public API: get_provider returns instance of new class.
-        """
         ProviderRegistry.register(MockJiraProvider)
         provider1 = ProviderRegistry.get_provider(Platform.JIRA)
         assert isinstance(provider1, MockJiraProvider)
@@ -285,10 +259,6 @@ class TestProviderRegistryRegister:
         assert "Replacing existing provider" in caplog.text
 
     def test_register_duplicate_clears_existing_instance(self):
-        """Registering new provider clears existing cached instance.
-
-        Verified via public API: new registration creates new instance.
-        """
         ProviderRegistry.register(MockJiraProvider)
         instance1 = ProviderRegistry.get_provider(Platform.JIRA)
 
@@ -302,10 +272,6 @@ class TestProviderRegistryRegister:
         assert instance2 is not instance1
 
     def test_register_does_not_instantiate_provider(self):
-        """Registration should not call provider's __init__.
-
-        Verified via tracking flag: __init__ only called on get_provider().
-        """
         init_called = False
 
         class TrackedProvider(MockJiraProvider):
@@ -327,10 +293,7 @@ class TestProviderRegistryRegister:
 
 
 class TestProviderRegistryGetProvider:
-    """Tests for ProviderRegistry.get_provider()."""
-
     def test_get_provider_returns_singleton(self):
-        """Same instance returned for repeated calls."""
         ProviderRegistry.register(MockJiraProvider)
 
         provider1 = ProviderRegistry.get_provider(Platform.JIRA)
@@ -339,10 +302,6 @@ class TestProviderRegistryGetProvider:
         assert provider1 is provider2
 
     def test_get_provider_creates_instance_lazily(self):
-        """Provider instance not created until first get.
-
-        Verified via tracking flag: __init__ only called after get_provider().
-        """
         init_called = False
 
         class TrackedProvider(MockJiraProvider):
@@ -365,14 +324,12 @@ class TestProviderRegistryGetProvider:
         assert isinstance(provider, TrackedProvider)
 
     def test_get_provider_unregistered_raises_error(self):
-        """Unregistered platform raises PlatformNotSupportedError."""
         with pytest.raises(PlatformNotSupportedError) as exc_info:
             ProviderRegistry.get_provider(Platform.JIRA)
 
         assert "JIRA" in str(exc_info.value)
 
     def test_get_provider_error_includes_registered_platforms(self):
-        """Error message includes list of registered platforms."""
         ProviderRegistry.register(MockGitHubProvider)
 
         with pytest.raises(PlatformNotSupportedError) as exc_info:
@@ -382,8 +339,6 @@ class TestProviderRegistryGetProvider:
         assert "GITHUB" in error.supported_platforms
 
     def test_get_provider_handles_init_exception(self):
-        """Exception during provider __init__ propagates correctly."""
-
         class FailingProvider(MockJiraProvider):
             PLATFORM = Platform.JIRA
 
@@ -401,10 +356,7 @@ class TestProviderRegistryGetProvider:
 
 
 class TestProviderRegistryGetProviderForInput:
-    """Tests for ProviderRegistry.get_provider_for_input()."""
-
     def test_get_provider_for_input_jira_url(self):
-        """Detects Jira from URL and returns provider."""
         ProviderRegistry.register(MockJiraProvider)
 
         provider = ProviderRegistry.get_provider_for_input(
@@ -414,7 +366,6 @@ class TestProviderRegistryGetProviderForInput:
         assert isinstance(provider, MockJiraProvider)
 
     def test_get_provider_for_input_jira_id(self):
-        """Detects Jira from ticket ID and returns provider."""
         ProviderRegistry.register(MockJiraProvider)
 
         provider = ProviderRegistry.get_provider_for_input("PROJ-123")
@@ -422,7 +373,6 @@ class TestProviderRegistryGetProviderForInput:
         assert isinstance(provider, MockJiraProvider)
 
     def test_get_provider_for_input_github_url(self):
-        """Detects GitHub from URL and returns provider."""
         ProviderRegistry.register(MockGitHubProvider)
 
         provider = ProviderRegistry.get_provider_for_input(
@@ -432,12 +382,10 @@ class TestProviderRegistryGetProviderForInput:
         assert isinstance(provider, MockGitHubProvider)
 
     def test_get_provider_for_input_unknown_raises_error(self):
-        """Unknown input raises PlatformNotSupportedError."""
         with pytest.raises(PlatformNotSupportedError):
             ProviderRegistry.get_provider_for_input("unknown-input-format")
 
     def test_get_provider_for_input_detected_but_not_registered(self):
-        """Detected platform without registered provider raises error."""
         # Don't register any provider
         # Jira ID format will be detected but no provider registered
         with pytest.raises(PlatformNotSupportedError) as exc_info:
@@ -448,11 +396,6 @@ class TestProviderRegistryGetProviderForInput:
     def test_get_provider_for_input_wraps_generic_exception_as_platform_not_supported(
         self, monkeypatch
     ):
-        """Generic exceptions from PlatformDetector.detect are wrapped as PlatformNotSupportedError.
-
-        Regression test: Ensures that when PlatformDetector.detect raises a non-PlatformNotSupportedError,
-        it is normalized to PlatformNotSupportedError without causing TypeError during construction.
-        """
         # Register a provider so we have a non-empty supported_platforms list
         ProviderRegistry.register(MockJiraProvider)
 
@@ -481,10 +424,7 @@ class TestProviderRegistryGetProviderForInput:
 
 
 class TestProviderRegistryUtilityMethods:
-    """Tests for utility methods."""
-
     def test_list_platforms_returns_registered(self):
-        """list_platforms() returns all registered platforms."""
         ProviderRegistry.register(MockJiraProvider)
         ProviderRegistry.register(MockGitHubProvider)
 
@@ -495,12 +435,10 @@ class TestProviderRegistryUtilityMethods:
         assert len(platforms) == 2
 
     def test_list_platforms_empty_initially(self):
-        """list_platforms() returns empty list after clear()."""
         platforms = ProviderRegistry.list_platforms()
         assert platforms == []
 
     def test_list_platforms_returns_sorted_deterministically(self):
-        """list_platforms() returns sorted list for deterministic output."""
         # Register in non-alphabetical order
         ProviderRegistry.register(MockJiraProvider)
         ProviderRegistry.register(MockGitHubProvider)
@@ -513,11 +451,6 @@ class TestProviderRegistryUtilityMethods:
         assert platform_names == sorted(platform_names)
 
     def test_clear_resets_providers_and_instances(self):
-        """clear() removes all providers and instances.
-
-        Verified via public API: after clear, list_platforms() is empty
-        and get_provider() raises PlatformNotSupportedError.
-        """
         ProviderRegistry.register(MockJiraProvider)
         provider1 = ProviderRegistry.get_provider(Platform.JIRA)
         assert isinstance(provider1, MockJiraProvider)
@@ -534,7 +467,6 @@ class TestProviderRegistryUtilityMethods:
             ProviderRegistry.get_provider(Platform.JIRA)
 
     def test_clear_resets_user_interaction_to_cli(self):
-        """clear() resets user interaction to CLIUserInteraction."""
         mock_ui = MagicMock(spec=UserInteractionInterface)
         ProviderRegistry.set_user_interaction(mock_ui)
 
@@ -544,7 +476,6 @@ class TestProviderRegistryUtilityMethods:
         assert isinstance(ui, CLIUserInteraction)
 
     def test_set_user_interaction(self):
-        """set_user_interaction() sets the UI implementation."""
         mock_ui = MagicMock(spec=UserInteractionInterface)
 
         ProviderRegistry.set_user_interaction(mock_ui)
@@ -552,7 +483,6 @@ class TestProviderRegistryUtilityMethods:
         assert ProviderRegistry.get_user_interaction() is mock_ui
 
     def test_get_user_interaction_returns_current(self):
-        """get_user_interaction() returns current implementation."""
         mock_ui = MagicMock(spec=UserInteractionInterface)
         ProviderRegistry.set_user_interaction(mock_ui)
 
@@ -561,13 +491,11 @@ class TestProviderRegistryUtilityMethods:
         assert result is mock_ui
 
     def test_default_user_interaction_is_cli(self):
-        """Default user interaction is CLIUserInteraction."""
         # After clear(), should reset to CLI
         ui = ProviderRegistry.get_user_interaction()
         assert isinstance(ui, CLIUserInteraction)
 
     def test_set_non_interactive_user_interaction(self):
-        """Can set NonInteractiveUserInteraction for testing."""
         non_interactive = NonInteractiveUserInteraction(fail_on_interaction=True)
 
         ProviderRegistry.set_user_interaction(non_interactive)
@@ -577,10 +505,7 @@ class TestProviderRegistryUtilityMethods:
 
 
 class TestProviderRegistryThreadSafety:
-    """Tests for thread-safe singleton instantiation."""
-
     def test_concurrent_get_provider_returns_same_instance(self):
-        """Concurrent calls to get_provider() return same instance."""
         ProviderRegistry.register(MockJiraProvider)
 
         instances = []
@@ -609,7 +534,6 @@ class TestProviderRegistryThreadSafety:
             assert instance is first_instance
 
     def test_concurrent_registration_and_lookup(self):
-        """Concurrent registration and lookup works correctly."""
         results = {"registered": False, "found": []}
         errors = []
 
@@ -656,10 +580,7 @@ class TestProviderRegistryThreadSafety:
 
 
 class TestProviderRegistryDependencyInjection:
-    """Tests for dependency injection of UserInteractionInterface."""
-
     def test_di_injected_into_provider_with_user_interaction_param(self):
-        """UserInteractionInterface is injected into providers that accept it."""
         mock_ui = MagicMock(spec=UserInteractionInterface)
         ProviderRegistry.set_user_interaction(mock_ui)
         ProviderRegistry.register(MockLinearProviderWithDI)
@@ -669,7 +590,6 @@ class TestProviderRegistryDependencyInjection:
         assert provider.user_interaction is mock_ui
 
     def test_di_not_injected_into_provider_without_param(self):
-        """Providers without user_interaction param are created without injection."""
         ProviderRegistry.register(MockJiraProvider)
 
         # Should not raise - provider doesn't expect user_interaction
@@ -678,7 +598,6 @@ class TestProviderRegistryDependencyInjection:
         assert isinstance(provider, MockJiraProvider)
 
     def test_set_user_interaction_affects_new_providers(self):
-        """set_user_interaction affects newly created providers."""
         ProviderRegistry.register(MockLinearProviderWithDI)
 
         # Set UI before first get
@@ -690,7 +609,6 @@ class TestProviderRegistryDependencyInjection:
         assert provider.user_interaction is mock_ui
 
     def test_set_user_interaction_does_not_affect_existing_instances(self):
-        """set_user_interaction does NOT affect already-created instances."""
         ProviderRegistry.register(MockLinearProviderWithDI)
 
         # First UI
@@ -708,7 +626,6 @@ class TestProviderRegistryDependencyInjection:
         assert provider1.user_interaction is mock_ui1
 
     def test_clear_then_recreate_uses_new_ui(self):
-        """After clear(), new providers get the newly set UI."""
         ProviderRegistry.register(MockLinearProviderWithDI)
 
         mock_ui1 = MagicMock(spec=UserInteractionInterface)
@@ -729,26 +646,19 @@ class TestProviderRegistryDependencyInjection:
 
 
 class TestProviderRegistryImport:
-    """Tests for module imports."""
-
     def test_import_from_providers_package(self):
-        """Can import ProviderRegistry from providers package."""
         from ingot.integrations.providers import ProviderRegistry as PR
 
         assert PR is ProviderRegistry
 
     def test_in_all_exports(self):
-        """ProviderRegistry is in __all__ exports."""
         from ingot.integrations.providers import __all__
 
         assert "ProviderRegistry" in __all__
 
 
 class TestProviderRegistryConcurrentClearAndRegister:
-    """Additional thread safety tests using queue for more rigorous results."""
-
     def test_concurrent_clear_and_register_no_exceptions(self):
-        """Concurrent clear and register operations don't raise exceptions."""
         error_queue = queue.Queue()
 
         def clear_op():
@@ -781,7 +691,6 @@ class TestProviderRegistryConcurrentClearAndRegister:
         assert error_queue.empty()
 
     def test_concurrent_register_multiple_platforms(self):
-        """Concurrent registration of multiple platforms works correctly."""
         error_queue = queue.Queue()
 
         def register_jira():
@@ -822,14 +731,7 @@ class TestProviderRegistryConcurrentClearAndRegister:
 
 
 class TestProviderRegistryResetInstances:
-    """Tests for reset_instances() method."""
-
     def test_reset_instances_preserves_registrations(self):
-        """reset_instances() clears instances but preserves provider registrations.
-
-        Verified via public API: after reset, get_provider() still works
-        (registrations preserved) but returns new instances (cache cleared).
-        """
         ProviderRegistry.register(MockJiraProvider)
         ProviderRegistry.register(MockGitHubProvider)
 
@@ -857,11 +759,6 @@ class TestProviderRegistryResetInstances:
         assert isinstance(github2, MockGitHubProvider)
 
     def test_reset_instances_clears_config(self):
-        """reset_instances() clears configuration.
-
-        Verifies behavior via public API: after reset, new provider instances
-        should NOT receive the previously configured default_project.
-        """
         ProviderRegistry.register(MockJiraProvider)
         ProviderRegistry.set_config({"default_jira_project": "MYPROJ"})
 
@@ -878,7 +775,6 @@ class TestProviderRegistryResetInstances:
         assert provider2 is not provider1
 
     def test_reset_instances_resets_user_interaction(self):
-        """reset_instances() resets user interaction to CLIUserInteraction."""
         mock_ui = MagicMock(spec=UserInteractionInterface)
         ProviderRegistry.set_user_interaction(mock_ui)
 
@@ -890,7 +786,6 @@ class TestProviderRegistryResetInstances:
         assert isinstance(ui, CLIUserInteraction)
 
     def test_reset_instances_allows_config_change_without_re_registration(self):
-        """reset_instances() allows changing config without re-registering providers."""
         ProviderRegistry.register(MockLinearProviderWithDI)
 
         # First config
@@ -920,13 +815,6 @@ class TestProviderRegistryConfigDeterminism:
     """
 
     def test_set_config_twice_does_not_keep_old_values(self):
-        """Setting config twice replaces all old values, not merging.
-
-        This ensures that if main() runs multiple times (e.g., in tests),
-        the second run's config completely replaces the first.
-
-        Verified via behavior: parse_input reflects the latest config.
-        """
         ProviderRegistry.register(MockJiraProviderWithConfig)
 
         # First config - create provider
@@ -942,12 +830,6 @@ class TestProviderRegistryConfigDeterminism:
         assert provider2 is not provider1
 
     def test_set_config_with_empty_replaces_previous(self):
-        """Setting config with empty dict clears all previous config.
-
-        This simulates running CLI first with config, then without.
-
-        Verified via behavior: after empty config, numeric IDs not handled.
-        """
         ProviderRegistry.register(MockJiraProviderWithConfig)
 
         # First run with config
@@ -966,13 +848,6 @@ class TestProviderRegistryConfigDeterminism:
         assert provider2 is not provider1
 
     def test_initialization_twice_first_with_value_then_without(self):
-        """Simulates main() running twice: first with config, then without.
-
-        Verifies that stale config from first run doesn't persist to second run.
-        This is the core acceptance test for config determinism.
-
-        Verified via behavior: second-run provider doesn't inherit first config.
-        """
         ProviderRegistry.register(MockJiraProviderWithConfig)
 
         # First "run" - set config and create instance

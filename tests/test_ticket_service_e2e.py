@@ -116,8 +116,6 @@ PLATFORM_INPUTS = {
 
 
 class TestE2EFetcherSelection:
-    """Verify create_ticket_service() selects correct fetcher by platform."""
-
     @pytest.mark.parametrize(
         ("backend_platform", "expected_name"),
         [
@@ -141,8 +139,6 @@ class TestE2EFetcherSelection:
 
 
 class TestE2EFullPipeline:
-    """Verify full pipeline: FakeBackend → fetcher → service → provider → GenericTicket."""
-
     @pytest.mark.parametrize(
         "backend_platform", [AgentPlatform.AUGGIE, AgentPlatform.CLAUDE, AgentPlatform.CURSOR]
     )
@@ -179,11 +175,8 @@ class TestE2EFullPipeline:
 
 
 class TestE2EFallbackBehavior:
-    """Verify fallback from primary to fallback fetcher on errors."""
-
     @pytest.mark.asyncio
     async def test_fallback_on_parse_error(self) -> None:
-        """Primary raises AgentResponseParseError on invalid JSON → fallback returns valid data."""
         backend = FakeBackend(
             responses=[(True, "not valid json at all")],
             platform=AgentPlatform.AUGGIE,
@@ -213,7 +206,6 @@ class TestE2EFallbackBehavior:
 
     @pytest.mark.asyncio
     async def test_fallback_on_empty_response(self) -> None:
-        """Primary raises AgentFetchError on empty backend response → fallback succeeds."""
         backend = FakeBackend(
             responses=[(True, "")],
             platform=AgentPlatform.AUGGIE,
@@ -242,7 +234,6 @@ class TestE2EFallbackBehavior:
 
     @pytest.mark.asyncio
     async def test_fallback_on_missing_required_fields(self) -> None:
-        """Primary raises AgentResponseParseError on missing fields → fallback succeeds."""
         # Valid JSON but missing "key" and "summary" required by Jira validation
         incomplete_response = json.dumps({"fields": {"summary": "Test"}})
         backend = FakeBackend(
@@ -274,7 +265,6 @@ class TestE2EFallbackBehavior:
 
     @pytest.mark.asyncio
     async def test_no_fallback_propagates_error(self) -> None:
-        """Primary returns bad JSON, no fallback → error propagates."""
         backend = FakeBackend(
             responses=[(True, "not json")],
             platform=AgentPlatform.AUGGIE,
@@ -297,8 +287,6 @@ class TestE2EFallbackBehavior:
 
 
 class TestE2ENoMediatedFetcherPlatforms:
-    """Verify platforms without mediated fetchers use DirectAPI."""
-
     @pytest.mark.asyncio
     async def test_manual_backend_uses_direct_api(self) -> None:
         backend = FakeBackend(responses=[], platform=AgentPlatform.MANUAL)
@@ -326,11 +314,8 @@ class TestE2ENoMediatedFetcherPlatforms:
 
 
 class TestE2ECacheIntegration:
-    """Verify caching works end-to-end through the service."""
-
     @pytest.mark.asyncio
     async def test_second_fetch_returns_cached(self) -> None:
-        """Fetch once, fetch again → cache hit, backend call_count stays 1."""
         response_json = json.dumps(JIRA_RESPONSE)
         backend = FakeBackend(
             responses=[(True, response_json)],
@@ -352,7 +337,6 @@ class TestE2ECacheIntegration:
 
     @pytest.mark.asyncio
     async def test_skip_cache_refetches(self) -> None:
-        """skip_cache=True → both calls reach backend."""
         response_json = json.dumps(JIRA_RESPONSE)
         backend = FakeBackend(
             responses=[(True, response_json), (True, response_json)],
@@ -373,7 +357,6 @@ class TestE2ECacheIntegration:
 
     @pytest.mark.asyncio
     async def test_cache_invalidation_forces_refetch(self) -> None:
-        """Invalidate between fetches → second fetch reaches backend."""
         response_json = json.dumps(JIRA_RESPONSE)
         backend = FakeBackend(
             responses=[(True, response_json), (True, response_json)],
@@ -400,11 +383,8 @@ class TestE2ECacheIntegration:
 
 
 class TestE2ECallVerification:
-    """Verify exact kwargs passed to backend by each fetcher."""
-
     @pytest.mark.asyncio
     async def test_auggie_no_timeout_in_backend_call(self) -> None:
-        """AuggieMediatedFetcher does NOT pass timeout_seconds to backend."""
         response_json = json.dumps(JIRA_RESPONSE)
         backend = FakeBackend(
             responses=[(True, response_json)],
@@ -427,7 +407,6 @@ class TestE2ECallVerification:
 
     @pytest.mark.asyncio
     async def test_claude_passes_timeout_to_backend(self) -> None:
-        """ClaudeMediatedFetcher passes timeout_seconds to backend."""
         response_json = json.dumps(JIRA_RESPONSE)
         backend = FakeBackend(
             responses=[(True, response_json)],
@@ -450,7 +429,6 @@ class TestE2ECallVerification:
 
     @pytest.mark.asyncio
     async def test_cursor_passes_timeout_to_backend(self) -> None:
-        """CursorMediatedFetcher passes timeout_seconds to backend."""
         response_json = json.dumps(JIRA_RESPONSE)
         backend = FakeBackend(
             responses=[(True, response_json)],
@@ -477,11 +455,8 @@ class TestE2ECallVerification:
 
 
 class TestE2EJsonParsingVariants:
-    """Verify different JSON formats are parsed correctly through the pipeline."""
-
     @pytest.mark.asyncio
     async def test_json_in_markdown_code_block(self) -> None:
-        """Backend returns ```json\\n{...}\\n``` → parses correctly."""
         wrapped = f"```json\n{json.dumps(JIRA_RESPONSE)}\n```"
         backend = FakeBackend(
             responses=[(True, wrapped)],
@@ -501,7 +476,6 @@ class TestE2EJsonParsingVariants:
 
     @pytest.mark.asyncio
     async def test_json_with_surrounding_text(self) -> None:
-        """Backend returns 'Here is the data: {...}' → extracts JSON."""
         wrapped = f"Here is the data: {json.dumps(LINEAR_RESPONSE)}"
         backend = FakeBackend(
             responses=[(True, wrapped)],
@@ -521,7 +495,6 @@ class TestE2EJsonParsingVariants:
 
     @pytest.mark.asyncio
     async def test_bare_json_object(self) -> None:
-        """Backend returns bare JSON string → works."""
         backend = FakeBackend(
             responses=[(True, json.dumps(GITHUB_RESPONSE))],
             platform=AgentPlatform.CURSOR,

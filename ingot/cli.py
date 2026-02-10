@@ -82,13 +82,6 @@ def run_async[T](coro_factory: Callable[[], Coroutine[None, None, T]]) -> T:
     coroutine and the subtle footgun of discarding side effects that might
     have occurred before the first await.
 
-    Args:
-        coro_factory: A callable that returns the coroutine to run.
-            Example: lambda: my_async_fn(arg1, arg2)
-
-    Returns:
-        The result of the coroutine
-
     Raises:
         AsyncLoopAlreadyRunningError: If an event loop is already running.
             This provides a clear error message instead of cryptic asyncio errors.
@@ -116,12 +109,6 @@ def _validate_platform(platform: str | None) -> Platform | None:
     Normalizes input by replacing hyphens with underscores to support
     both "azure-devops" and "azure_devops" formats.
 
-    Args:
-        platform: Platform name string (e.g., "jira", "linear", "azure-devops")
-
-    Returns:
-        Platform enum if valid, None if not provided
-
     Raises:
         typer.BadParameter: If platform name is invalid
     """
@@ -148,12 +135,6 @@ def _is_ambiguous_ticket_id(input_str: str) -> bool:
     Unambiguous formats:
     - URLs (https://...)
     - GitHub format (owner/repo#123)
-
-    Args:
-        input_str: Ticket input string
-
-    Returns:
-        True if the input is ambiguous
     """
     # URLs are unambiguous
     if input_str.startswith("http://") or input_str.startswith("https://"):
@@ -184,13 +165,6 @@ def _disambiguate_platform(ticket_input: str, config: ConfigManager) -> Platform
     Resolution order:
     1. Check config default_platform setting
     2. Interactive prompt asking user to choose
-
-    Args:
-        ticket_input: The ambiguous ticket ID
-        config: Configuration manager
-
-    Returns:
-        Resolved Platform enum
 
     Raises:
         UserCancelledError: If user cancels the prompt
@@ -229,15 +203,6 @@ async def create_ticket_service_from_config(
     the AI backend and AuthenticationManager, making the CLI code cleaner
     and easier to test.
 
-    Args:
-        config_manager: Configuration manager
-        auth_manager: Optional pre-configured AuthenticationManager.
-            If None, creates one from config_manager.
-        cli_backend_override: CLI --backend flag value for runtime override
-
-    Returns:
-        Tuple of (TicketService, AIBackend) for backend reuse downstream
-
     Raises:
         BackendNotConfiguredError: If no backend is configured
         BackendNotInstalledError: If backend CLI is not installed
@@ -273,15 +238,6 @@ async def _fetch_ticket_async(
     """Fetch ticket using TicketService.
 
     This async function bridges the sync CLI with the async TicketService.
-
-    Args:
-        ticket_input: Ticket ID or URL
-        config: Configuration manager
-        platform_hint: Optional platform override for ambiguous ticket IDs
-        cli_backend_override: CLI --backend flag value for runtime override
-
-    Returns:
-        Tuple of (GenericTicket, AIBackend) for downstream workflow use
 
     Raises:
         TicketNotFoundError: If ticket cannot be found
@@ -319,7 +275,7 @@ def _resolve_with_platform_hint(
     the intended platform directly, we construct a synthetic URL that will route
     to the correct provider during platform detection.
 
-    TODO(https://github.com/Amiad5298/Spec/issues/36): Refactor TicketService to
+    TODO(https://github.com/Amiad5298/AI-Platform/issues/36): Refactor TicketService to
     accept platform_override parameter
     directly instead of relying on URL-based platform detection. This would
     eliminate the need for synthetic URL construction and make the intent clearer.
@@ -331,13 +287,6 @@ def _resolve_with_platform_hint(
     - Jira provider handles bare IDs natively (no URL needed).
     - Other platforms in AMBIGUOUS_PLATFORMS (if added) may need their own
       URL templates here.
-
-    Args:
-        ticket_id: Ambiguous ticket ID (e.g., "PROJ-123")
-        platform: Target platform to route to
-
-    Returns:
-        Platform-specific URL for routing, or the original ID if no conversion needed
     """
     if platform == Platform.JIRA:
         # Jira provider handles bare IDs natively - no URL construction needed
@@ -629,15 +578,7 @@ def main(
 
 
 def _check_prerequisites(config: ConfigManager, force_integration_check: bool) -> bool:
-    """Check all prerequisites for running the workflow.
-
-    Args:
-        config: Configuration manager
-        force_integration_check: Force fresh platform integration check
-
-    Returns:
-        True if all prerequisites are met
-    """
+    """Check all prerequisites for running the workflow."""
     # Check git repository
     if not is_git_repo():
         print_error("Not in a git repository. Please run from a git repository.")
@@ -662,11 +603,7 @@ def _check_prerequisites(config: ConfigManager, force_integration_check: bool) -
 
 
 def _run_main_menu(config: ConfigManager) -> None:
-    """Run the main menu loop.
-
-    Args:
-        config: Configuration manager
-    """
+    """Run the main menu loop."""
     while True:
         choice = show_main_menu()
 
@@ -693,11 +630,7 @@ def _run_main_menu(config: ConfigManager) -> None:
 
 
 def _configure_settings(config: ConfigManager) -> None:
-    """Interactive configuration menu.
-
-    Args:
-        config: Configuration manager
-    """
+    """Interactive configuration menu."""
     from ingot.ui.menus import show_model_selection
     from ingot.ui.prompts import prompt_confirm, prompt_input
 
@@ -805,15 +738,6 @@ def _fetch_ticket_with_onboarding(
     If the initial fetch fails with BackendNotConfiguredError, runs the
     onboarding wizard and retries once.
 
-    Args:
-        ticket: Ticket ID or URL
-        config: Configuration manager
-        effective_platform: Resolved platform hint (may be None)
-        backend: CLI --backend override (may be None)
-
-    Returns:
-        Tuple of (GenericTicket, AIBackend)
-
     Raises:
         typer.Exit: On any unrecoverable error
     """
@@ -875,29 +799,7 @@ def _run_workflow(
     dirty_tree_policy: str | None = None,
     auto_update_docs: bool | None = None,
 ) -> None:
-    """Run the AI-assisted workflow.
-
-    Args:
-        ticket: Ticket ID or URL from any supported platform
-        config: Configuration manager
-        platform: Explicit platform override (from --platform flag)
-        backend: Override AI backend for this run (from --backend flag)
-        model: Override model for all phases
-        planning_model: Model for planning phases
-        impl_model: Model for implementation phase
-        skip_clarification: Skip clarification step
-        squash_at_end: Squash commits at end
-        use_tui: Override for TUI mode. None = auto-detect.
-        verbose: Enable verbose mode in TUI (expanded log panel).
-        parallel: Override for parallel execution. None = use config.
-        max_parallel: Maximum number of parallel tasks (1-5). None = use config.
-        fail_fast: Stop on first task failure. None = use config.
-        max_retries: Max retries on rate limit (0 to disable).
-        retry_base_delay: Base delay for retry backoff (seconds).
-        enable_review: Enable phase reviews after task execution.
-        dirty_tree_policy: Policy for dirty working tree: 'fail-fast' or 'warn'.
-        auto_update_docs: Enable documentation updates. None = use config.
-    """
+    """Run the AI-assisted workflow."""
     from ingot.workflow.runner import run_ingot_workflow
     from ingot.workflow.state import DirtyTreePolicy, RateLimitConfig
 

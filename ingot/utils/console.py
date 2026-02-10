@@ -28,11 +28,7 @@ console_err = Console(theme=custom_theme, stderr=True)
 
 
 def print_error(message: str) -> None:
-    """Print error message in red.
-
-    Args:
-        message: Error message to display
-    """
+    """Print error message in red."""
     from ingot.utils.logging import log_message
 
     console_err.print(f"[error][[ERROR]][/error] [red]{message}[/red]")
@@ -40,11 +36,7 @@ def print_error(message: str) -> None:
 
 
 def print_success(message: str) -> None:
-    """Print success message in green.
-
-    Args:
-        message: Success message to display
-    """
+    """Print success message in green."""
     from ingot.utils.logging import log_message
 
     console.print(f"[success][[SUCCESS]][/success] [green]{message}[/green]")
@@ -52,11 +44,7 @@ def print_success(message: str) -> None:
 
 
 def print_warning(message: str) -> None:
-    """Print warning message in yellow.
-
-    Args:
-        message: Warning message to display
-    """
+    """Print warning message in yellow."""
     from ingot.utils.logging import log_message
 
     console.print(f"[warning][[WARNING]][/warning] [yellow]{message}[/yellow]")
@@ -64,11 +52,7 @@ def print_warning(message: str) -> None:
 
 
 def print_info(message: str) -> None:
-    """Print info message in blue/cyan.
-
-    Args:
-        message: Info message to display
-    """
+    """Print info message in blue/cyan."""
     from ingot.utils.logging import log_message
 
     console.print(f"[info][[INFO]][/info] [cyan]{message}[/cyan]")
@@ -76,22 +60,14 @@ def print_info(message: str) -> None:
 
 
 def print_header(title: str) -> None:
-    """Print section header in magenta.
-
-    Args:
-        title: Header title to display
-    """
+    """Print section header in magenta."""
     console.print()
     console.print(f"[header]=== {title} ===[/header]")
     console.print()
 
 
 def print_step(message: str) -> None:
-    """Print step indicator with arrow.
-
-    Args:
-        message: Step message to display
-    """
+    """Print step indicator with arrow."""
     console.print(f"[step]➜[/step] {message}")
 
 

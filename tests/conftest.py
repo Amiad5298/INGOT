@@ -218,11 +218,7 @@ def generic_ticket_no_summary():
     )
 
 
-# =============================================================================
-# CLI Integration Test Fixtures (AMI-40)
-# =============================================================================
 # NOTE: Platform-specific fixtures for CLI integration tests are in
 # tests/fixtures/cli_integration.py and loaded via pytest_plugins above.
 # This is required since pytest 9.x no longer supports pytest_plugins
 # in non-top-level conftest files.
-# =============================================================================

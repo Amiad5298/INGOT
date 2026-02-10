@@ -13,10 +13,7 @@ def sample_task() -> Task:
 
 
 class TestErrorAnalysis:
-    """Test ErrorAnalysis dataclass."""
-
     def test_to_markdown(self) -> None:
-        """Test markdown formatting."""
         error = ErrorAnalysis(
             error_type="syntax",
             file_path="test.py",
@@ -37,10 +34,7 @@ class TestErrorAnalysis:
 
 
 class TestParsePythonTraceback:
-    """Test Python traceback parsing."""
-
     def test_parse_name_error(self, sample_task: Task) -> None:
-        """Test parsing NameError."""
         output = """
 Traceback (most recent call last):
   File "/path/to/file.py", line 42, in <module>
@@ -56,7 +50,6 @@ NameError: name 'undefined_var' is not defined
         assert "undefined_var" in result.error_message
 
     def test_parse_type_error(self, sample_task: Task) -> None:
-        """Test parsing TypeError."""
         output = """
 Traceback (most recent call last):
   File "/app/main.py", line 10, in process
@@ -71,7 +64,6 @@ TypeError: can only concatenate str (not "int") to str
         assert "TypeError" in result.error_message
 
     def test_parse_attribute_error(self, sample_task: Task) -> None:
-        """Test parsing AttributeError."""
         output = """
 Traceback (most recent call last):
   File "service.py", line 25, in get_data
@@ -86,10 +78,7 @@ AttributeError: 'NoneType' object has no attribute 'missing_attribute'
 
 
 class TestParseTypeScriptError:
-    """Test TypeScript error parsing."""
-
     def test_parse_ts_compiler_error(self, sample_task: Task) -> None:
-        """Test parsing TypeScript compiler error with correct format."""
         # The parser expects: file.ts(line,col): error TSxxxx: message
         # Note: Detection pattern checks for ".ts(" so we need .ts not .tsx
         output = "src/components/Button.ts(15,7): error TS2322: Type 'string' is not assignable to type 'number'."
@@ -102,7 +91,6 @@ class TestParseTypeScriptError:
         assert "TS2322" in result.error_message
 
     def test_parse_ts_name_error(self, sample_task: Task) -> None:
-        """Test parsing TypeScript name error."""
         output = "src/utils/helper.ts(42,10): error TS2304: Cannot find name 'foo'."
 
         result = analyze_error_output(output, sample_task)
@@ -113,10 +101,7 @@ class TestParseTypeScriptError:
 
 
 class TestParseTestFailure:
-    """Test test failure parsing."""
-
     def test_parse_pytest_failure(self, sample_task: Task) -> None:
-        """Test parsing pytest failure with correct format."""
         # The parser expects: FAILED file::test - error message
         output = "FAILED tests/test_api.py::test_get_user - AssertionError: assert 404 == 200"
 
@@ -127,7 +112,6 @@ class TestParseTestFailure:
         assert "test_get_user" in result.error_message
 
     def test_parse_test_failure_without_specific_format(self, sample_task: Task) -> None:
-        """Test that generic FAILED keyword falls back to unknown."""
         # Without the specific format, it won't be parsed as test_failure
         output = "FAILED: Some generic failure message"
 
@@ -138,10 +122,7 @@ class TestParseTestFailure:
 
 
 class TestParseImportError:
-    """Test import error parsing."""
-
     def test_parse_module_not_found(self, sample_task: Task) -> None:
-        """Test parsing ModuleNotFoundError."""
         output = """
 Traceback (most recent call last):
   File "app.py", line 5, in <module>
@@ -155,10 +136,7 @@ ModuleNotFoundError: No module named 'missing_module'
 
 
 class TestParseSyntaxError:
-    """Test syntax error parsing."""
-
     def test_parse_python_syntax_error(self, sample_task: Task) -> None:
-        """Test parsing Python SyntaxError."""
         output = """
   File "bad_syntax.py", line 10
     if True
@@ -172,10 +150,7 @@ SyntaxError: invalid syntax
 
 
 class TestGenericError:
-    """Test generic error handling."""
-
     def test_unknown_error_type(self, sample_task: Task) -> None:
-        """Test handling unknown error types."""
         output = "Some random error message that doesn't match any pattern"
 
         result = analyze_error_output(output, sample_task)

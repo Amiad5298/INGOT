@@ -86,26 +86,8 @@ def sanitize_title_for_branch(title: str, max_length: int = 50) -> str:
 def _normalize_for_json(obj: Any) -> Any:
     """Recursively normalize an object for JSON serialization.
 
-    P1 Fix: Ensures platform_metadata (which may contain arbitrary data from
-    platform APIs) can always be serialized to JSON without raising TypeError.
-
-    Normalization rules:
-    - None, bool, int, float, str → passed through unchanged
-    - datetime → ISO format string
-    - set, frozenset → sorted list (for deterministic output)
-    - Enum → .value (or .name if value is not JSON-serializable)
-    - dict → recursively normalize keys and values
-    - list, tuple → recursively normalize elements (returns list)
-    - Other objects → repr() string with __non_serializable__ marker
-
-    The __non_serializable__ marker allows detection of data that was
-    converted and may need investigation, without silently corrupting data.
-
-    Args:
-        obj: Any object to normalize
-
-    Returns:
-        A JSON-serializable representation of the object
+    Handles datetime, set/frozenset, Enum, and arbitrary objects so that
+    platform_metadata can always be serialized without raising TypeError.
     """
     # Primitives that are already JSON-safe
     if obj is None or isinstance(obj, bool | int | float | str):
@@ -599,40 +581,21 @@ class GenericTicket:
         return branch
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize GenericTicket to JSON-compatible dictionary.
-
-        Converts the ticket to a dictionary suitable for JSON storage.
-        Handles datetime (ISO format), Enum (names/values), and platform_metadata.
-
-        P1 Fix: platform_metadata is recursively normalized to JSON-safe types:
-        - datetime objects → ISO format strings
-        - set/frozenset → list
-        - Enum values → .value or .name (for auto() enums)
-        - Non-serializable objects are converted to repr() strings with a
-          warning marker to preserve data visibility without breaking caching.
-
-        Returns:
-            Dictionary representation of the ticket with all fields serialized
-            to JSON-compatible types.
-        """
+        """Serialize GenericTicket to JSON-compatible dictionary."""
         from dataclasses import asdict
 
         result = asdict(self)
 
-        # Convert Platform enum to name (uses auto() so we use .name)
         result["platform"] = self.platform.name
 
-        # Convert TicketStatus and TicketType enums to their values
         result["status"] = self.status.value
         result["type"] = self.type.value
 
-        # Convert datetime objects to ISO format strings
         if self.created_at is not None:
             result["created_at"] = self.created_at.isoformat()
         if self.updated_at is not None:
             result["updated_at"] = self.updated_at.isoformat()
 
-        # P1 Fix: Normalize platform_metadata to JSON-safe types
         if result.get("platform_metadata"):
             result["platform_metadata"] = _normalize_for_json(result["platform_metadata"])
 
@@ -660,9 +623,7 @@ class GenericTicket:
         # Make a copy to avoid mutating the input
         ticket_data = data.copy()
 
-        # P1 FIX: Normalize platform casing before strict validation.
-        # Accepts "jira", "JIRA", "Jira" etc. and maps to Platform.JIRA.
-        # Still raises ValueError for unknown platforms to prevent data corruption.
+        # Normalize platform casing ("jira" → Platform.JIRA)
         platform_str = ticket_data.get("platform", "")
         platform_normalized = platform_str.upper() if platform_str else ""
         if not hasattr(Platform, platform_normalized):

@@ -10,10 +10,7 @@ from ingot.integrations.backends.errors import BackendNotConfiguredError
 
 
 class TestResolveBackendPlatformPrecedence:
-    """Tests for precedence order in resolve_backend_platform()."""
-
     def test_cli_override_takes_precedence_over_config(self) -> None:
-        """CLI --backend flag overrides persisted config."""
         config = MagicMock()
         config.get.return_value = "auggie"  # Config says auggie
 
@@ -23,7 +20,6 @@ class TestResolveBackendPlatformPrecedence:
         assert result == AgentPlatform.CLAUDE  # CLI wins
 
     def test_cli_override_with_empty_config(self) -> None:
-        """CLI override works when config has no AI_BACKEND."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -32,7 +28,6 @@ class TestResolveBackendPlatformPrecedence:
         assert result == AgentPlatform.AUGGIE
 
     def test_config_used_when_no_cli_override(self) -> None:
-        """Persisted config is used when CLI override is None."""
         config = MagicMock()
         config.get.return_value = "cursor"
 
@@ -41,7 +36,6 @@ class TestResolveBackendPlatformPrecedence:
         assert result == AgentPlatform.CURSOR
 
     def test_empty_string_cli_override_uses_config(self) -> None:
-        """Empty string CLI override falls through to config (falsy check)."""
         config = MagicMock()
         config.get.return_value = "cursor"
 
@@ -51,7 +45,6 @@ class TestResolveBackendPlatformPrecedence:
         assert result == AgentPlatform.CURSOR
 
     def test_whitespace_only_cli_override_uses_config(self) -> None:
-        """Whitespace-only CLI override falls through to config."""
         config = MagicMock()
         config.get.return_value = "auggie"
 
@@ -62,10 +55,7 @@ class TestResolveBackendPlatformPrecedence:
 
 
 class TestResolveBackendPlatformNoBackend:
-    """Tests for 'no backend configured' error."""
-
     def test_raises_when_no_cli_and_empty_config(self) -> None:
-        """Raises BackendNotConfiguredError when both CLI and config are empty."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -76,7 +66,6 @@ class TestResolveBackendPlatformNoBackend:
         assert "ingot init" in str(exc_info.value)
 
     def test_raises_when_config_is_whitespace_only(self) -> None:
-        """Whitespace-only config is treated as empty."""
         config = MagicMock()
         config.get.return_value = "   "
 
@@ -84,11 +73,6 @@ class TestResolveBackendPlatformNoBackend:
             resolve_backend_platform(config, cli_backend_override=None)
 
     def test_whitespace_cli_and_empty_config_raises_error(self) -> None:
-        """Whitespace-only CLI + empty config raises BackendNotConfiguredError.
-
-        This ensures whitespace CLI doesn't silently fall through to
-        parse_ai_backend()'s default (AUGGIE).
-        """
         config = MagicMock()
         config.get.return_value = ""
 
@@ -106,7 +90,6 @@ class TestResolveBackendPlatformInvalidInput:
     """
 
     def test_invalid_cli_override_raises_config_validation_error(self) -> None:
-        """Invalid CLI platform string raises ConfigValidationError."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -119,7 +102,6 @@ class TestResolveBackendPlatformInvalidInput:
         assert "chatgpt" in str(exc_info.value)
 
     def test_invalid_config_value_raises_config_validation_error(self) -> None:
-        """Invalid config platform string raises ConfigValidationError."""
         config = MagicMock()
         config.get.return_value = "openai"  # Not a valid platform
 
@@ -128,10 +110,7 @@ class TestResolveBackendPlatformInvalidInput:
 
 
 class TestResolveBackendPlatformStringNormalization:
-    """Tests for string input normalization."""
-
     def test_cli_override_is_case_insensitive(self) -> None:
-        """CLI override handles mixed case."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -140,7 +119,6 @@ class TestResolveBackendPlatformStringNormalization:
         assert result == AgentPlatform.AUGGIE
 
     def test_config_value_is_case_insensitive(self) -> None:
-        """Config value handles mixed case."""
         config = MagicMock()
         config.get.return_value = "AuGgIe"
 
@@ -149,7 +127,6 @@ class TestResolveBackendPlatformStringNormalization:
         assert result == AgentPlatform.AUGGIE
 
     def test_cli_override_strips_whitespace(self) -> None:
-        """CLI override strips leading/trailing whitespace."""
         config = MagicMock()
         config.get.return_value = ""
 
@@ -158,7 +135,6 @@ class TestResolveBackendPlatformStringNormalization:
         assert result == AgentPlatform.AUGGIE
 
     def test_config_value_strips_whitespace(self) -> None:
-        """Config value strips leading/trailing whitespace."""
         config = MagicMock()
         config.get.return_value = "  auggie  "
 
@@ -177,11 +153,6 @@ class TestResolveBackendPlatformEnvironmentVariable:
     def test_ai_backend_env_var_is_loaded_by_config_manager(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
     ) -> None:
-        """AI_BACKEND environment variable is loaded into ConfigManager._raw_values.
-
-        This test verifies that AI_BACKEND is in the Settings key mapping,
-        so environment variable overrides work correctly.
-        """
         from ingot.config.manager import ConfigManager
         from ingot.config.settings import Settings
 
@@ -204,7 +175,6 @@ class TestResolveBackendPlatformEnvironmentVariable:
     def test_ai_backend_env_var_works_with_resolver(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
     ) -> None:
-        """AI_BACKEND environment variable works end-to-end with resolver."""
         from ingot.config.manager import ConfigManager
 
         # Set environment variable
@@ -222,7 +192,6 @@ class TestResolveBackendPlatformEnvironmentVariable:
     def test_cli_override_takes_precedence_over_env_var(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
     ) -> None:
-        """CLI --backend flag takes precedence over AI_BACKEND env var."""
         from ingot.config.manager import ConfigManager
 
         # Set environment variable to auggie

@@ -127,8 +127,7 @@ def parse_ai_backend(
     except ValueError:
         context_msg = f" in {context}" if context else ""
         raise ConfigValidationError(
-            f"Invalid AI backend '{value}'{context_msg}. "
-            f"Allowed values: {', '.join(valid_values)}"
+            f"Invalid AI backend '{value}'{context_msg}. Allowed values: {', '.join(valid_values)}"
         ) from None
 
 
@@ -328,7 +327,7 @@ class FetchPerformanceConfig:
         # Cache duration - clamp to [0, MAX]
         if self.cache_duration_hours < 0:
             logger.warning(
-                f"cache_duration_hours ({self.cache_duration_hours}) is negative, " "clamping to 0"
+                f"cache_duration_hours ({self.cache_duration_hours}) is negative, clamping to 0"
             )
             self.cache_duration_hours = 0
         elif self.cache_duration_hours > MAX_CACHE_DURATION_HOURS:
@@ -341,7 +340,7 @@ class FetchPerformanceConfig:
         # Timeout - clamp to [1, MAX] (must be > 0 for valid HTTP timeout)
         if self.timeout_seconds <= 0:
             logger.warning(
-                f"timeout_seconds ({self.timeout_seconds}) must be positive, " "clamping to 1"
+                f"timeout_seconds ({self.timeout_seconds}) must be positive, clamping to 1"
             )
             self.timeout_seconds = 1
         elif self.timeout_seconds > MAX_TIMEOUT_SECONDS:
@@ -364,7 +363,7 @@ class FetchPerformanceConfig:
         # Retry delay - clamp to [0, MAX]
         if self.retry_delay_seconds < 0:
             logger.warning(
-                f"retry_delay_seconds ({self.retry_delay_seconds}) is negative, " "clamping to 0"
+                f"retry_delay_seconds ({self.retry_delay_seconds}) is negative, clamping to 0"
             )
             self.retry_delay_seconds = 0.0
         elif self.retry_delay_seconds > MAX_RETRY_DELAY_SECONDS:

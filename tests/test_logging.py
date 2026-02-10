@@ -6,10 +6,7 @@ from unittest.mock import patch
 
 
 class TestLogging:
-    """Tests for logging functionality."""
-
     def test_log_disabled_by_default(self):
-        """Logging is disabled when INGOT_LOG is not set."""
         with patch.dict(os.environ, {}, clear=True):
             # Need to reimport to pick up env changes
             import importlib
@@ -23,7 +20,6 @@ class TestLogging:
             assert logging_module.LOG_ENABLED is False
 
     def test_log_enabled_with_env_var(self):
-        """Logging is enabled when INGOT_LOG=true."""
         with patch.dict(os.environ, {"INGOT_LOG": "true"}):
             import importlib
 
@@ -35,14 +31,12 @@ class TestLogging:
             assert logging_module.LOG_ENABLED is True
 
     def test_log_file_default_path(self):
-        """Default log file is in home directory."""
         import ingot.utils.logging as logging_module
 
         expected = Path.home() / ".ingot.log"
         assert logging_module.LOG_FILE == expected
 
     def test_log_file_custom_path(self):
-        """Custom log file path from environment."""
         custom_path = "/tmp/custom-log.log"
         with patch.dict(os.environ, {"INGOT_LOG_FILE": custom_path}):
             import importlib
@@ -55,7 +49,6 @@ class TestLogging:
             assert str(logging_module.LOG_FILE) == custom_path
 
     def test_setup_logging_returns_logger(self):
-        """setup_logging returns a logger instance."""
         import ingot.utils.logging as logging_module
 
         logging_module._logger = None
@@ -65,7 +58,6 @@ class TestLogging:
         assert logger.name == "ingot"
 
     def test_get_logger_returns_same_instance(self):
-        """get_logger returns the same logger instance."""
         import ingot.utils.logging as logging_module
 
         logging_module._logger = None
@@ -75,7 +67,6 @@ class TestLogging:
         assert logger1 is logger2
 
     def test_log_message_when_disabled(self):
-        """log_message does nothing when logging is disabled."""
         with patch.dict(os.environ, {"INGOT_LOG": "false"}):
             import importlib
 
@@ -88,7 +79,6 @@ class TestLogging:
             logging_module.log_message("Test message")
 
     def test_log_message_when_enabled(self, tmp_path):
-        """log_message writes to file when logging is enabled."""
         log_file = tmp_path / "test.log"
 
         with patch.dict(
@@ -115,7 +105,6 @@ class TestLogging:
             assert "Test message" in content
 
     def test_log_command(self, tmp_path):
-        """log_command logs command with exit code."""
         log_file = tmp_path / "test.log"
 
         with patch.dict(

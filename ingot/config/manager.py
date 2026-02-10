@@ -67,9 +67,6 @@ def _get_known_platforms() -> frozenset[str]:
 
     Uses lru_cache instead of a global mutable variable for thread-safety
     and simpler code.
-
-    Returns:
-        Frozenset of known platform names (immutable).
     """
     from ingot.config.fetch_config import KNOWN_PLATFORMS
 
@@ -92,22 +89,13 @@ class ConfigManager:
     - Atomic file writes
     - Secure file permissions (600)
 
-    Attributes:
-        settings: Current settings instance
-        global_config_path: Path to global ~/.ingot-config file
-        local_config_path: Path to discovered local .ingot file (after load)
     """
 
     LOCAL_CONFIG_NAME = ".ingot"
     GLOBAL_CONFIG_NAME = ".ingot-config"
 
     def __init__(self, global_config_path: Path | None = None) -> None:
-        """Initialize the configuration manager.
-
-        Args:
-            global_config_path: Optional custom path to global config file.
-                                Defaults to ~/.ingot-config.
-        """
+        """Initialize the configuration manager."""
         self.global_config_path = global_config_path or CONFIG_FILE
         self.local_config_path: Path | None = None
         self.settings = Settings()
@@ -128,9 +116,6 @@ class ConfigManager:
 
         Note: This method is idempotent - each call starts from clean defaults
         to prevent stale values from persisting across multiple loads.
-
-        Returns:
-            Settings instance with loaded values
         """
         # Reset to clean state for idempotency
         self.settings = Settings()
@@ -167,13 +152,8 @@ class ConfigManager:
         """Find local .ingot config by traversing up from CWD.
 
         Starts from current working directory and traverses parent
-        directories until:
-        - A .ingot file is found
-        - A .git directory is found (repository root)
-        - The filesystem root is reached
-
-        Returns:
-            Path to local config file, or None if not found
+        directories until a .ingot file is found, a .git directory is
+        found (repository root), or the filesystem root is reached.
         """
         current = Path.cwd()
         while True:
@@ -193,12 +173,7 @@ class ConfigManager:
         return None
 
     def _load_file(self, path: Path, source: str = "file") -> None:
-        """Load key=value pairs from a config file.
-
-        Args:
-            path: Path to the config file
-            source: Source identifier for debugging
-        """
+        """Load key=value pairs from a config file."""
         pattern = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_]*)=(.*)$")
 
         with path.open() as f:
@@ -240,12 +215,7 @@ class ConfigManager:
                 self._config_sources[key] = "environment"
 
     def _apply_value_to_settings(self, key: str, value: str) -> None:
-        """Apply a raw config value to the settings object.
-
-        Args:
-            key: Configuration key
-            value: Raw string value from file
-        """
+        """Apply a raw config value to the settings object."""
         attr = self.settings.get_attribute_for_key(key)
         if attr is None:
             return  # Unknown key, ignore
@@ -298,22 +268,8 @@ class ConfigManager:
             - Values containing special characters (quotes, backslashes) are
               properly escaped for safe round-trip through save/load.
 
-        Args:
-            key: Configuration key (must match pattern: [a-zA-Z_][a-zA-Z0-9_]*)
-            value: Configuration value to save
-            scope: Target config file - "global" (~/.ingot-config) or
-                   "local" (.spec in project directory)
-            warn_on_override: If True, returns warning message when the saved
-                              value is overridden by a higher-priority source
-
-        Returns:
-            Warning message describing overrides (if any), None otherwise.
-            For global scope: warns if local config or env var overrides.
-            For local scope: warns if env var overrides.
-
         Raises:
-            ValueError: If key name is invalid (doesn't match pattern) or
-                        scope is not "global" or "local"
+            ValueError: If key name is invalid or scope is not "global"/"local".
         """
         # Validate key name
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", key):
@@ -394,17 +350,7 @@ class ConfigManager:
         scope: Literal["global", "local"],
         warn_on_override: bool,
     ) -> str | None:
-        """Check if saved value will be overridden by higher-priority source.
-
-        Args:
-            key: Configuration key that was saved
-            saved_value: Value that was written to file
-            scope: Scope of the save operation
-            warn_on_override: Whether to generate warnings
-
-        Returns:
-            Warning message if overridden, None otherwise
-        """
+        """Check if saved value will be overridden by higher-priority source."""
         if not warn_on_override:
             return None
 
@@ -432,14 +378,7 @@ class ConfigManager:
         return warning
 
     def _read_file_values(self, path: Path) -> dict[str, str]:
-        """Read key=value pairs from a config file without modifying state.
-
-        Args:
-            path: Path to the config file
-
-        Returns:
-            Dictionary of key-value pairs
-        """
+        """Read key=value pairs from a config file without modifying state."""
         values: dict[str, str] = {}
         pattern = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_]*)=(.*)$")
 
@@ -466,12 +405,7 @@ class ConfigManager:
         return values
 
     def _atomic_write_to_path(self, lines: list[str], target_path: Path) -> None:
-        """Atomically write lines to a specific config file.
-
-        Args:
-            lines: Lines to write
-            target_path: Path to write to
-        """
+        """Atomically write lines to a specific config file."""
         # Ensure parent directory exists
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -503,15 +437,8 @@ class ConfigManager:
     def _escape_value_for_storage(value: str) -> str:
         """Escape a value for safe storage in config file.
 
-        Handles:
-        - Backslashes (escape with another backslash)
-        - Double quotes (escape with backslash)
-
-        Args:
-            value: The raw value to escape
-
-        Returns:
-            Escaped value safe for storage in double-quoted format
+        Handles backslashes (escape with another backslash) and
+        double quotes (escape with backslash).
         """
         # Escape backslashes first, then quotes
         result = value.replace("\\", "\\\\")
@@ -523,12 +450,6 @@ class ConfigManager:
         """Unescape a value read from config file.
 
         Reverses the escaping done by _escape_value_for_storage.
-
-        Args:
-            value: The escaped value from the config file
-
-        Returns:
-            Original unescaped value
         """
         # Unescape backslashes first, then quotes
         # (reverse order of escaping to handle \\\" correctly)
@@ -540,12 +461,7 @@ class ConfigManager:
         """Log a configuration save without exposing sensitive values.
 
         For sensitive keys (containing TOKEN, KEY, SECRET, PASSWORD, PAT),
-        the value is not logged. For other keys, only the key and scope
-        are logged.
-
-        Args:
-            key: The configuration key that was saved
-            scope: The scope (global or local) where it was saved
+        the value is not logged.
         """
         if is_sensitive_key(key):
             log_message(f"Configuration saved to {scope}: {key}=<REDACTED>")
@@ -553,15 +469,7 @@ class ConfigManager:
             log_message(f"Configuration saved to {scope}: {key}")
 
     def get(self, key: str, default: str = "") -> str:
-        """Get a configuration value.
-
-        Args:
-            key: Configuration key to retrieve
-            default: Default value if key not found
-
-        Returns:
-            Configuration value or default
-        """
+        """Get a configuration value."""
         return self._raw_values.get(key, default)
 
     def get_agent_config(self) -> AgentConfig:
@@ -569,13 +477,8 @@ class ConfigManager:
 
         Parses AI_BACKEND and AGENT_INTEGRATION_* keys from config.
 
-        Returns:
-            AgentConfig instance with platform and integrations.
-            integrations is None if no AGENT_INTEGRATION_* keys are set,
-            or a dict if any are explicitly configured.
-
         Raises:
-            ConfigValidationError: If AI_BACKEND has an invalid value
+            ConfigValidationError: If AI_BACKEND has an invalid value.
         """
         platform_str = self._raw_values.get("AI_BACKEND")
         integrations: dict[str, bool] | None = None
@@ -606,11 +509,8 @@ class ConfigManager:
 
         Parses FETCH_STRATEGY_DEFAULT and FETCH_STRATEGY_* keys from config.
 
-        Returns:
-            FetchStrategyConfig instance with default and per-platform strategies
-
         Raises:
-            ConfigValidationError: If any strategy value is invalid
+            ConfigValidationError: If any strategy value is invalid.
         """
         default_str = self._raw_values.get("FETCH_STRATEGY_DEFAULT")
         per_platform: dict[str, FetchStrategy] = {}
@@ -649,9 +549,6 @@ class ConfigManager:
         - timeout_seconds: > 0
         - max_retries: >= 0
         - retry_delay_seconds: >= 0
-
-        Returns:
-            FetchPerformanceConfig instance with performance settings
         """
         # Default values
         cache_duration_hours = 24
@@ -751,18 +648,9 @@ class ConfigManager:
         Canonicalization is applied before validation, ensuring required fields
         are checked against canonical keys defined in PLATFORM_REQUIRED_CREDENTIALS.
 
-        Args:
-            platform: Platform name (e.g., 'azure_devops', 'trello')
-            strict: If True, raises EnvVarExpansionError for missing env vars
-            validate: If True, validates credentials have required fields
-
-        Returns:
-            Dictionary of credential key-value pairs with canonical keys,
-            or None if no credentials found
-
         Raises:
-            EnvVarExpansionError: If strict=True and env var expansion fails
-            ConfigValidationError: If validate=True and required fields missing
+            EnvVarExpansionError: If strict=True and env var expansion fails.
+            ConfigValidationError: If validate=True and required fields missing.
         """
         prefix = f"FALLBACK_{platform.upper()}_"
         raw_credentials: dict[str, str] = {}
@@ -787,13 +675,8 @@ class ConfigManager:
     def _get_active_platforms(self) -> set[str]:
         """Get the set of 'active' platforms that need validation.
 
-        Active platforms are those explicitly defined in:
-        - per_platform strategy overrides
-        - agent integrations
-        - fallback_credentials
-
-        Returns:
-            Set of lowercase platform names that are actively configured
+        Active platforms are those explicitly defined in per_platform
+        strategy overrides, agent integrations, or fallback_credentials.
         """
         # Delegate to the extracted helper function
         return get_active_platforms(
@@ -815,15 +698,8 @@ class ConfigManager:
         - Per-platform override references
         - Enum parsing (agent platform, fetch strategies)
 
-        Args:
-            strict: If True, raises ConfigValidationError on first error.
-                    If False, collects and returns all errors without raising.
-
-        Returns:
-            List of validation error messages
-
         Raises:
-            ConfigValidationError: If strict=True and validation fails
+            ConfigValidationError: If strict=True and validation fails.
         """
         errors: list[str] = []
 
@@ -925,9 +801,6 @@ class ConfigManager:
 
         Note: An empty dict `{}` means the user explicitly disabled all integrations,
         which is different from None (no config set).
-
-        Returns:
-            Dict mapping platform names to their agent integration status.
         """
         known_platforms = _get_known_platforms()
         agent_config = self.get_agent_config()
@@ -940,11 +813,7 @@ class ConfigManager:
         return result
 
     def _get_fallback_status(self) -> dict[str, bool]:
-        """Get fallback credential status for all platforms.
-
-        Returns:
-            Dict mapping platform names to whether fallback credentials are configured.
-        """
+        """Get fallback credential status for all platforms."""
         # Lazy imports to avoid circular dependencies
         from ingot.integrations.auth import AuthenticationManager
         from ingot.integrations.providers import Platform
@@ -975,16 +844,8 @@ class ConfigManager:
     ) -> dict[str, bool]:
         """Determine if each platform is ready to use.
 
-        A platform is ready if:
-        - It has agent integration, OR
-        - It has fallback credentials configured
-
-        Args:
-            agent_integrations: Dict of agent integration status per platform
-            fallback_status: Dict of fallback credential status per platform
-
-        Returns:
-            Dict mapping platform names to ready status
+        A platform is ready if it has agent integration OR fallback
+        credentials configured.
         """
         known_platforms = _get_known_platforms()
         return {
@@ -1077,11 +938,6 @@ class ConfigManager:
         """Display platform status as plain text (fallback when Rich fails).
 
         Uses dynamic column widths to accommodate platform names of any length.
-
-        Args:
-            agent_integrations: Dict of agent integration status per platform
-            fallback_status: Dict of fallback credential status per platform
-            ready_status: Dict of ready status per platform
         """
         known_platforms = _get_known_platforms()
 

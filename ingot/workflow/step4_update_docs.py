@@ -109,12 +109,6 @@ def _is_github_doc_path(filepath_lower: str) -> bool:
 
     This prevents false positives like .github/readme-scripts/tool.py being
     classified as documentation due to substring matching on "readme".
-
-    Args:
-        filepath_lower: Lowercase path with forward slashes.
-
-    Returns:
-        True if the path is a .github/ documentation path.
     """
     # Split path into segments
     parts = filepath_lower.split("/")
@@ -142,14 +136,7 @@ def _is_github_doc_path(filepath_lower: str) -> bool:
 
 
 def is_doc_file(filepath: str) -> bool:
-    """Check if a file is a documentation file.
-
-    Args:
-        filepath: Path to the file (relative or absolute)
-
-    Returns:
-        True if the file is a documentation file
-    """
+    """Check if a file is a documentation file."""
     path = Path(filepath)
     filepath_lower = filepath.lower().replace("\\", "/")
 
@@ -180,15 +167,7 @@ def is_doc_file(filepath: str) -> bool:
 
 @dataclass
 class FileSnapshot:
-    """Snapshot of a file's state for restoration.
-
-    Attributes:
-        path: File path relative to repo root.
-        was_untracked: True if file was untracked (status code '??') at snapshot time.
-        was_dirty: True if file had pre-agent modifications (tracked but modified).
-        existed: True if file existed at snapshot time.
-        content: Byte content if file existed pre-agent (for both dirty and untracked files).
-    """
+    """Snapshot of a file's state for restoration."""
 
     path: str
     was_untracked: bool = False
@@ -198,15 +177,7 @@ class FileSnapshot:
 
     @classmethod
     def capture(cls, filepath: str, status_code: str) -> "FileSnapshot":
-        """Capture the current state of a file based on git status code.
-
-        Args:
-            filepath: Path to the file.
-            status_code: Two-character git status code (e.g., '??', 'M ', ' M', 'MM').
-
-        Returns:
-            FileSnapshot with appropriate state captured.
-        """
+        """Capture the current state of a file based on git status code."""
         is_untracked = status_code == "??"
         # File is dirty if it has any tracked modification (not untracked)
         is_dirty = not is_untracked and status_code.strip() != ""
@@ -237,12 +208,6 @@ def _git_restore_file(filepath: str) -> bool:
 
     Uses 'git restore --worktree --staged -- <file>' to fully restore
     a tracked file to its committed state.
-
-    Args:
-        filepath: Path to the file to restore.
-
-    Returns:
-        True if restoration succeeded.
     """
     result = subprocess.run(
         ["git", "restore", "--worktree", "--staged", "--", filepath],
@@ -260,12 +225,6 @@ def _parse_porcelain_z_output(output: str) -> list[tuple[str, str]]:
     Format for each entry:
     - Regular file: "XY path\\0" (status code followed by space, then path, then NUL)
     - Renamed file: "XY old_path\\0new_path\\0" (status, old path, NUL, new path, NUL)
-
-    Args:
-        output: Raw output from git status --porcelain -z
-
-    Returns:
-        List of (status_code, filepath) tuples. For renames, returns the new path.
     """
     if not output:
         return []
@@ -353,9 +312,6 @@ class NonDocSnapshot:
         3. Previously non-existent files that now exist (agent recreated them).
         4. Previously clean tracked files that are now dirty.
         5. New untracked files created by the agent.
-
-        Returns:
-            List of file paths that were modified.
         """
         changed = []
 
@@ -432,12 +388,6 @@ class NonDocSnapshot:
         - Files that didn't exist pre-Step4 (new or recreated): Delete them.
         - Previously clean tracked files that existed: Use git restore.
         - Deleted files with saved content: Restore the content.
-
-        Args:
-            filepaths: List of files to revert.
-
-        Returns:
-            List of files that were successfully reverted.
         """
         reverted = []
         for filepath in filepaths:
@@ -491,17 +441,7 @@ class NonDocSnapshot:
 
 @dataclass
 class Step4Result:
-    """Result of Step 4 execution.
-
-    Attributes:
-        success: True if step completed without critical errors
-        docs_updated: True if documentation was updated
-        agent_ran: True if the doc-updater agent was invoked
-        non_doc_reverted: List of non-doc files that were reverted
-        non_doc_revert_failed: List of non-doc files that failed to revert
-        had_violations: True if agent violated doc-only constraint
-        error_message: Error description if success is False
-    """
+    """Result of Step 4 execution."""
 
     success: bool = True
     docs_updated: bool = False
@@ -531,13 +471,6 @@ def step_4_update_docs(
 
     Uses TaskRunnerUI in single-operation mode to provide a consistent
     collapsible UI with verbose toggle, matching the UX of Steps 1 and 3.
-
-    Args:
-        state: Current workflow state
-        backend: AI backend instance for agent interactions
-
-    Returns:
-        Step4Result with details of what happened (always succeeds for workflow)
     """
     from ingot.ui.tui import TaskRunnerUI
     from ingot.workflow.events import format_run_directory
@@ -656,15 +589,7 @@ def step_4_update_docs(
 
 
 def _build_doc_update_prompt(state: WorkflowState, diff_result: DiffResult) -> str:
-    """Build the prompt for the doc-updater agent.
-
-    Args:
-        state: Current workflow state
-        diff_result: DiffResult from get_diff_from_baseline
-
-    Returns:
-        Formatted prompt string with clear sections and strong doc-only instruction
-    """
+    """Build the prompt for the doc-updater agent."""
     # Build changed files summary (always include, won't be truncated)
     changed_files_section = ""
     if diff_result.changed_files:
