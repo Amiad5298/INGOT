@@ -40,6 +40,7 @@ from ingot.workflow.events import (
 )
 from ingot.workflow.runner import run_ingot_workflow, workflow_cleanup
 from ingot.workflow.state import WorkflowState
+from ingot.workflow.step1_5_clarification import step_1_5_clarification
 from ingot.workflow.step1_plan import step_1_create_plan
 from ingot.workflow.step2_tasklist import step_2_create_tasklist
 from ingot.workflow.step3_execute import step_3_execute
@@ -104,6 +105,7 @@ __all__ = [
     "create_task_finished_event",
     "create_run_finished_event",
     # Steps
+    "step_1_5_clarification",
     "step_1_create_plan",
     "step_2_create_tasklist",
     "step_3_execute",

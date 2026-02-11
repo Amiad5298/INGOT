@@ -37,6 +37,7 @@ from ingot.workflow.conflict_detection import (
 )
 from ingot.workflow.git_utils import DirtyTreePolicy
 from ingot.workflow.state import RateLimitConfig, WorkflowState
+from ingot.workflow.step1_5_clarification import step_1_5_clarification
 from ingot.workflow.step1_plan import step_1_create_plan
 from ingot.workflow.step2_tasklist import step_2_create_tasklist
 from ingot.workflow.step3_execute import step_3_execute
@@ -173,6 +174,11 @@ def run_ingot_workflow(
         if state.current_step <= 1:
             print_info("Starting Step 1: Create Implementation Plan")
             if not step_1_create_plan(state, backend):
+                return False
+
+        # Step 1.5: Interactive clarification (optional)
+        if state.current_step == 2 and not state.skip_clarification:
+            if not step_1_5_clarification(state, backend):
                 return False
 
         # Step 2: Create task list

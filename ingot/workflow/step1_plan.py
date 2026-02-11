@@ -121,12 +121,12 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     """Execute Step 1: Create implementation plan.
 
     This step:
-    1. Optionally runs clarification with the user
-    2. Generates an implementation plan
-    3. Saves the plan to specs/{ticket}-plan.md
+    1. Generates an implementation plan
+    2. Saves the plan to specs/{ticket}-plan.md
 
     Note: Ticket information is already fetched in the workflow runner
-    before this step is called.
+    before this step is called. Clarification is handled separately
+    in step 1.5 (step1_5_clarification.py).
     """
     print_header("Step 1: Create Implementation Plan")
 
@@ -162,13 +162,6 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
         # Display plan summary
         _display_plan_summary(plan_path)
 
-        # Clarification step (optional) - happens AFTER plan creation
-        if not state.skip_clarification:
-            if not _run_clarification(state, backend, plan_path):
-                return False
-            # Display updated plan after clarification
-            _display_plan_summary(plan_path)
-
         # Confirm plan
         if prompt_confirm("Does this plan look good?", default=True):
             state.current_step = 2
@@ -179,94 +172,6 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     else:
         print_error("Plan file was not created")
         return False
-
-
-def _run_clarification(state: WorkflowState, backend: AIBackend, plan_path: Path) -> bool:
-    """Run clarification step with user.
-
-    This happens AFTER the plan is created. The AI reviews the plan and asks
-    clarifying questions, then updates the plan with a Q&A section.
-    """
-    print_header("Step 1.5: Clarification Phase (Optional)")
-    print_info("The AI can review the plan and ask clarification questions about:")
-    print_info("  - Ambiguous requirements")
-    print_info("  - Missing technical details")
-    print_info("  - Unclear dependencies or integration points")
-    print_info("  - Edge cases not covered")
-    console.print()
-
-    if not prompt_confirm(
-        "Would you like the AI to review the plan and ask clarification questions?", default=True
-    ):
-        print_info("Skipping clarification phase")
-        return True
-
-    print_step("Starting interactive clarification phase...")
-    console.print()
-    print_info("INSTRUCTIONS:")
-    print_info("  1. The AI will review the plan and ask clarification questions")
-    print_info("  2. Answer each question in the chat")
-    print_info("  3. The AI will update the plan file with a '## Clarification Q&A' section")
-    print_info("  4. Type 'done' or press Ctrl+D when you're finished with clarifications")
-    console.print()
-
-    # Build conflict context if a conflict was detected
-    # Truncate conflict_summary to prevent context pollution or prompt injection
-    # from malformed LLM outputs (max 500 characters)
-    _MAX_CONFLICT_SUMMARY_LENGTH = 500
-    conflict_context = ""
-    if state.conflict_detected and state.conflict_summary:
-        sanitized_summary = state.conflict_summary[:_MAX_CONFLICT_SUMMARY_LENGTH]
-        if len(state.conflict_summary) > _MAX_CONFLICT_SUMMARY_LENGTH:
-            sanitized_summary += "..."
-        conflict_context = f"""
-⚠️ IMPORTANT: A conflict was detected between the ticket description and the user's additional context:
-"{sanitized_summary}"
-
-Your FIRST priority should be to ask a clarifying question about this specific conflict to help
-the user resolve the ambiguity. Then proceed with other clarification questions as needed.
-
-"""
-
-    prompt = f"""Review the implementation plan at @{plan_path}.
-{conflict_context}
-Ask 2-4 clarifying questions about any ambiguous or unclear aspects:
-- Requirements that could be interpreted multiple ways
-- Missing technical details needed for implementation
-- Unclear dependencies or integration points
-- Edge cases or error scenarios not covered
-- Performance, security, or scalability considerations
-
-After I answer your questions, update the plan file by adding a new section at the end:
-
-## Clarification Q&A
-
-Q1: [Your question]
-A1: [My answer]
-
-Q2: [Your question]
-A2: [My answer]
-
-If the plan is complete and clear, simply respond with 'No clarifications needed - plan is comprehensive.' and do not modify the file."""
-
-    print_step("Running clarification via AI backend")
-    print_info(f"Using agent: {state.subagent_names['planner']}")
-    console.print()
-
-    # Use streaming mode - backend operates non-interactively, prompt contains all context
-    success, _output = backend.run_streaming(prompt, subagent=state.subagent_names["planner"])
-
-    console.print()
-    if success:
-        print_success("Clarification phase completed!")
-        console.print()
-        print_info(
-            "The plan file has been updated with clarification Q&A (if any questions were asked)"
-        )
-    else:
-        print_warning("Clarification phase encountered an issue, but continuing...")
-
-    return True
 
 
 def _save_plan_from_output(plan_path: Path, state: WorkflowState) -> None:
