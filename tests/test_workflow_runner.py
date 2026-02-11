@@ -1221,7 +1221,7 @@ class TestDetectContextConflict:
         assert "Additional context here" in prompt  # user context
         assert "CONFLICT:" in prompt  # expected response format
 
-    def test_calls_auggie_with_planner_agent(self, ticket, workflow_state):
+    def test_calls_auggie_with_no_subagent(self, ticket, workflow_state):
         mock_auggie = MagicMock()
         mock_auggie.run_with_callback.return_value = (
             True,
@@ -1231,7 +1231,7 @@ class TestDetectContextConflict:
         _detect_context_conflict(ticket, "Additional context here", mock_auggie, workflow_state)
 
         call_kwargs = mock_auggie.run_with_callback.call_args[1]
-        assert call_kwargs["subagent"] == workflow_state.subagent_names["planner"]
+        assert call_kwargs["subagent"] is None
 
     def test_detects_conflict_when_llm_returns_yes(self, ticket, workflow_state):
         mock_auggie = MagicMock()

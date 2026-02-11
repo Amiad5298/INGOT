@@ -136,12 +136,11 @@ def _run_interactive_qa_loop(
     Returns list of ClarificationQA pairs collected.
     """
     qa_pairs: list[ClarificationQA] = []
-    plan_content = plan_path.read_text()
 
     for round_num in range(1, MAX_CLARIFICATION_ROUNDS + 1):
         # Build prompt for this round
         prompt = _build_single_question_prompt(
-            plan_content=plan_content,
+            plan_path=plan_path,
             state=state,
             previous_qa=qa_pairs,
             round_num=round_num,
@@ -222,7 +221,7 @@ def _rewrite_plan_with_clarifications(
     original_length = len(original_content)
 
     # Build rewrite prompt
-    prompt = _build_rewrite_prompt(original_content, qa_pairs, plan_path)
+    prompt = _build_rewrite_prompt(plan_path, qa_pairs)
 
     success, output = backend.run_with_callback(
         prompt,
@@ -270,7 +269,7 @@ def _rewrite_plan_with_clarifications(
 
 
 def _build_single_question_prompt(
-    plan_content: str,
+    plan_path: Path,
     state: WorkflowState,
     previous_qa: list[ClarificationQA],
     round_num: int,
@@ -305,11 +304,9 @@ Previously asked questions and answers:
 
     return f"""You are reviewing an implementation plan and asking clarification questions ONE AT A TIME.
 
-Here is the implementation plan:
+Implementation plan file: {plan_path}
+Read the plan file before asking your question.
 
----
-{plan_content}
----
 {conflict_context}{qa_context}
 Ask a SINGLE clarification question about any ambiguous or unclear aspect of the plan:
 - Requirements that could be interpreted multiple ways
@@ -326,9 +323,8 @@ IMPORTANT RULES:
 
 
 def _build_rewrite_prompt(
-    plan_content: str,
-    qa_pairs: list[ClarificationQA],
     plan_path: Path,
+    qa_pairs: list[ClarificationQA],
 ) -> str:
     """Build prompt for rewriting the plan with clarifications."""
     qa_section = []
@@ -340,9 +336,8 @@ def _build_rewrite_prompt(
     return f"""Rewrite the implementation plan to incorporate the following clarifications.
 
 CURRENT PLAN:
----
-{plan_content}
----
+File: {plan_path}
+Read the current plan file before rewriting.
 
 CLARIFICATIONS COLLECTED:
 {"\n".join(qa_section)}

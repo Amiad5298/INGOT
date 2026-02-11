@@ -47,7 +47,6 @@ from ingot.workflow.step3_execute import step_3_execute
 from ingot.workflow.task_memory import (
     TaskMemory,
     build_pattern_context,
-    capture_task_memory,
     find_related_task_memories,
 )
 from ingot.workflow.tasks import (
@@ -86,7 +85,6 @@ __all__ = [
     "format_task_list",
     # Task Memory
     "TaskMemory",
-    "capture_task_memory",
     "find_related_task_memories",
     "build_pattern_context",
     # Events

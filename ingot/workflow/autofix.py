@@ -21,6 +21,8 @@ from ingot.utils.console import (
 if TYPE_CHECKING:
     from ingot.workflow.state import WorkflowState
 
+_MAX_REVIEW_FEEDBACK_LENGTH = 3000
+
 
 def run_auto_fix(
     state: WorkflowState,
@@ -45,6 +47,15 @@ def run_auto_fix(
         False if agent crashed or was cancelled
     """
     print_step("Attempting auto-fix based on review feedback...")
+
+    if len(review_feedback) > _MAX_REVIEW_FEEDBACK_LENGTH:
+        cut = review_feedback[:_MAX_REVIEW_FEEDBACK_LENGTH].rfind("\n")
+        if cut <= 0:
+            cut = _MAX_REVIEW_FEEDBACK_LENGTH
+        review_feedback = (
+            review_feedback[:cut]
+            + "\n\n... [review feedback truncated — focus on the issues listed above]"
+        )
 
     prompt = f"""Fix the following issues identified during code review:
 

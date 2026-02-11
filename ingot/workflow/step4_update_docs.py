@@ -617,10 +617,24 @@ def _build_doc_update_prompt(state: WorkflowState, diff_result: DiffResult) -> s
 
     # Truncate full diff to avoid context overflow
     diff_content = diff_result.diff
-    truncated_diff = diff_content[:MAX_DIFF_SIZE]
-    truncation_note = ""
-    if len(diff_content) > MAX_DIFF_SIZE:
+    diff_was_truncated = len(diff_content) > MAX_DIFF_SIZE
+    if diff_was_truncated:
+        cut = diff_content[:MAX_DIFF_SIZE].rfind("\n")
+        if cut <= 0:
+            cut = MAX_DIFF_SIZE
+        truncated_diff = diff_content[:cut]
         truncation_note = "\n\n... (diff truncated due to size - see Changed Files and Statistics above for full scope)"
+    else:
+        truncated_diff = diff_content
+        truncation_note = ""
+
+    # Only include changed files list and diffstat when diff is truncated
+    # (they're redundant when the full diff is present)
+    context_sections = ""
+    if diff_was_truncated:
+        context_sections = f"{changed_files_section}{diffstat_section}"
+    # Always include untracked files (they're not in diffs)
+    context_sections += untracked_section
 
     return f"""Update documentation for: {state.ticket.id}
 
@@ -643,7 +657,7 @@ Documentation files include:
 
 Any changes to non-documentation files will be automatically reverted.
 
-{changed_files_section}{diffstat_section}{untracked_section}## Code Changes (git diff)
+{context_sections}## Code Changes (git diff)
 ```diff
 {truncated_diff}{truncation_note}
 ```

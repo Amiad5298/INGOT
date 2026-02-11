@@ -631,11 +631,10 @@ class TestOfferCommitInstructions:
 
 
 class TestExecuteFallback:
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     def test_executes_tasks_sequentially(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         mock_execute.return_value = True
 
@@ -657,11 +656,10 @@ class TestExecuteFallback:
 
         assert mock_execute.call_count == 2
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     def test_marks_tasks_complete_on_success(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         mock_execute.return_value = True
 
@@ -681,11 +679,10 @@ class TestExecuteFallback:
         mock_mark.assert_called_once()
         assert "Task 1" in workflow_state.completed_tasks
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     def test_tracks_failed_tasks(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         mock_execute.side_effect = [True, False, True]
 
@@ -708,59 +705,10 @@ class TestExecuteFallback:
 
         assert failed == ["Task 2"]
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
-    @patch("ingot.workflow.step3_execute.mark_task_complete")
-    @patch("ingot.workflow.step3_execute._execute_task_with_callback")
-    def test_calls_capture_task_memory_on_success(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
-    ):
-        mock_execute.return_value = True
-
-        tasks = [Task(name="Task 1", status=TaskStatus.PENDING)]
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-
-        _execute_fallback(
-            workflow_state,
-            tasks,
-            workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(),
-            log_dir,
-            backend=mock_backend,
-        )
-
-        mock_capture.assert_called_once()
-
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
-    @patch("ingot.workflow.step3_execute.mark_task_complete")
-    @patch("ingot.workflow.step3_execute._execute_task_with_callback")
-    def test_handles_capture_task_memory_exceptions(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
-    ):
-        mock_execute.return_value = True
-        mock_capture.side_effect = RuntimeError("Memory capture failed")
-
-        tasks = [Task(name="Task 1", status=TaskStatus.PENDING)]
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-
-        # Should not raise
-        failed = _execute_fallback(
-            workflow_state,
-            tasks,
-            workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(),
-            log_dir,
-            backend=mock_backend,
-        )
-
-        assert failed == []  # Task still counts as success
-
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     def test_respects_fail_fast_option(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         mock_execute.side_effect = [True, False, True]
         workflow_state.fail_fast = True
@@ -786,11 +734,10 @@ class TestExecuteFallback:
         assert mock_execute.call_count == 2
         assert failed == ["Task 2"]
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     def test_returns_list_of_failed_task_names(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         mock_execute.side_effect = [False, True, False]
 
@@ -815,7 +762,6 @@ class TestExecuteFallback:
 
 
 class TestExecuteWithTui:
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     @patch("ingot.ui.tui.TaskRunnerUI")
@@ -824,7 +770,6 @@ class TestExecuteWithTui:
         mock_tui_class,
         mock_execute,
         mock_mark,
-        mock_capture,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -851,7 +796,6 @@ class TestExecuteWithTui:
         mock_tui_class.assert_called_once_with(ticket_id="TEST-123", verbose_mode=False)
         mock_tui.initialize_records.assert_called_once_with(["Task 1"])
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     @patch("ingot.ui.tui.TaskRunnerUI")
@@ -860,7 +804,6 @@ class TestExecuteWithTui:
         mock_tui_class,
         mock_execute,
         mock_mark,
-        mock_capture,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -887,7 +830,6 @@ class TestExecuteWithTui:
         mock_mark.assert_called_once()
         assert "Task 1" in workflow_state.completed_tasks
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     @patch("ingot.ui.tui.TaskRunnerUI")
@@ -896,7 +838,6 @@ class TestExecuteWithTui:
         mock_tui_class,
         mock_execute,
         mock_mark,
-        mock_capture,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -925,7 +866,6 @@ class TestExecuteWithTui:
 
         assert failed == ["Task 2"]
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     @patch("ingot.ui.tui.TaskRunnerUI")
@@ -934,7 +874,6 @@ class TestExecuteWithTui:
         mock_tui_class,
         mock_execute,
         mock_mark,
-        mock_capture,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -966,45 +905,6 @@ class TestExecuteWithTui:
         # Should stop after Task 2 fails
         assert mock_execute.call_count == 2
         mock_tui.mark_remaining_skipped.assert_called()
-
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
-    @patch("ingot.workflow.step3_execute.mark_task_complete")
-    @patch("ingot.workflow.step3_execute._execute_task_with_callback")
-    @patch("ingot.ui.tui.TaskRunnerUI")
-    def test_handles_capture_task_memory_exceptions(
-        self,
-        mock_tui_class,
-        mock_execute,
-        mock_mark,
-        mock_capture,
-        mock_backend,
-        workflow_state,
-        tmp_path,
-    ):
-        mock_tui = MagicMock()
-        mock_tui.check_quit_requested.return_value = False
-        mock_record = MagicMock(elapsed_time=1.0)
-        mock_record.log_buffer = MagicMock()
-        mock_tui.get_record.return_value = mock_record
-        mock_tui_class.return_value = mock_tui
-        mock_execute.return_value = True
-        mock_capture.side_effect = RuntimeError("Memory capture failed")
-
-        tasks = [Task(name="Task 1", status=TaskStatus.PENDING)]
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-
-        # Should not raise
-        failed = _execute_with_tui(
-            workflow_state,
-            tasks,
-            workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(),
-            log_dir,
-            backend=mock_backend,
-        )
-
-        assert failed == []  # Task still counts as success
 
 
 class TestStep3Execute:
@@ -1301,7 +1201,6 @@ class TestStep3Execute:
         mock_commit.assert_called_once()
 
     @patch("ingot.workflow.step3_execute.prompt_confirm")
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
     @patch("ingot.ui.tui.TaskRunnerUI")
@@ -1310,7 +1209,6 @@ class TestStep3Execute:
         mock_tui_class,
         mock_execute,
         mock_mark,
-        mock_capture,
         mock_confirm,
         mock_backend,
         workflow_state,
@@ -1560,11 +1458,10 @@ class TestTwoPhaseExecution:
 
 
 class TestParallelExecution:
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_uses_thread_pool_executor(
-        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
@@ -1591,11 +1488,10 @@ class TestParallelExecution:
         # Both tasks should be executed
         assert mock_execute_retry.call_count == 2
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_respects_max_parallel_tasks(
-        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
@@ -1619,11 +1515,10 @@ class TestParallelExecution:
         assert failed == []
         assert mock_execute_retry.call_count == 5
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_collects_failed_tasks(
-        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
@@ -1650,11 +1545,10 @@ class TestParallelExecution:
         assert len(failed) == 1
         assert "Failed Task" in failed
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_marks_successful_tasks_complete(
-        self, mock_execute_retry, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute_retry, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
@@ -1776,64 +1670,11 @@ class TestTaskRetry:
         assert result is False
 
 
-class TestParallelTaskMemorySkipped:
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
-    @patch("ingot.workflow.step3_execute.mark_task_complete")
-    @patch("ingot.workflow.step3_execute._execute_task_with_retry")
-    def test_parallel_fallback_skips_memory_capture(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
-    ):
-        from ingot.workflow.step3_execute import _execute_parallel_fallback
-
-        mock_execute.return_value = True
-
-        tasks = [Task(name="Parallel Task 1", status=TaskStatus.PENDING)]
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-
-        _execute_parallel_fallback(
-            workflow_state,
-            tasks,
-            workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(),
-            log_dir,
-            backend=mock_backend,
-        )
-
-        # Memory capture should NOT be called for parallel tasks
-        mock_capture.assert_not_called()
-
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
-    @patch("ingot.workflow.step3_execute.mark_task_complete")
-    @patch("ingot.workflow.step3_execute._execute_task_with_retry")
-    def test_sequential_fallback_calls_memory_capture(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
-    ):
-        mock_execute.return_value = True
-
-        tasks = [Task(name="Sequential Task 1", status=TaskStatus.PENDING)]
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-
-        _execute_fallback(
-            workflow_state,
-            tasks,
-            workflow_state.get_plan_path(),
-            workflow_state.get_tasklist_path(),
-            log_dir,
-            backend=mock_backend,
-        )
-
-        # Memory capture SHOULD be called for sequential tasks
-        mock_capture.assert_called_once()
-
-
 class TestParallelFailFast:
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_fail_fast_stops_pending_tasks(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
@@ -1862,11 +1703,10 @@ class TestParallelFailFast:
         # Task 1 should fail, others should be skipped
         assert "Task 1" in failed
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_no_fail_fast_continues_after_failure(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         from ingot.workflow.step3_execute import _execute_parallel_fallback
 
@@ -1895,11 +1735,10 @@ class TestParallelFailFast:
         assert mock_execute.call_count == 3
         assert failed == ["Task 1"]
 
-    @patch("ingot.workflow.step3_execute.capture_task_memory")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_stop_flag_prevents_new_task_execution(
-        self, mock_execute, mock_mark, mock_capture, mock_backend, workflow_state, tmp_path
+        self, mock_execute, mock_mark, mock_backend, workflow_state, tmp_path
     ):
         import threading
 

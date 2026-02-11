@@ -9,7 +9,7 @@ Tests cover:
 
 import pytest
 
-from ingot.workflow.autofix import _run_auto_fix, run_auto_fix
+from ingot.workflow.autofix import _MAX_REVIEW_FEEDBACK_LENGTH, _run_auto_fix, run_auto_fix
 from ingot.workflow.state import WorkflowState
 
 
@@ -96,6 +96,52 @@ class TestRunAutoFix:
         call_args = mock_backend.run_with_callback.call_args
         prompt = call_args[0][0]
         assert "Do NOT commit" in prompt
+
+
+class TestReviewFeedbackTruncation:
+    def test_truncates_long_feedback(self, mock_backend, workflow_state, log_dir):
+        mock_backend.run_with_callback.return_value = (True, "Done")
+
+        overflow = _MAX_REVIEW_FEEDBACK_LENGTH + 2000
+        long_feedback = "x" * overflow
+        run_auto_fix(workflow_state, long_feedback, log_dir, mock_backend)
+
+        call_args = mock_backend.run_with_callback.call_args
+        prompt = call_args[0][0]
+        # Full feedback must not appear, but truncated portion must
+        assert long_feedback not in prompt
+        assert "x" * _MAX_REVIEW_FEEDBACK_LENGTH in prompt
+        assert "review feedback truncated" in prompt
+
+    def test_truncates_at_newline_boundary(self, mock_backend, workflow_state, log_dir):
+        mock_backend.run_with_callback.return_value = (True, "Done")
+
+        # Build feedback with newlines so truncation snaps to line boundary
+        line = "issue line\n"
+        repeat_count = (_MAX_REVIEW_FEEDBACK_LENGTH // len(line)) + 100
+        long_feedback = line * repeat_count  # well over the limit
+        run_auto_fix(workflow_state, long_feedback, log_dir, mock_backend)
+
+        call_args = mock_backend.run_with_callback.call_args
+        prompt = call_args[0][0]
+        assert "review feedback truncated" in prompt
+        # Should cut at a newline, not mid-word
+        truncated_part = prompt.split("... [review feedback truncated")[0]
+        feedback_part = truncated_part.split(
+            "Fix the following issues identified during code review:\n\n"
+        )[1]
+        assert feedback_part.endswith("\n\n")
+
+    def test_short_feedback_unchanged(self, mock_backend, workflow_state, log_dir):
+        mock_backend.run_with_callback.return_value = (True, "Done")
+
+        short_feedback = "Missing test for function foo()"
+        run_auto_fix(workflow_state, short_feedback, log_dir, mock_backend)
+
+        call_args = mock_backend.run_with_callback.call_args
+        prompt = call_args[0][0]
+        assert short_feedback in prompt
+        assert "truncated" not in prompt
 
 
 class TestBackwardsCompatibility:

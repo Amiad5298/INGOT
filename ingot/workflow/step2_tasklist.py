@@ -264,13 +264,11 @@ def _generate_tasklist(
     Captures AI output and persists the task list to disk, even if the AI
     does not create/write the file itself.
     """
-    plan_content = plan_path.read_text()
-
     # Minimal prompt - subagent has detailed instructions
     prompt = f"""Generate task list for: {state.ticket.id}
 
-Implementation Plan:
-{plan_content}
+Implementation plan: {plan_path}
+Read the plan file before generating the task list.
 
 Create an executable task list with FUNDAMENTAL and INDEPENDENT categories."""
 
@@ -398,10 +396,11 @@ def _post_process_tasklist(state: WorkflowState, tasklist_path: Path, backend: A
         log_message("No test keywords found in Fundamental section, skipping post-processing")
         return True
 
-    # Build prompt with the task list content
+    # Build prompt referencing task list file path
     prompt = f"""Refine this task list by extracting test-related work from FUNDAMENTAL to INDEPENDENT:
 
-{tasklist_content}
+Task list file: {tasklist_path}
+Read the current task list file before refining.
 
 Output ONLY the refined task list markdown."""
 

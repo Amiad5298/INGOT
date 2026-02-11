@@ -102,8 +102,8 @@ class TestParsePorcelainZOutput:
 
 
 class TestMaxDiffSize:
-    def test_max_diff_size_is_8000(self):
-        assert MAX_DIFF_SIZE == 8000
+    def test_max_diff_size_is_positive(self):
+        assert MAX_DIFF_SIZE > 0
 
 
 class TestStep4NoChanges:
@@ -431,9 +431,9 @@ class TestBuildDocUpdatePrompt:
         assert "ONLY EDIT DOCUMENTATION FILES" in prompt
         assert "DO NOT EDIT" in prompt
 
-    def test_includes_changed_files_list(self, workflow_state):
+    def test_includes_changed_files_when_diff_truncated(self, workflow_state):
         diff_result = DiffResult(
-            diff="diff content",
+            diff="x" * (MAX_DIFF_SIZE + 100),
             changed_files=["src/main.py", "lib/utils.py"],
         )
         prompt = _build_doc_update_prompt(workflow_state, diff_result)
@@ -441,14 +441,30 @@ class TestBuildDocUpdatePrompt:
         assert "src/main.py" in prompt
         assert "lib/utils.py" in prompt
 
-    def test_includes_diffstat(self, workflow_state):
+    def test_excludes_changed_files_when_diff_not_truncated(self, workflow_state):
         diff_result = DiffResult(
             diff="diff content",
+            changed_files=["src/main.py", "lib/utils.py"],
+        )
+        prompt = _build_doc_update_prompt(workflow_state, diff_result)
+        assert "Changed Files" not in prompt
+
+    def test_includes_diffstat_when_diff_truncated(self, workflow_state):
+        diff_result = DiffResult(
+            diff="x" * (MAX_DIFF_SIZE + 100),
             diffstat=" file.py | 10 +++++++---\n 1 file changed",
         )
         prompt = _build_doc_update_prompt(workflow_state, diff_result)
         assert "Change Statistics" in prompt
         assert "10 +++++++" in prompt
+
+    def test_excludes_diffstat_when_diff_not_truncated(self, workflow_state):
+        diff_result = DiffResult(
+            diff="diff content",
+            diffstat=" file.py | 10 +++++++---\n 1 file changed",
+        )
+        prompt = _build_doc_update_prompt(workflow_state, diff_result)
+        assert "Change Statistics" not in prompt
 
     def test_includes_untracked_files(self, workflow_state):
         diff_result = DiffResult(

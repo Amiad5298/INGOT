@@ -88,10 +88,11 @@ def detect_context_conflict(
     log_message("Running conflict detection between ticket and user context")
 
     try:
-        # Use run_with_callback with a no-op callback to capture output silently
+        # Use run_with_callback with a no-op callback to capture output silently.
+        # subagent=None: conflict detection is lightweight triage, not a planning task.
         success, output = backend.run_with_callback(
             prompt,
-            subagent=state.subagent_names["planner"],
+            subagent=None,
             output_callback=_noop_callback,
             dont_save_session=True,
         )

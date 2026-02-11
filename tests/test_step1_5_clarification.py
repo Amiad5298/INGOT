@@ -374,22 +374,23 @@ class TestRewritePlanWithClarifications:
 
 
 class TestBuildSingleQuestionPrompt:
-    def test_includes_plan_content(self, workflow_state):
+    def test_includes_plan_path_reference(self, workflow_state):
         result = _build_single_question_prompt(
-            plan_content="# My Plan",
+            plan_path=Path("/tmp/plan.md"),
             state=workflow_state,
             previous_qa=[],
             round_num=1,
         )
 
-        assert "# My Plan" in result
+        assert "/tmp/plan.md" in result
+        assert "Read the plan file" in result
 
     def test_includes_conflict_context_in_first_round(self, workflow_state):
         workflow_state.conflict_detected = True
         workflow_state.conflict_summary = "Ticket says add, user says remove."
 
         result = _build_single_question_prompt(
-            plan_content="# Plan",
+            plan_path=Path("/tmp/plan.md"),
             state=workflow_state,
             previous_qa=[],
             round_num=1,
@@ -404,7 +405,7 @@ class TestBuildSingleQuestionPrompt:
         workflow_state.conflict_summary = "Some conflict."
 
         result = _build_single_question_prompt(
-            plan_content="# Plan",
+            plan_path=Path("/tmp/plan.md"),
             state=workflow_state,
             previous_qa=[],
             round_num=2,
@@ -416,7 +417,7 @@ class TestBuildSingleQuestionPrompt:
         qa = [ClarificationQA(question="What DB?", answer="PostgreSQL")]
 
         result = _build_single_question_prompt(
-            plan_content="# Plan",
+            plan_path=Path("/tmp/plan.md"),
             state=workflow_state,
             previous_qa=qa,
             round_num=2,
@@ -427,7 +428,7 @@ class TestBuildSingleQuestionPrompt:
 
     def test_includes_sentinel(self, workflow_state):
         result = _build_single_question_prompt(
-            plan_content="# Plan",
+            plan_path=Path("/tmp/plan.md"),
             state=workflow_state,
             previous_qa=[],
             round_num=1,
@@ -439,7 +440,7 @@ class TestBuildSingleQuestionPrompt:
         workflow_state.conflict_detected = False
 
         result = _build_single_question_prompt(
-            plan_content="# Plan",
+            plan_path=Path("/tmp/plan.md"),
             state=workflow_state,
             previous_qa=[],
             round_num=1,
@@ -452,7 +453,7 @@ class TestBuildSingleQuestionPrompt:
         workflow_state.conflict_summary = ""
 
         result = _build_single_question_prompt(
-            plan_content="# Plan",
+            plan_path=Path("/tmp/plan.md"),
             state=workflow_state,
             previous_qa=[],
             round_num=1,
@@ -462,18 +463,18 @@ class TestBuildSingleQuestionPrompt:
 
 
 class TestBuildRewritePrompt:
-    def test_includes_plan_and_qa(self):
+    def test_includes_plan_path_and_qa(self):
         qa = [ClarificationQA(question="What DB?", answer="PostgreSQL")]
-        result = _build_rewrite_prompt("# Plan content", qa, Path("plan.md"))
+        result = _build_rewrite_prompt(Path("plan.md"), qa)
 
-        assert "# Plan content" in result
+        assert "plan.md" in result
+        assert "Read the current plan file" in result
         assert "What DB?" in result
         assert "PostgreSQL" in result
-        assert "plan.md" in result
 
     def test_includes_instructions(self):
         qa = [ClarificationQA(question="Q?", answer="A")]
-        result = _build_rewrite_prompt("# Plan", qa, Path("plan.md"))
+        result = _build_rewrite_prompt(Path("plan.md"), qa)
 
         assert "Clarifications Log" in result
         assert "Do NOT remove" in result

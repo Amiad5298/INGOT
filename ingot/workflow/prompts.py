@@ -6,11 +6,16 @@ the task execution and post-implementation phases.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ingot.workflow.tasks import PathSecurityError, normalize_path
+
 if TYPE_CHECKING:
     from ingot.workflow.tasks import Task
+
+logger = logging.getLogger(__name__)
 
 
 def build_task_prompt(
@@ -22,6 +27,10 @@ def build_task_prompt(
     - Reduce token usage and context window pressure
     - Let the agent retrieve only relevant sections via codebase-retrieval
     - Avoid prompt bloat in parallel execution scenarios
+
+    Note: This relies on the backend agent (Auggie, Claude Code, Cursor) having
+    native file-reading tools. All supported backends run as CLI subprocesses in
+    the repo working directory with built-in filesystem access.
 
     Args:
         task: Task to execute
@@ -50,10 +59,18 @@ Use codebase-retrieval to read relevant sections of the plan as needed."""
 
 Use codebase-retrieval to understand existing patterns before making changes."""
 
-    # Add target files if task has them
+    # Add target files if task has them (validate paths to prevent traversal)
     if task.target_files:
-        files_list = "\n".join(f"- {f}" for f in task.target_files)
-        prompt += f"""
+        repo_root = Path.cwd()
+        safe_files = []
+        for f in task.target_files:
+            try:
+                safe_files.append(normalize_path(f, repo_root))
+            except PathSecurityError:
+                logger.warning("Skipping target file with unsafe path: %s", f)
+        if safe_files:
+            files_list = "\n".join(f"- {f}" for f in safe_files)
+            prompt += f"""
 
 Target files for this task:
 {files_list}

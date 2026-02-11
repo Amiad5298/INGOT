@@ -83,7 +83,6 @@ from ingot.workflow.prompts import (
 )
 from ingot.workflow.review import run_phase_review as _run_phase_review
 from ingot.workflow.state import WorkflowState
-from ingot.workflow.task_memory import capture_task_memory
 from ingot.workflow.tasks import (
     Task,
     get_pending_fundamental_tasks,
@@ -431,12 +430,6 @@ def _execute_with_tui(
             if success:
                 mark_task_complete(tasklist_path, task.name)
                 state.mark_task_complete(task.name)
-                try:
-                    capture_task_memory(task, state)
-                except Exception as e:
-                    # Log to buffer, don't print
-                    if record.log_buffer:
-                        record.log_buffer.write(f"[WARNING] Failed to capture task memory: {e}")
             else:
                 failed_tasks.append(task.name)
                 if state.fail_fast:
@@ -488,10 +481,6 @@ def _execute_fallback(
             mark_task_complete(tasklist_path, task.name)
             state.mark_task_complete(task.name)
             print_success(f"Task completed: {task.name}")
-            try:
-                capture_task_memory(task, state)
-            except Exception as e:
-                print_warning(f"Failed to capture task memory (analytics): {e}")
         else:
             failed_tasks.append(task.name)
             print_warning(f"Task returned failure: {task.name}")
