@@ -365,10 +365,10 @@ class TestStep1TUIIntegration:
 
         # Act - note: new signature is (state, plan_path, backend)
         plan_path = workflow_state.get_plan_path()
-        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
+        success, output = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         # Assert
-        assert result is True
+        assert success is True
         mock_ui_class.assert_called_once()
         mock_backend.run_with_callback.assert_called_once()
 
@@ -396,10 +396,10 @@ class TestStep1TUIIntegration:
 
         # Act - note: new signature is (state, plan_path, backend)
         plan_path = workflow_state.get_plan_path()
-        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
+        success, output = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
         # Assert - should return False due to quit
-        assert result is False
+        assert success is False
 
     def test_creates_log_directory(self, tmp_path: Path, monkeypatch):
         from ingot.workflow.step1_plan import _create_plan_log_dir

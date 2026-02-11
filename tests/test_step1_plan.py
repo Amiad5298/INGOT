@@ -96,9 +96,9 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
+        success, output = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
-        assert result is True
+        assert success is True
 
     @patch("ingot.ui.tui.TaskRunnerUI")
     def test_returns_false_when_user_requests_quit(
@@ -114,9 +114,9 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
+        success, output = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
-        assert result is False
+        assert success is False
 
     @patch("ingot.ui.tui.TaskRunnerUI")
     def test_log_path_is_set_on_ui(
@@ -174,9 +174,9 @@ class TestGeneratePlanWithTui:
 
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
 
-        result = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
+        success, output = _generate_plan_with_tui(workflow_state, plan_path, mock_backend)
 
-        assert result is False
+        assert success is False
 
     @patch("ingot.ui.tui.TaskRunnerUI")
     def test_dont_save_session_flag_is_passed(
@@ -358,7 +358,7 @@ class TestStep1CreatePlanTuiMode:
     ):
         monkeypatch.chdir(tmp_path)
         mock_should_tui.return_value = True
-        mock_generate.return_value = True
+        mock_generate.return_value = (True, "# Plan")
         mock_confirm.return_value = True
 
         # Create plan file to simulate successful generation
@@ -368,7 +368,7 @@ class TestStep1CreatePlanTuiMode:
         def create_plan(*args, **kwargs):
             specs_dir.mkdir(parents=True, exist_ok=True)
             plan_path.write_text("# Plan")
-            return True
+            return True, "# Plan"
 
         mock_generate.side_effect = create_plan
         workflow_state.skip_clarification = True
@@ -392,7 +392,7 @@ class TestStep1CreatePlanTuiMode:
         def create_plan(*args, **kwargs):
             specs_dir.mkdir(parents=True, exist_ok=True)
             plan_path.write_text("# Plan")
-            return True
+            return True, "# Plan"
 
         mock_generate.side_effect = create_plan
         workflow_state.skip_clarification = True
@@ -406,7 +406,7 @@ class TestStep1CreatePlanTuiMode:
         self, mock_generate, workflow_state, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        mock_generate.return_value = False  # Generation fails
+        mock_generate.return_value = (False, "")  # Generation fails
 
         result = step_1_create_plan(workflow_state, MagicMock())
 
@@ -429,7 +429,7 @@ class TestStep1CreatePlanFileHandling:
         def create_plan(*args, **kwargs):
             specs_dir.mkdir(parents=True, exist_ok=True)
             plan_path.write_text("# Generated Plan")
-            return True
+            return True, "# Generated Plan"
 
         mock_generate.side_effect = create_plan
         workflow_state.skip_clarification = True
@@ -454,7 +454,7 @@ class TestStep1CreatePlanFileHandling:
         monkeypatch,
     ):
         monkeypatch.chdir(tmp_path)
-        mock_generate.return_value = True  # Success but no file
+        mock_generate.return_value = (True, "# Plan output")  # Success but no file
         mock_confirm.return_value = True
 
         specs_dir = tmp_path / "specs"
@@ -462,7 +462,7 @@ class TestStep1CreatePlanFileHandling:
         specs_dir / "TEST-123-plan.md"
 
         # Mock _save_plan_from_output to create the file
-        def create_plan_file(path, state):
+        def create_plan_file(path, state, *, output=""):
             path.write_text("# Fallback Plan")
 
         mock_save_plan.side_effect = create_plan_file
@@ -479,7 +479,7 @@ class TestStep1CreatePlanFileHandling:
         self, mock_generate, mock_save_plan, mock_print_error, workflow_state, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        mock_generate.return_value = True  # Generation succeeds but no file
+        mock_generate.return_value = (True, "# Plan output")  # Generation succeeds but no file
 
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir(parents=True, exist_ok=True)
@@ -517,7 +517,7 @@ class TestStep1CreatePlanConfirmation:
         def create_plan(*args, **kwargs):
             specs_dir.mkdir(parents=True, exist_ok=True)
             plan_path.write_text("# Plan")
-            return True
+            return True, "# Plan"
 
         mock_generate.side_effect = create_plan
         workflow_state.skip_clarification = True
@@ -541,7 +541,7 @@ class TestStep1CreatePlanConfirmation:
         def create_plan(*args, **kwargs):
             specs_dir.mkdir(parents=True, exist_ok=True)
             plan_path.write_text("# Plan")
-            return True
+            return True, "# Plan"
 
         mock_generate.side_effect = create_plan
         workflow_state.skip_clarification = True
@@ -565,7 +565,7 @@ class TestStep1CreatePlanConfirmation:
         def create_plan(*args, **kwargs):
             specs_dir.mkdir(parents=True, exist_ok=True)
             plan_path.write_text("# Plan")
-            return True
+            return True, "# Plan"
 
         mock_generate.side_effect = create_plan
         workflow_state.skip_clarification = True
@@ -591,7 +591,7 @@ class TestStep1CreatePlanConfirmation:
         def create_plan(*args, **kwargs):
             specs_dir.mkdir(parents=True, exist_ok=True)
             plan_path.write_text("# Plan")
-            return True
+            return True, "# Plan"
 
         mock_generate.side_effect = create_plan
         workflow_state.skip_clarification = True

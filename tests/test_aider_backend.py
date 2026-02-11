@@ -154,6 +154,7 @@ class TestAiderBackendDelegation:
             subagent=None,
             model=None,
             timeout_seconds=None,
+            plan_mode=False,
         )
         assert success is True
         assert output == "streaming output"

@@ -167,6 +167,7 @@ class AIBackend(Protocol):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute prompt with streaming output (non-interactive).
 
@@ -180,6 +181,8 @@ class AIBackend(Protocol):
             model: Model override (best-effort, safely ignored if unsupported).
             dont_save_session: If True, isolate this execution (no session persistence).
             timeout_seconds: Maximum execution time (None = no timeout).
+            plan_mode: If True, enable provider plan/architect mode for read-only
+                analysis. Backends map this to provider-specific flags.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
@@ -195,6 +198,7 @@ class AIBackend(Protocol):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute prompt (non-interactive) and return output.
 
@@ -211,6 +215,7 @@ class AIBackend(Protocol):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Execute prompt quietly (non-interactive) and return output only.
 
@@ -230,6 +235,7 @@ class AIBackend(Protocol):
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute prompt in streaming/print mode (non-interactive).
 
@@ -599,6 +605,7 @@ class BaseBackend(ABC):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute prompt with streaming output (non-interactive).
 
@@ -617,6 +624,7 @@ class BaseBackend(ABC):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute prompt (non-interactive) and return output."""
         ...
@@ -630,6 +638,7 @@ class BaseBackend(ABC):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Execute prompt quietly (non-interactive) and return output only."""
         ...
@@ -642,6 +651,7 @@ class BaseBackend(ABC):
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute prompt in streaming/print mode (non-interactive)."""
         ...

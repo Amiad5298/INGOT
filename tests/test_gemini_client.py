@@ -18,7 +18,7 @@ class TestGeminiClientBuildCommand:
         cmd = client.build_command("test prompt")
 
         assert cmd[0] == "gemini"
-        assert "--yolo" in cmd
+        assert "--approval-mode=yolo" in cmd
         assert "-p" in cmd
         p_idx = cmd.index("-p")
         assert cmd[p_idx + 1] == "test prompt"

@@ -96,6 +96,7 @@ class GeminiBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
@@ -106,6 +107,7 @@ class GeminiBackend(BaseBackend):
             model: Optional model override.
             dont_save_session: Unused (Gemini has no session persistence).
             timeout_seconds: Optional timeout in seconds (None = no timeout).
+            plan_mode: If True, use --approval-mode=plan instead of yolo.
 
         Returns:
             Tuple of (success, output).
@@ -115,10 +117,13 @@ class GeminiBackend(BaseBackend):
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         env, temp_path = self._build_system_prompt_env(subagent_prompt)
+        approval_mode = "plan" if plan_mode else "yolo"
 
         try:
             if timeout_seconds is not None:
-                cmd = self._client.build_command(prompt, model=resolved_model)
+                cmd = self._client.build_command(
+                    prompt, model=resolved_model, approval_mode=approval_mode
+                )
                 exit_code, output = self._run_streaming_with_timeout(
                     cmd,
                     output_callback=output_callback,
@@ -133,6 +138,7 @@ class GeminiBackend(BaseBackend):
                     output_callback=output_callback,
                     model=resolved_model,
                     env=env,
+                    approval_mode=approval_mode,
                 )
         finally:
             if temp_path:
@@ -146,6 +152,7 @@ class GeminiBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Run and return success status and captured output.
 
@@ -154,6 +161,7 @@ class GeminiBackend(BaseBackend):
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         env, temp_path = self._build_system_prompt_env(subagent_prompt)
+        approval_mode = "plan" if plan_mode else "yolo"
 
         try:
             return self._client.run_print_with_output(
@@ -161,6 +169,7 @@ class GeminiBackend(BaseBackend):
                 model=resolved_model,
                 timeout_seconds=timeout_seconds,
                 env=env,
+                approval_mode=approval_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -179,6 +188,7 @@ class GeminiBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Run quietly, return output only.
 
@@ -187,6 +197,7 @@ class GeminiBackend(BaseBackend):
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         env, temp_path = self._build_system_prompt_env(subagent_prompt)
+        approval_mode = "plan" if plan_mode else "yolo"
 
         try:
             return self._client.run_print_quiet(
@@ -194,6 +205,7 @@ class GeminiBackend(BaseBackend):
                 model=resolved_model,
                 timeout_seconds=timeout_seconds,
                 env=env,
+                approval_mode=approval_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -211,6 +223,7 @@ class GeminiBackend(BaseBackend):
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute in streaming mode (non-interactive).
 
@@ -221,6 +234,7 @@ class GeminiBackend(BaseBackend):
             subagent=subagent,
             model=model,
             timeout_seconds=timeout_seconds,
+            plan_mode=plan_mode,
         )
 
     def check_installed(self) -> tuple[bool, str]:
