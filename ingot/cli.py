@@ -474,7 +474,7 @@ def main(
         typer.Option(
             "--backend",
             "-b",
-            help="Override AI backend for this run (auggie, claude, cursor)",
+            help="Override AI backend for this run (auggie, claude, cursor, aider, gemini, codex)",
         ),
     ] = None,
     show_config: Annotated[

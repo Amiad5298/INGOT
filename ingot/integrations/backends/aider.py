@@ -1,66 +1,63 @@
-"""Cursor IDE CLI backend implementation.
+"""Aider CLI backend implementation.
 
-This module provides the CursorBackend class that wraps the CursorClient
+This module provides the AiderBackend class that wraps the AiderClient
 for use with the pluggable multi-agent architecture.
 
-CursorBackend follows the same delegation pattern as ClaudeBackend:
+AiderBackend follows the same delegation pattern as CursorBackend:
 - Extends BaseBackend to inherit shared functionality
 - Implements the AIBackend protocol
-- Wraps the CursorClient (delegation pattern)
+- Wraps the AiderClient (delegation pattern)
 
-Key difference from ClaudeBackend: Cursor has no --append-system-prompt-file
-equivalent. Subagent instructions are embedded directly in the user prompt
-(via _compose_prompt) instead of being passed as a separate system prompt file.
-
-Model resolution and subagent parsing happen ONLY in this backend layer
-(via BaseBackend helpers). The client receives pre-resolved values.
+Like CursorBackend, Aider has no system prompt file equivalent. Subagent
+instructions are embedded directly in the user prompt (via _compose_prompt).
 """
 
 import subprocess
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 
 from ingot.config.fetch_config import AgentPlatform
-from ingot.integrations.backends.base import BaseBackend
-from ingot.integrations.backends.errors import BackendTimeoutError
-from ingot.integrations.cursor import (
-    CursorClient,
-    check_cursor_installed,
+from ingot.integrations.aider import (
+    AiderClient,
+    check_aider_installed,
     looks_like_rate_limit,
 )
+from ingot.integrations.backends.base import BaseBackend
+from ingot.integrations.backends.errors import BackendTimeoutError
 
 
-class CursorBackend(BaseBackend):
-    """Cursor IDE CLI backend implementation.
+class AiderBackend(BaseBackend):
+    """Aider CLI backend implementation.
 
     Extends BaseBackend to inherit shared logic (subagent parsing, model resolution).
-    Wraps the CursorClient for actual CLI execution.
+    Wraps the AiderClient for actual CLI execution.
 
-    Unlike ClaudeBackend which passes system_prompt to the client for file-based
-    injection, CursorBackend composes the full prompt itself (embedding subagent
-    instructions directly in the prompt) before passing to the client.
+    Subagent instructions are embedded directly in the prompt before passing
+    to the client (same approach as CursorBackend).
 
     Attributes:
-        _client: The underlying CursorClient instance for CLI execution.
+        _client: The underlying AiderClient instance for CLI execution.
     """
 
     def __init__(self, model: str = "") -> None:
-        """Initialize the Cursor backend.
+        """Initialize the Aider backend.
 
         Args:
             model: Default model to use for commands.
         """
         super().__init__(model=model)
-        self._client = CursorClient(model=model)
+        self._client = AiderClient(model=model)
 
     @property
     def name(self) -> str:
         """Return the backend name."""
-        return "Cursor"
+        return "Aider"
 
     @property
     def platform(self) -> AgentPlatform:
         """Return the platform identifier."""
-        return AgentPlatform.CURSOR
+        return AgentPlatform.AIDER
 
     @property
     def supports_parallel(self) -> bool:
@@ -81,14 +78,12 @@ class CursorBackend(BaseBackend):
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
-        Uses BaseBackend._run_streaming_with_timeout() for timeout enforcement.
-
         Args:
-            prompt: The prompt to send to Cursor.
+            prompt: The prompt to send to Aider.
             output_callback: Callback function for streaming output.
             subagent: Optional subagent name.
             model: Optional model override.
-            dont_save_session: If True, don't persist the session.
+            dont_save_session: Unused (Aider has no session persistence).
             timeout_seconds: Optional timeout in seconds (None = no timeout).
 
         Returns:
@@ -101,25 +96,31 @@ class CursorBackend(BaseBackend):
         composed_prompt = self._compose_prompt(prompt, subagent_prompt)
 
         if timeout_seconds is not None:
-            cmd = self._client.build_command(
-                composed_prompt,
-                model=resolved_model,
-                print_mode=True,
-                no_save=dont_save_session,
-            )
-            exit_code, output = self._run_streaming_with_timeout(
-                cmd,
-                output_callback=output_callback,
-                timeout_seconds=timeout_seconds,
-            )
-            success = exit_code == 0
-            return success, output
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False, prefix="ingot_aider_"
+            ) as f:
+                f.write(composed_prompt)
+                message_file = f.name
+            try:
+                cmd = self._client.build_command(
+                    composed_prompt,
+                    model=resolved_model,
+                    message_file=message_file,
+                )
+                exit_code, output = self._run_streaming_with_timeout(
+                    cmd,
+                    output_callback=output_callback,
+                    timeout_seconds=timeout_seconds,
+                )
+                success = exit_code == 0
+                return success, output
+            finally:
+                Path(message_file).unlink(missing_ok=True)
         else:
             return self._client.run_with_callback(
                 composed_prompt,
                 output_callback=output_callback,
                 model=resolved_model,
-                no_save=dont_save_session,
             )
 
     def run_print_with_output(
@@ -131,7 +132,7 @@ class CursorBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> tuple[bool, str]:
-        """Run with --print flag, return success status and captured output.
+        """Run and return success status and captured output.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
@@ -142,7 +143,6 @@ class CursorBackend(BaseBackend):
             return self._client.run_print_with_output(
                 composed_prompt,
                 model=resolved_model,
-                no_save=dont_save_session,
                 timeout_seconds=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
@@ -160,7 +160,7 @@ class CursorBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> str:
-        """Run with --print flag quietly, return output only.
+        """Run quietly, return output only.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
@@ -171,7 +171,6 @@ class CursorBackend(BaseBackend):
             return self._client.run_print_quiet(
                 composed_prompt,
                 model=resolved_model,
-                no_save=dont_save_session,
                 timeout_seconds=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
@@ -191,15 +190,6 @@ class CursorBackend(BaseBackend):
         """Execute in streaming mode (non-interactive).
 
         Uses run_print_with_output internally.
-
-        Args:
-            prompt: The prompt to send (with any user input already included).
-            subagent: Optional subagent name.
-            model: Optional model override.
-            timeout_seconds: Optional timeout in seconds.
-
-        Returns:
-            Tuple of (success, full_output).
         """
         return self.run_print_with_output(
             prompt,
@@ -209,27 +199,14 @@ class CursorBackend(BaseBackend):
         )
 
     def check_installed(self) -> tuple[bool, str]:
-        """Check if Cursor CLI is installed.
-
-        Returns:
-            Tuple of (is_installed, version_or_error_message).
-        """
-        return check_cursor_installed()
+        """Check if Aider CLI is installed."""
+        return check_aider_installed()
 
     def detect_rate_limit(self, output: str) -> bool:
-        """Detect if output indicates a rate limit error.
-
-        Args:
-            output: The output string to check.
-
-        Returns:
-            True if output looks like a rate limit error.
-        """
+        """Detect if output indicates a rate limit error."""
         return looks_like_rate_limit(output)
-
-    # supports_parallel_execution() and close() inherited from BaseBackend
 
 
 __all__ = [
-    "CursorBackend",
+    "AiderBackend",
 ]

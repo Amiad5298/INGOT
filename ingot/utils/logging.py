@@ -1,4 +1,4 @@
-"""Logging configuration for INGOT.
+"""Logging configuration and shared CLI utilities for INGOT.
 
 This module provides logging functionality that matches the original
 Bash script's logging behavior, controlled by environment variables.
@@ -10,6 +10,8 @@ Environment Variables:
 
 import logging
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 # Environment variable configuration
@@ -99,6 +101,65 @@ def log_command(command: str, exit_code: int = 0) -> None:
     logger.info(f"COMMAND: {command} | EXIT_CODE: {exit_code}")
 
 
+def check_cli_installed(cli_name: str) -> tuple[bool, str]:
+    """Check if a CLI tool is installed and accessible.
+
+    Shared implementation for check_aider_installed, check_gemini_installed,
+    check_codex_installed, etc. Looks up the CLI in PATH and runs --version.
+
+    Args:
+        cli_name: The CLI executable name (e.g. "aider", "gemini", "codex")
+
+    Returns:
+        (is_valid, message) tuple where message is the version string
+        if installed, or an error message if not.
+    """
+    if shutil.which(cli_name):
+        try:
+            result = subprocess.run(
+                [cli_name, "--version"],
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                timeout=10,
+            )
+            log_command(f"{cli_name} --version", result.returncode)
+
+            version_output = result.stdout.strip() or result.stderr.strip()
+            if result.returncode == 0 and version_output:
+                return True, version_output
+
+        except Exception as e:
+            log_message(f"Failed to check {cli_name} CLI: {e}")
+
+    return False, f"{cli_name} CLI is not installed or not in PATH"
+
+
+def log_backend_metadata(
+    backend_name: str,
+    *,
+    model: str | None = None,
+    timeout: float | None = None,
+) -> None:
+    """Log sanitized backend command metadata for debugging.
+
+    Used by CLI client wrappers to log model/timeout info without
+    leaking prompt contents.
+
+    Args:
+        backend_name: Name of the backend (e.g. "aider", "gemini", "codex")
+        model: Model name if specified
+        timeout: Timeout in seconds if specified
+    """
+    parts: list[str] = []
+    if model:
+        parts.append(f"model={model}")
+    if timeout is not None:
+        parts.append(f"timeout={timeout}s")
+    if parts:
+        log_message(f"  {backend_name} metadata: {', '.join(parts)}")
+
+
 __all__ = [
     "LOG_ENABLED",
     "LOG_FILE",
@@ -106,4 +167,6 @@ __all__ = [
     "get_logger",
     "log_message",
     "log_command",
+    "log_backend_metadata",
+    "check_cli_installed",
 ]

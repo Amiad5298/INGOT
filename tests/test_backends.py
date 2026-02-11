@@ -56,9 +56,10 @@ class TestBackendFactory:
         with pytest.raises(ValueError, match="Manual mode"):
             BackendFactory.create(AgentPlatform.MANUAL)
 
-    def test_aider_backend_raises(self):
-        with pytest.raises(ValueError, match="[Aa]ider"):
-            BackendFactory.create(AgentPlatform.AIDER)
+    def test_aider_backend_creates(self):
+        backend = BackendFactory.create(AgentPlatform.AIDER)
+        assert backend.name == "Aider"
+        assert backend.platform == AgentPlatform.AIDER
 
     def test_create_with_model(self):
         backend = BackendFactory.create(AgentPlatform.AUGGIE, model="gpt-4")

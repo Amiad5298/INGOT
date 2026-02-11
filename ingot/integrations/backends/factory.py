@@ -72,10 +72,19 @@ class BackendFactory:
             backend = CursorBackend(model=model)
 
         elif platform == AgentPlatform.AIDER:
-            # Future: Replace with actual import when AiderBackend is implemented
-            # Note: Uses ValueError (not NotImplementedError) per parent spec line 1976
-            # because Aider support is deferred indefinitely, not a planned phase.
-            raise ValueError("Aider backend not yet implemented")
+            from ingot.integrations.backends.aider import AiderBackend
+
+            backend = AiderBackend(model=model)
+
+        elif platform == AgentPlatform.GEMINI:
+            from ingot.integrations.backends.gemini import GeminiBackend
+
+            backend = GeminiBackend(model=model)
+
+        elif platform == AgentPlatform.CODEX:
+            from ingot.integrations.backends.codex import CodexBackend
+
+            backend = CodexBackend(model=model)
 
         elif platform == AgentPlatform.MANUAL:
             raise ValueError("Manual mode does not use an AI backend")

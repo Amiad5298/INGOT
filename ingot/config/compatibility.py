@@ -16,6 +16,8 @@ MCP_SUPPORT: dict[AgentPlatform, frozenset[Platform]] = {
     AgentPlatform.CLAUDE: frozenset({Platform.JIRA, Platform.LINEAR, Platform.GITHUB}),
     AgentPlatform.CURSOR: frozenset({Platform.JIRA, Platform.LINEAR, Platform.GITHUB}),
     AgentPlatform.AIDER: frozenset(),
+    AgentPlatform.GEMINI: frozenset(),
+    AgentPlatform.CODEX: frozenset(),
     AgentPlatform.MANUAL: frozenset(),
 }
 

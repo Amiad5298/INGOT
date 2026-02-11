@@ -1,73 +1,91 @@
-"""Cursor IDE CLI backend implementation.
+"""Gemini CLI backend implementation.
 
-This module provides the CursorBackend class that wraps the CursorClient
+This module provides the GeminiBackend class that wraps the GeminiClient
 for use with the pluggable multi-agent architecture.
 
-CursorBackend follows the same delegation pattern as ClaudeBackend:
-- Extends BaseBackend to inherit shared functionality
-- Implements the AIBackend protocol
-- Wraps the CursorClient (delegation pattern)
-
-Key difference from ClaudeBackend: Cursor has no --append-system-prompt-file
-equivalent. Subagent instructions are embedded directly in the user prompt
-(via _compose_prompt) instead of being passed as a separate system prompt file.
-
-Model resolution and subagent parsing happen ONLY in this backend layer
-(via BaseBackend helpers). The client receives pre-resolved values.
+GeminiBackend injects subagent instructions via the GEMINI_SYSTEM_MD
+environment variable, which points to a temp file containing the system
+prompt. This is analogous to Claude's --append-system-prompt-file but
+uses an env var instead of a CLI flag.
 """
 
 import subprocess
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 
 from ingot.config.fetch_config import AgentPlatform
 from ingot.integrations.backends.base import BaseBackend
 from ingot.integrations.backends.errors import BackendTimeoutError
-from ingot.integrations.cursor import (
-    CursorClient,
-    check_cursor_installed,
+from ingot.integrations.gemini import (
+    GeminiClient,
+    check_gemini_installed,
     looks_like_rate_limit,
 )
 
 
-class CursorBackend(BaseBackend):
-    """Cursor IDE CLI backend implementation.
+class GeminiBackend(BaseBackend):
+    """Gemini CLI backend implementation.
 
     Extends BaseBackend to inherit shared logic (subagent parsing, model resolution).
-    Wraps the CursorClient for actual CLI execution.
+    Wraps the GeminiClient for actual CLI execution.
 
-    Unlike ClaudeBackend which passes system_prompt to the client for file-based
-    injection, CursorBackend composes the full prompt itself (embedding subagent
-    instructions directly in the prompt) before passing to the client.
+    System prompt injection uses the GEMINI_SYSTEM_MD env var pointing
+    to a temp file, rather than embedding in the user prompt.
 
     Attributes:
-        _client: The underlying CursorClient instance for CLI execution.
+        _client: The underlying GeminiClient instance for CLI execution.
     """
 
     def __init__(self, model: str = "") -> None:
-        """Initialize the Cursor backend.
+        """Initialize the Gemini backend.
 
         Args:
             model: Default model to use for commands.
         """
         super().__init__(model=model)
-        self._client = CursorClient(model=model)
+        self._client = GeminiClient(model=model)
 
     @property
     def name(self) -> str:
         """Return the backend name."""
-        return "Cursor"
+        return "Gemini CLI"
 
     @property
     def platform(self) -> AgentPlatform:
         """Return the platform identifier."""
-        return AgentPlatform.CURSOR
+        return AgentPlatform.GEMINI
 
     @property
     def supports_parallel(self) -> bool:
         """Return whether this backend supports parallel execution."""
         return True
 
-    # _resolve_subagent() and _compose_prompt() inherited from BaseBackend
+    # _resolve_subagent() inherited from BaseBackend
+
+    def _build_system_prompt_env(
+        self, subagent_prompt: str | None
+    ) -> tuple[dict[str, str] | None, str | None]:
+        """Build env dict with GEMINI_SYSTEM_MD if subagent prompt is provided.
+
+        Writes the subagent prompt to a temp file and returns the env dict
+        along with the temp file path (for cleanup).
+
+        Args:
+            subagent_prompt: Optional subagent instructions.
+
+        Returns:
+            Tuple of (env_dict_or_None, temp_file_path_or_None).
+        """
+        if not subagent_prompt:
+            return None, None
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", delete=False, prefix="ingot_gemini_system_"
+        ) as f:
+            f.write(subagent_prompt)
+            temp_path = f.name
+        return {"GEMINI_SYSTEM_MD": temp_path}, temp_path
 
     def run_with_callback(
         self,
@@ -81,14 +99,12 @@ class CursorBackend(BaseBackend):
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
-        Uses BaseBackend._run_streaming_with_timeout() for timeout enforcement.
-
         Args:
-            prompt: The prompt to send to Cursor.
+            prompt: The prompt to send to Gemini.
             output_callback: Callback function for streaming output.
             subagent: Optional subagent name.
             model: Optional model override.
-            dont_save_session: If True, don't persist the session.
+            dont_save_session: Unused (Gemini has no session persistence).
             timeout_seconds: Optional timeout in seconds (None = no timeout).
 
         Returns:
@@ -98,29 +114,29 @@ class CursorBackend(BaseBackend):
             BackendTimeoutError: If timeout_seconds is specified and exceeded.
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
-        composed_prompt = self._compose_prompt(prompt, subagent_prompt)
+        env, temp_path = self._build_system_prompt_env(subagent_prompt)
 
-        if timeout_seconds is not None:
-            cmd = self._client.build_command(
-                composed_prompt,
-                model=resolved_model,
-                print_mode=True,
-                no_save=dont_save_session,
-            )
-            exit_code, output = self._run_streaming_with_timeout(
-                cmd,
-                output_callback=output_callback,
-                timeout_seconds=timeout_seconds,
-            )
-            success = exit_code == 0
-            return success, output
-        else:
-            return self._client.run_with_callback(
-                composed_prompt,
-                output_callback=output_callback,
-                model=resolved_model,
-                no_save=dont_save_session,
-            )
+        try:
+            if timeout_seconds is not None:
+                cmd = self._client.build_command(prompt, model=resolved_model)
+                exit_code, output = self._run_streaming_with_timeout(
+                    cmd,
+                    output_callback=output_callback,
+                    timeout_seconds=timeout_seconds,
+                    env=env,
+                )
+                success = exit_code == 0
+                return success, output
+            else:
+                return self._client.run_with_callback(
+                    prompt,
+                    output_callback=output_callback,
+                    model=resolved_model,
+                    env=env,
+                )
+        finally:
+            if temp_path:
+                Path(temp_path).unlink(missing_ok=True)
 
     def run_print_with_output(
         self,
@@ -131,25 +147,29 @@ class CursorBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> tuple[bool, str]:
-        """Run with --print flag, return success status and captured output.
+        """Run and return success status and captured output.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
-        composed_prompt = self._compose_prompt(prompt, subagent_prompt)
+        env, temp_path = self._build_system_prompt_env(subagent_prompt)
+
         try:
             return self._client.run_print_with_output(
-                composed_prompt,
+                prompt,
                 model=resolved_model,
-                no_save=dont_save_session,
                 timeout_seconds=timeout_seconds,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
                 f"Operation timed out after {timeout_seconds}s",
                 timeout_seconds=timeout_seconds,
             ) from None
+        finally:
+            if temp_path:
+                Path(temp_path).unlink(missing_ok=True)
 
     def run_print_quiet(
         self,
@@ -160,25 +180,29 @@ class CursorBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> str:
-        """Run with --print flag quietly, return output only.
+        """Run quietly, return output only.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
-        composed_prompt = self._compose_prompt(prompt, subagent_prompt)
+        env, temp_path = self._build_system_prompt_env(subagent_prompt)
+
         try:
             return self._client.run_print_quiet(
-                composed_prompt,
+                prompt,
                 model=resolved_model,
-                no_save=dont_save_session,
                 timeout_seconds=timeout_seconds,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
                 f"Operation timed out after {timeout_seconds}s",
                 timeout_seconds=timeout_seconds,
             ) from None
+        finally:
+            if temp_path:
+                Path(temp_path).unlink(missing_ok=True)
 
     def run_streaming(
         self,
@@ -191,15 +215,6 @@ class CursorBackend(BaseBackend):
         """Execute in streaming mode (non-interactive).
 
         Uses run_print_with_output internally.
-
-        Args:
-            prompt: The prompt to send (with any user input already included).
-            subagent: Optional subagent name.
-            model: Optional model override.
-            timeout_seconds: Optional timeout in seconds.
-
-        Returns:
-            Tuple of (success, full_output).
         """
         return self.run_print_with_output(
             prompt,
@@ -209,27 +224,14 @@ class CursorBackend(BaseBackend):
         )
 
     def check_installed(self) -> tuple[bool, str]:
-        """Check if Cursor CLI is installed.
-
-        Returns:
-            Tuple of (is_installed, version_or_error_message).
-        """
-        return check_cursor_installed()
+        """Check if Gemini CLI is installed."""
+        return check_gemini_installed()
 
     def detect_rate_limit(self, output: str) -> bool:
-        """Detect if output indicates a rate limit error.
-
-        Args:
-            output: The output string to check.
-
-        Returns:
-            True if output looks like a rate limit error.
-        """
+        """Detect if output indicates a rate limit error."""
         return looks_like_rate_limit(output)
-
-    # supports_parallel_execution() and close() inherited from BaseBackend
 
 
 __all__ = [
-    "CursorBackend",
+    "GeminiBackend",
 ]

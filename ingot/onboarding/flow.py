@@ -25,12 +25,18 @@ BACKEND_CHOICES: dict[str, AgentPlatform] = {
     "Auggie (Augment Code CLI)": AgentPlatform.AUGGIE,
     "Claude Code CLI": AgentPlatform.CLAUDE,
     "Cursor": AgentPlatform.CURSOR,
+    "Aider": AgentPlatform.AIDER,
+    "Gemini CLI": AgentPlatform.GEMINI,
+    "Codex (OpenAI)": AgentPlatform.CODEX,
 }
 
 INSTALLATION_URLS: dict[AgentPlatform, str] = {
     AgentPlatform.AUGGIE: "https://docs.augmentcode.com/cli",
     AgentPlatform.CLAUDE: "https://docs.anthropic.com/claude-code",
     AgentPlatform.CURSOR: "https://www.cursor.com/downloads",
+    AgentPlatform.AIDER: "https://aider.chat/docs/install.html",
+    AgentPlatform.GEMINI: "https://github.com/google-gemini/gemini-cli",
+    AgentPlatform.CODEX: "https://github.com/openai/codex",
 }
 
 

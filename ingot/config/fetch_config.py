@@ -54,6 +54,8 @@ class AgentPlatform(Enum):
         CLAUDE: Claude Code CLI
         CURSOR: Cursor IDE
         AIDER: Aider CLI tool
+        GEMINI: Gemini CLI
+        CODEX: OpenAI Codex CLI
         MANUAL: Manual/no AI backend (direct API only)
     """
 
@@ -61,6 +63,8 @@ class AgentPlatform(Enum):
     CLAUDE = "claude"
     CURSOR = "cursor"
     AIDER = "aider"
+    GEMINI = "gemini"
+    CODEX = "codex"
     MANUAL = "manual"
 
 

@@ -1,19 +1,15 @@
-"""Cursor IDE CLI backend implementation.
+"""Codex CLI backend implementation.
 
-This module provides the CursorBackend class that wraps the CursorClient
+This module provides the CodexBackend class that wraps the CodexClient
 for use with the pluggable multi-agent architecture.
 
-CursorBackend follows the same delegation pattern as ClaudeBackend:
+CodexBackend follows the same delegation pattern as CursorBackend:
 - Extends BaseBackend to inherit shared functionality
 - Implements the AIBackend protocol
-- Wraps the CursorClient (delegation pattern)
+- Wraps the CodexClient (delegation pattern)
 
-Key difference from ClaudeBackend: Cursor has no --append-system-prompt-file
-equivalent. Subagent instructions are embedded directly in the user prompt
-(via _compose_prompt) instead of being passed as a separate system prompt file.
-
-Model resolution and subagent parsing happen ONLY in this backend layer
-(via BaseBackend helpers). The client receives pre-resolved values.
+Like CursorBackend, Codex has no system prompt file equivalent. Subagent
+instructions are embedded directly in the user prompt (via _compose_prompt).
 """
 
 import subprocess
@@ -22,45 +18,44 @@ from collections.abc import Callable
 from ingot.config.fetch_config import AgentPlatform
 from ingot.integrations.backends.base import BaseBackend
 from ingot.integrations.backends.errors import BackendTimeoutError
-from ingot.integrations.cursor import (
-    CursorClient,
-    check_cursor_installed,
+from ingot.integrations.codex import (
+    CodexClient,
+    check_codex_installed,
     looks_like_rate_limit,
 )
 
 
-class CursorBackend(BaseBackend):
-    """Cursor IDE CLI backend implementation.
+class CodexBackend(BaseBackend):
+    """Codex CLI backend implementation.
 
     Extends BaseBackend to inherit shared logic (subagent parsing, model resolution).
-    Wraps the CursorClient for actual CLI execution.
+    Wraps the CodexClient for actual CLI execution.
 
-    Unlike ClaudeBackend which passes system_prompt to the client for file-based
-    injection, CursorBackend composes the full prompt itself (embedding subagent
-    instructions directly in the prompt) before passing to the client.
+    Subagent instructions are embedded directly in the prompt before passing
+    to the client (same approach as CursorBackend).
 
     Attributes:
-        _client: The underlying CursorClient instance for CLI execution.
+        _client: The underlying CodexClient instance for CLI execution.
     """
 
     def __init__(self, model: str = "") -> None:
-        """Initialize the Cursor backend.
+        """Initialize the Codex backend.
 
         Args:
             model: Default model to use for commands.
         """
         super().__init__(model=model)
-        self._client = CursorClient(model=model)
+        self._client = CodexClient(model=model)
 
     @property
     def name(self) -> str:
         """Return the backend name."""
-        return "Cursor"
+        return "Codex"
 
     @property
     def platform(self) -> AgentPlatform:
         """Return the platform identifier."""
-        return AgentPlatform.CURSOR
+        return AgentPlatform.CODEX
 
     @property
     def supports_parallel(self) -> bool:
@@ -81,14 +76,12 @@ class CursorBackend(BaseBackend):
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
-        Uses BaseBackend._run_streaming_with_timeout() for timeout enforcement.
-
         Args:
-            prompt: The prompt to send to Cursor.
+            prompt: The prompt to send to Codex.
             output_callback: Callback function for streaming output.
             subagent: Optional subagent name.
             model: Optional model override.
-            dont_save_session: If True, don't persist the session.
+            dont_save_session: If True, use --ephemeral for session isolation.
             timeout_seconds: Optional timeout in seconds (None = no timeout).
 
         Returns:
@@ -104,8 +97,7 @@ class CursorBackend(BaseBackend):
             cmd = self._client.build_command(
                 composed_prompt,
                 model=resolved_model,
-                print_mode=True,
-                no_save=dont_save_session,
+                ephemeral=dont_save_session,
             )
             exit_code, output = self._run_streaming_with_timeout(
                 cmd,
@@ -119,7 +111,7 @@ class CursorBackend(BaseBackend):
                 composed_prompt,
                 output_callback=output_callback,
                 model=resolved_model,
-                no_save=dont_save_session,
+                ephemeral=dont_save_session,
             )
 
     def run_print_with_output(
@@ -131,7 +123,7 @@ class CursorBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> tuple[bool, str]:
-        """Run with --print flag, return success status and captured output.
+        """Run and return success status and captured output.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
@@ -142,7 +134,7 @@ class CursorBackend(BaseBackend):
             return self._client.run_print_with_output(
                 composed_prompt,
                 model=resolved_model,
-                no_save=dont_save_session,
+                ephemeral=dont_save_session,
                 timeout_seconds=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
@@ -160,7 +152,7 @@ class CursorBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
     ) -> str:
-        """Run with --print flag quietly, return output only.
+        """Run quietly, return output only.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
@@ -171,7 +163,7 @@ class CursorBackend(BaseBackend):
             return self._client.run_print_quiet(
                 composed_prompt,
                 model=resolved_model,
-                no_save=dont_save_session,
+                ephemeral=dont_save_session,
                 timeout_seconds=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
@@ -191,15 +183,6 @@ class CursorBackend(BaseBackend):
         """Execute in streaming mode (non-interactive).
 
         Uses run_print_with_output internally.
-
-        Args:
-            prompt: The prompt to send (with any user input already included).
-            subagent: Optional subagent name.
-            model: Optional model override.
-            timeout_seconds: Optional timeout in seconds.
-
-        Returns:
-            Tuple of (success, full_output).
         """
         return self.run_print_with_output(
             prompt,
@@ -209,27 +192,14 @@ class CursorBackend(BaseBackend):
         )
 
     def check_installed(self) -> tuple[bool, str]:
-        """Check if Cursor CLI is installed.
-
-        Returns:
-            Tuple of (is_installed, version_or_error_message).
-        """
-        return check_cursor_installed()
+        """Check if Codex CLI is installed."""
+        return check_codex_installed()
 
     def detect_rate_limit(self, output: str) -> bool:
-        """Detect if output indicates a rate limit error.
-
-        Args:
-            output: The output string to check.
-
-        Returns:
-            True if output looks like a rate limit error.
-        """
+        """Detect if output indicates a rate limit error."""
         return looks_like_rate_limit(output)
-
-    # supports_parallel_execution() and close() inherited from BaseBackend
 
 
 __all__ = [
-    "CursorBackend",
+    "CodexBackend",
 ]

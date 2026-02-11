@@ -10,6 +10,7 @@ User input is collected via the TUI, then included in prompts.
 """
 
 import logging
+import os
 import re
 import subprocess
 import threading
@@ -441,11 +442,60 @@ class BaseBackend(ABC):
         # 3. Fall back to instance default
         return self._model or None
 
+    def _resolve_subagent(
+        self,
+        subagent: str | None,
+        model: str | None,
+    ) -> tuple[str | None, str | None]:
+        """Resolve subagent and model in one pass.
+
+        Uses _parse_subagent_prompt() to get both the prompt body and
+        model from frontmatter. Avoids reading the subagent file twice.
+
+        Model precedence: explicit > frontmatter > instance default.
+
+        Args:
+            subagent: Optional subagent name.
+            model: Optional explicit model override.
+
+        Returns:
+            Tuple of (resolved_model, subagent_prompt_body).
+        """
+        subagent_prompt: str | None = None
+
+        if subagent:
+            metadata, prompt_body = self._parse_subagent_prompt(subagent)
+            subagent_prompt = prompt_body if prompt_body else None
+
+            if not model and metadata.model:
+                model = metadata.model
+
+        resolved_model = model or self._model or None
+        return resolved_model, subagent_prompt
+
+    def _compose_prompt(self, prompt: str, subagent_prompt: str | None) -> str:
+        """Compose the final prompt with optional subagent instructions.
+
+        For backends without a system prompt file mechanism, subagent
+        instructions are embedded directly in the user prompt.
+
+        Args:
+            prompt: The user/task prompt.
+            subagent_prompt: Optional subagent instructions to embed.
+
+        Returns:
+            The composed prompt string.
+        """
+        if subagent_prompt:
+            return f"## Agent Instructions\n\n{subagent_prompt}\n\n## Task\n\n{prompt}"
+        return prompt
+
     def _run_streaming_with_timeout(
         self,
         cmd: list[str],
         output_callback: Callable[[str], None],
         timeout_seconds: float | None,
+        env: dict[str, str] | None = None,
     ) -> tuple[int, str]:
         """Run subprocess with streaming output and timeout enforcement.
 
@@ -470,6 +520,10 @@ class BaseBackend(ABC):
             ...     timeout_seconds=120.0,
             ... )
         """
+        process_env = None
+        if env:
+            process_env = {**os.environ, **env}
+
         process = subprocess.Popen(
             cmd,
             stdin=subprocess.DEVNULL,
@@ -477,6 +531,7 @@ class BaseBackend(ABC):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,  # Line-buffered
+            env=process_env,
         )
 
         output_lines: list[str] = []

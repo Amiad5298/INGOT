@@ -48,9 +48,23 @@ class TestBackendFactoryUnimplementedPlatforms:
         assert backend.platform == AgentPlatform.CURSOR
         assert isinstance(backend, AIBackend)
 
-    def test_create_aider_raises_value_error(self):
-        with pytest.raises(ValueError, match="Aider backend not yet implemented"):
-            BackendFactory.create(AgentPlatform.AIDER)
+    def test_create_aider_backend(self):
+        backend = BackendFactory.create(AgentPlatform.AIDER)
+        assert backend.name == "Aider"
+        assert backend.platform == AgentPlatform.AIDER
+        assert isinstance(backend, AIBackend)
+
+    def test_create_gemini_backend(self):
+        backend = BackendFactory.create(AgentPlatform.GEMINI)
+        assert backend.name == "Gemini CLI"
+        assert backend.platform == AgentPlatform.GEMINI
+        assert isinstance(backend, AIBackend)
+
+    def test_create_codex_backend(self):
+        backend = BackendFactory.create(AgentPlatform.CODEX)
+        assert backend.name == "Codex"
+        assert backend.platform == AgentPlatform.CODEX
+        assert isinstance(backend, AIBackend)
 
     def test_create_manual_raises_value_error(self):
         with pytest.raises(ValueError, match="Manual mode does not use an AI backend"):
@@ -181,6 +195,9 @@ class TestBackendFactoryLazyImports:
             "ingot.integrations.backends.auggie",
             "ingot.integrations.backends.claude",
             "ingot.integrations.backends.cursor",
+            "ingot.integrations.backends.aider",
+            "ingot.integrations.backends.gemini",
+            "ingot.integrations.backends.codex",
         ]
         for backend_module in backend_modules:
             assert backend_module not in toplevel_imports, (
