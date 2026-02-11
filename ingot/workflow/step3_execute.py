@@ -238,15 +238,6 @@ def step_3_execute(
             print_error("Phase 1 failures with fail_fast enabled. Stopping.")
             return False
 
-    # PHASE 1 REVIEW CHECKPOINT
-    # Run after TUI context manager has exited to avoid display corruption
-    if pending_fundamental and state.enable_phase_review and not failed_tasks:
-        review_passed = _run_phase_review(state, log_dir, phase="fundamental", backend=backend)
-        if not review_passed:
-            # User explicitly chose to stop
-            print_info("Stopping after Phase 1 review.")
-            return False
-
     # PHASE 2: Execute independent tasks in parallel
     if pending_independent and state.parallel_execution_enabled:
         print_header("Phase 2: Independent Tasks (Parallel)")
@@ -300,8 +291,10 @@ def step_3_execute(
     _show_summary(state, failed_tasks)
     _run_post_implementation_tests(state, backend)
 
-    # FINAL REVIEW CHECKPOINT
-    # Run after tests but before commit instructions
+    # REVIEW CHECKPOINT
+    # Single review of all changes after all tasks and tests complete,
+    # right before commit instructions. Validates complete implementation
+    # against the Step 1 spec as a whole.
     if state.enable_phase_review:
         review_passed = _run_phase_review(state, log_dir, phase="final", backend=backend)
         if not review_passed:

@@ -129,7 +129,7 @@ def build_review_prompt(
 
     Args:
         state: Current workflow state
-        phase: Phase being reviewed ("fundamental" or "final")
+        phase: Phase identifier for the review (e.g., "final")
         diff_output: Git diff output (full or stat-only)
         is_truncated: Whether diff was truncated due to size
 
@@ -227,7 +227,7 @@ def _run_rereview_after_fix(
     Args:
         state: Current workflow state
         log_dir: Directory for log files
-        phase: Phase identifier ("fundamental" or "final")
+        phase: Phase identifier for the review (e.g., "final")
         backend: AI backend instance for agent interactions
 
     Returns:
@@ -302,7 +302,7 @@ def run_phase_review(
     Args:
         state: Current workflow state
         log_dir: Directory for log files
-        phase: Phase identifier ("fundamental" or "final")
+        phase: Phase identifier for the review (e.g., "final")
         backend: AI backend instance for agent interactions
 
     Returns:
