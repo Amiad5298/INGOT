@@ -5,13 +5,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ingot.integrations.git import DiffResult
+from ingot.workflow.git_utils import parse_porcelain_z_output
 from ingot.workflow.state import WorkflowState
 from ingot.workflow.step4_update_docs import (
     MAX_DIFF_SIZE,
     NonDocSnapshot,
     Step4Result,
     _build_doc_update_prompt,
-    _parse_porcelain_z_output,
     is_doc_file,
     step_4_update_docs,
 )
@@ -60,44 +60,50 @@ class TestIsDocFile:
 
 
 class TestParsePorcelainZOutput:
+    """Tests for parse_porcelain_z_output (now in git_utils).
+
+    Note: with -z, rename/copy entries use reversed field order vs the arrow
+    format: the inline path is the NEW path, followed by OLD path after NUL.
+    """
+
     def test_parses_empty_output(self):
-        assert _parse_porcelain_z_output("") == []
+        assert parse_porcelain_z_output("") == []
 
     def test_parses_single_modified_file(self):
-        # Format: "XY path\0"
         output = " M file.py\0"
-        result = _parse_porcelain_z_output(output)
+        result = parse_porcelain_z_output(output)
         assert result == [(" M", "file.py")]
 
     def test_parses_multiple_files(self):
         output = " M file1.py\0?? newfile.txt\0A  staged.py\0"
-        result = _parse_porcelain_z_output(output)
+        result = parse_porcelain_z_output(output)
         assert result == [(" M", "file1.py"), ("??", "newfile.txt"), ("A ", "staged.py")]
 
     def test_parses_file_with_spaces(self):
         output = " M file with spaces.py\0"
-        result = _parse_porcelain_z_output(output)
+        result = parse_porcelain_z_output(output)
         assert result == [(" M", "file with spaces.py")]
 
     def test_parses_renamed_file(self):
-        # For renames: "R  old_path\0new_path\0"
-        output = "R  old_name.py\0new_name.py\0"
-        result = _parse_porcelain_z_output(output)
+        # -z rename format: "R  new_path\0old_path\0" (new first, old second)
+        output = "R  new_name.py\0old_name.py\0"
+        result = parse_porcelain_z_output(output)
         assert result == [("R ", "new_name.py")]
 
     def test_parses_copied_file(self):
-        output = "C  source.py\0copy.py\0"
-        result = _parse_porcelain_z_output(output)
+        # -z copy format: "C  dest.py\0source.py\0" (dest first, source second)
+        output = "C  copy.py\0source.py\0"
+        result = parse_porcelain_z_output(output)
         assert result == [("C ", "copy.py")]
 
     def test_parses_untracked_file(self):
         output = "?? untracked.py\0"
-        result = _parse_porcelain_z_output(output)
+        result = parse_porcelain_z_output(output)
         assert result == [("??", "untracked.py")]
 
     def test_handles_mixed_entries(self):
-        output = " M regular.py\0R  old.py\0new.py\0?? untracked.py\0"
-        result = _parse_porcelain_z_output(output)
+        output = " M regular.py\0R  new.py\0old.py\0?? untracked.py\0"
+        result = parse_porcelain_z_output(output)
         assert result == [(" M", "regular.py"), ("R ", "new.py"), ("??", "untracked.py")]
 
 
@@ -915,8 +921,9 @@ class TestNonDocSnapshotGuardrailFixes:
         snapshot = NonDocSnapshot()
 
         # Mock subprocess.run for detect_changes() - reports renamed file
+        # -z rename format: "R  new_path\0old_path\0" (new first, old second)
         with patch("ingot.workflow.step4_update_docs.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="R  old_name.py\0new_name.py\0")
+            mock_run.return_value = MagicMock(returncode=0, stdout="R  new_name.py\0old_name.py\0")
 
             changed = snapshot.detect_changes()
 

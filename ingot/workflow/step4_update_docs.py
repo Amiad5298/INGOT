@@ -28,6 +28,7 @@ from ingot.utils.console import (
     print_success,
     print_warning,
 )
+from ingot.workflow.git_utils import parse_porcelain_z_output
 from ingot.workflow.state import WorkflowState
 
 # Maximum diff size to avoid context overflow
@@ -216,52 +217,6 @@ def _git_restore_file(filepath: str) -> bool:
     return result.returncode == 0
 
 
-def _parse_porcelain_z_output(output: str) -> list[tuple[str, str]]:
-    """Parse git status --porcelain -z output.
-
-    The -z flag uses NUL as delimiter between entries and between renamed file paths.
-    This handles filenames with spaces and special characters correctly.
-
-    Format for each entry:
-    - Regular file: "XY path\\0" (status code followed by space, then path, then NUL)
-    - Renamed file: "XY old_path\\0new_path\\0" (status, old path, NUL, new path, NUL)
-    """
-    if not output:
-        return []
-
-    entries = []
-    # Split on NUL bytes
-    parts = output.split("\0")
-
-    i = 0
-    while i < len(parts):
-        part = parts[i]
-        if not part:
-            i += 1
-            continue
-
-        # Status code is first 2 chars, then a space, then the path
-        if len(part) < 3:
-            i += 1
-            continue
-
-        status_code = part[:2]
-        filepath = part[3:]
-
-        # Check if this is a rename (R) or copy (C) - next part is the destination
-        if status_code[0] in ("R", "C") and i + 1 < len(parts) and parts[i + 1]:
-            # For renames/copies, the current filepath is the old path
-            # The next part (before next status entry) is the new path
-            new_path = parts[i + 1]
-            entries.append((status_code, new_path))
-            i += 2  # Skip both old path entry and new path
-        else:
-            entries.append((status_code, filepath))
-            i += 1
-
-    return entries
-
-
 @dataclass
 class NonDocSnapshot:
     """Snapshot of all non-doc files for enforcement.
@@ -294,7 +249,7 @@ class NonDocSnapshot:
             return snapshot
 
         # Parse the null-delimited output
-        for status_code, filepath in _parse_porcelain_z_output(result.stdout):
+        for status_code, filepath in parse_porcelain_z_output(result.stdout):
             # Skip doc files - we only want to track non-doc files
             if is_doc_file(filepath):
                 continue
@@ -352,7 +307,7 @@ class NonDocSnapshot:
         )
 
         if result.returncode == 0:
-            for status_code, filepath in _parse_porcelain_z_output(result.stdout):
+            for status_code, filepath in parse_porcelain_z_output(result.stdout):
                 # Skip doc files
                 if is_doc_file(filepath):
                     continue

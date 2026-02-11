@@ -60,11 +60,13 @@ class TestGenerateCommitMessage:
 
 
 class TestGetStageableFiles:
+    """Tests use NUL-delimited (``-z``) porcelain format."""
+
     @patch("ingot.workflow.step5_commit.subprocess.run")
     def test_filters_ingot_artifacts(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=" M src/main.py\n?? .ingot/runs/log.txt\n M README.md\n",
+            stdout=" M src/main.py\0?? .ingot/runs/log.txt\0 M README.md\0",
         )
 
         stageable, excluded = _get_stageable_files()
@@ -77,7 +79,7 @@ class TestGetStageableFiles:
     def test_filters_augment_artifacts(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="?? .augment/agents/planner.md\n M src/app.py\n",
+            stdout="?? .augment/agents/planner.md\0 M src/app.py\0",
         )
 
         stageable, excluded = _get_stageable_files()
@@ -89,7 +91,7 @@ class TestGetStageableFiles:
     def test_filters_specs_artifacts(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="?? specs/TEST-123-plan.md\n M src/module.py\n",
+            stdout="?? specs/TEST-123-plan.md\0 M src/module.py\0",
         )
 
         stageable, excluded = _get_stageable_files()
@@ -101,7 +103,7 @@ class TestGetStageableFiles:
     def test_filters_ds_store(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="?? .DS_Store\n M code.py\n",
+            stdout="?? .DS_Store\0 M code.py\0",
         )
 
         stageable, excluded = _get_stageable_files()
@@ -113,7 +115,7 @@ class TestGetStageableFiles:
     def test_filters_gitignore(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=" M .gitignore\n M src/app.py\n",
+            stdout=" M .gitignore\0 M src/app.py\0",
         )
 
         stageable, excluded = _get_stageable_files()
@@ -123,9 +125,10 @@ class TestGetStageableFiles:
 
     @patch("ingot.workflow.step5_commit.subprocess.run")
     def test_handles_rename_format(self, mock_run):
+        # -z rename: "R  new_path\0old_path\0"
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="R  old_name.py -> new_name.py\n",
+            stdout="R  new_name.py\0old_name.py\0",
         )
 
         stageable, excluded = _get_stageable_files()
@@ -133,10 +136,11 @@ class TestGetStageableFiles:
         assert "new_name.py" in stageable
 
     @patch("ingot.workflow.step5_commit.subprocess.run")
-    def test_strips_quoted_paths(self, mock_run):
+    def test_handles_paths_with_spaces(self, mock_run):
+        # -z format gives raw paths (no C-style quoting)
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=' M "path with spaces/file.py"\n',
+            stdout=" M path with spaces/file.py\0",
         )
 
         stageable, excluded = _get_stageable_files()

@@ -25,11 +25,9 @@ from ingot.utils.console import (
 from ingot.workflow.git_utils import (
     get_working_tree_diff_from_baseline,
     is_workflow_artifact,
+    parse_porcelain_z_output,
 )
 from ingot.workflow.state import WorkflowState
-
-# Minimum length of a git status --porcelain line: "XY <filename>" (e.g. " M a")
-_PORCELAIN_MIN_LINE_LEN = 4
 
 
 @dataclass
@@ -70,11 +68,15 @@ def _generate_commit_message(ticket_id: str, completed_tasks: list[str]) -> str:
 def _get_stageable_files() -> tuple[list[str], list[str]]:
     """Get files that can be staged, filtering out workflow artifacts.
 
+    Uses ``git status --porcelain -z`` (NUL-delimited) so that filenames with
+    spaces, tabs, and other special characters are handled correctly without
+    needing to unescape C-style quoting.
+
     Returns:
         Tuple of (stageable_files, excluded_artifact_files).
     """
     result = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "-z"],
         capture_output=True,
         text=True,
         check=False,
@@ -86,21 +88,7 @@ def _get_stageable_files() -> tuple[list[str], list[str]]:
     stageable: list[str] = []
     excluded: list[str] = []
 
-    for line in result.stdout.split("\n"):
-        if not line.strip() or len(line) < _PORCELAIN_MIN_LINE_LEN:
-            continue
-
-        # Parse porcelain format: XY filename
-        filepath = line[3:]
-
-        # Strip surrounding quotes from paths with special characters
-        if filepath.startswith('"') and filepath.endswith('"'):
-            filepath = filepath[1:-1]
-
-        # Handle rename format "old -> new"
-        if " -> " in filepath:
-            filepath = filepath.split(" -> ")[-1]
-
+    for _status, filepath in parse_porcelain_z_output(result.stdout):
         if is_workflow_artifact(filepath):
             excluded.append(filepath)
         else:
