@@ -101,7 +101,10 @@ class CodexClient:
         if ephemeral:
             cmd.append("--ephemeral")
 
-        # Prompt as final positional argument
+        # Prompt as final positional argument.
+        # NOTE: Unlike Aider (which uses --message-file), Codex only accepts
+        # a positional prompt. Very large prompts (>256KB) may hit OS ARG_MAX
+        # limits. This is a Codex CLI limitation with no upstream workaround.
         cmd.append(prompt)
         return cmd
 

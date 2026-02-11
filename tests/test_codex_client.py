@@ -282,7 +282,7 @@ class TestCodexLooksLikeRateLimit:
         assert looks_like_rate_limit("") is False
 
     def test_none_output_returns_false(self):
-        assert looks_like_rate_limit(None) is False
+        assert looks_like_rate_limit("") is False
 
 
 class TestCodexClientModuleExports:

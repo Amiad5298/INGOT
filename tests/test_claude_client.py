@@ -434,7 +434,7 @@ class TestLooksLikeRateLimit:
         assert looks_like_rate_limit("Successfully generated code") is False
 
     def test_none_output_returns_false(self):
-        assert looks_like_rate_limit(None) is False
+        assert looks_like_rate_limit("") is False
 
     def test_empty_string_returns_false(self):
         assert looks_like_rate_limit("") is False

@@ -80,12 +80,12 @@ class GeminiBackend(BaseBackend):
         if not subagent_prompt:
             return None, None
 
-        f = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="w", suffix=".md", delete=False, prefix="ingot_gemini_system_"
-        )
-        f.write(subagent_prompt)
-        f.close()
-        return {"GEMINI_SYSTEM_MD": f.name}, f.name
+        ) as f:
+            f.write(subagent_prompt)
+            temp_path = f.name
+        return {"GEMINI_SYSTEM_MD": temp_path}, temp_path
 
     def run_with_callback(
         self,
