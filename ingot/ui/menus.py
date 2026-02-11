@@ -147,6 +147,50 @@ def show_git_dirty_menu(context: str) -> DirtyStateAction:
         raise UserCancelledError("User cancelled with Ctrl+C") from e
 
 
+class CommitFailureChoice(Enum):
+    """Commit failure menu choices."""
+
+    RETRY = "retry"
+    SKIP = "skip"
+
+
+def show_commit_failure_menu(error_message: str) -> CommitFailureChoice:
+    """Display menu for handling a failed commit.
+
+    Args:
+        error_message: The error message from the failed commit.
+
+    Returns:
+        Selected CommitFailureChoice.
+
+    Raises:
+        UserCancelledError: If user cancels.
+    """
+    print_info(f"Commit failed: {error_message}")
+    console.print()
+
+    choices = [
+        questionary.Choice("Retry commit", value=CommitFailureChoice.RETRY),
+        questionary.Choice("Skip commit and continue", value=CommitFailureChoice.SKIP),
+    ]
+
+    try:
+        result = questionary.select(
+            "How would you like to proceed?",
+            choices=choices,
+            style=custom_style,
+        ).ask()
+
+        if result is None:
+            raise UserCancelledError("User cancelled commit failure menu")
+
+        log_message(f"Commit failure selection: {result.value}")
+        return CommitFailureChoice(result.value)
+
+    except KeyboardInterrupt as e:
+        raise UserCancelledError("User cancelled with Ctrl+C") from e
+
+
 def show_model_selection(
     current_model: str = "",
     purpose: str = "default",
@@ -246,8 +290,10 @@ def show_task_checkboxes(
 
 
 __all__ = [
+    "CommitFailureChoice",
     "MainMenuChoice",
     "TaskReviewChoice",
+    "show_commit_failure_menu",
     "show_main_menu",
     "show_task_review_menu",
     "show_git_dirty_menu",

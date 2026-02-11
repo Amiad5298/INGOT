@@ -16,7 +16,6 @@ from ingot.workflow.step3_execute import (
     _execute_task_with_callback,
     _execute_with_tui,
     _get_log_base_dir,
-    _offer_commit_instructions,
     _run_post_implementation_tests,
     _show_summary,
     step_3_execute,
@@ -575,61 +574,6 @@ class TestRunPostImplementationTests:
         _run_post_implementation_tests(workflow_state, mock_backend)
 
 
-class TestOfferCommitInstructions:
-    @patch("ingot.workflow.step3_execute.console")
-    @patch("ingot.workflow.step3_execute.is_dirty")
-    def test_does_nothing_when_no_dirty_files(self, mock_is_dirty, mock_console, workflow_state):
-        mock_is_dirty.return_value = False
-
-        _offer_commit_instructions(workflow_state)
-
-        # Console should not print commit instructions
-        calls = [str(c) for c in mock_console.print.call_args_list]
-        assert not any("git commit" in c for c in calls)
-
-    @patch("ingot.workflow.step3_execute.console")
-    @patch("ingot.workflow.step3_execute.prompt_confirm")
-    @patch("ingot.workflow.step3_execute.is_dirty")
-    def test_prompts_user_for_instructions(
-        self, mock_is_dirty, mock_confirm, mock_console, workflow_state
-    ):
-        mock_is_dirty.return_value = True
-        mock_confirm.return_value = False
-
-        _offer_commit_instructions(workflow_state)
-
-        mock_confirm.assert_called_once()
-
-    @patch("ingot.workflow.step3_execute.console")
-    @patch("ingot.workflow.step3_execute.prompt_confirm")
-    @patch("ingot.workflow.step3_execute.is_dirty")
-    def test_does_nothing_when_user_declines(
-        self, mock_is_dirty, mock_confirm, mock_console, workflow_state
-    ):
-        mock_is_dirty.return_value = True
-        mock_confirm.return_value = False
-
-        _offer_commit_instructions(workflow_state)
-
-        calls = [str(c) for c in mock_console.print.call_args_list]
-        assert not any("git commit" in c for c in calls)
-
-    @patch("ingot.workflow.step3_execute.console")
-    @patch("ingot.workflow.step3_execute.prompt_confirm")
-    @patch("ingot.workflow.step3_execute.is_dirty")
-    def test_prints_commit_commands_when_accepted(
-        self, mock_is_dirty, mock_confirm, mock_console, workflow_state
-    ):
-        mock_is_dirty.return_value = True
-        mock_confirm.return_value = True
-        workflow_state.completed_tasks = ["Task 1"]
-
-        _offer_commit_instructions(workflow_state)
-
-        calls = [str(c) for c in mock_console.print.call_args_list]
-        assert any("git" in c for c in calls)
-
-
 class TestExecuteFallback:
     @patch("ingot.workflow.step3_execute.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_callback")
@@ -917,7 +861,6 @@ class TestStep3Execute:
 
         assert result is False
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._capture_baseline_for_diffs")
@@ -926,7 +869,6 @@ class TestStep3Execute:
         mock_baseline,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -946,7 +888,6 @@ class TestStep3Execute:
 
         assert result is True
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_with_tui")
@@ -963,7 +904,6 @@ class TestStep3Execute:
         mock_execute_tui,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -977,7 +917,6 @@ class TestStep3Execute:
 
         mock_execute_tui.assert_called_once()
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_fallback")
@@ -994,7 +933,6 @@ class TestStep3Execute:
         mock_execute_fallback,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1008,7 +946,6 @@ class TestStep3Execute:
 
         mock_execute_fallback.assert_called_once()
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute.prompt_confirm")
@@ -1027,7 +964,6 @@ class TestStep3Execute:
         mock_confirm,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1042,7 +978,6 @@ class TestStep3Execute:
 
         mock_confirm.assert_called()
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_fallback")
@@ -1059,7 +994,6 @@ class TestStep3Execute:
         mock_execute,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1073,7 +1007,6 @@ class TestStep3Execute:
 
         assert result is True
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute.prompt_confirm")
@@ -1092,7 +1025,6 @@ class TestStep3Execute:
         mock_confirm,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1107,7 +1039,6 @@ class TestStep3Execute:
 
         assert result is False
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_fallback")
@@ -1124,7 +1055,6 @@ class TestStep3Execute:
         mock_execute,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1138,7 +1068,6 @@ class TestStep3Execute:
 
         mock_summary.assert_called_once()
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_fallback")
@@ -1155,7 +1084,6 @@ class TestStep3Execute:
         mock_execute,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1168,37 +1096,6 @@ class TestStep3Execute:
         step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
 
         mock_tests.assert_called_once()
-
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
-    @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
-    @patch("ingot.workflow.step3_execute._show_summary")
-    @patch("ingot.workflow.step3_execute._execute_fallback")
-    @patch("ingot.ui.tui._should_use_tui")
-    @patch("ingot.workflow.step3_execute._cleanup_old_runs")
-    @patch("ingot.workflow.step3_execute._create_run_log_dir")
-    @patch("ingot.workflow.step3_execute._capture_baseline_for_diffs")
-    def test_calls_offer_commit_instructions(
-        self,
-        mock_baseline,
-        mock_log_dir,
-        mock_cleanup,
-        mock_should_tui,
-        mock_execute,
-        mock_summary,
-        mock_tests,
-        mock_commit,
-        mock_backend,
-        workflow_state,
-        tmp_path,
-    ):
-        mock_baseline.return_value = True
-        mock_log_dir.return_value = tmp_path / "logs"
-        mock_should_tui.return_value = False
-        mock_execute.return_value = []
-
-        step_3_execute(workflow_state, backend=mock_backend, use_tui=False)
-
-        mock_commit.assert_called_once()
 
     @patch("ingot.workflow.step3_execute.prompt_confirm")
     @patch("ingot.workflow.step3_execute.mark_task_complete")
@@ -1251,7 +1148,6 @@ class TestStep3Execute:
 
 
 class TestTwoPhaseExecution:
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_parallel_fallback")
@@ -1270,7 +1166,6 @@ class TestTwoPhaseExecution:
         mock_execute_parallel,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1304,7 +1199,6 @@ class TestTwoPhaseExecution:
         assert mock_execute_fallback.call_count >= 1
         assert mock_execute_parallel.call_count == 1
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_fallback")
@@ -1321,7 +1215,6 @@ class TestTwoPhaseExecution:
         mock_execute_fallback,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1353,7 +1246,6 @@ class TestTwoPhaseExecution:
         tasks = call_args[0][1]  # Second positional arg is tasks
         assert len(tasks) == 2
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_parallel_fallback")
@@ -1372,7 +1264,6 @@ class TestTwoPhaseExecution:
         mock_execute_parallel,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,
@@ -1404,7 +1295,6 @@ class TestTwoPhaseExecution:
         # Should use _execute_parallel_fallback for independent tasks
         assert mock_execute_parallel.called
 
-    @patch("ingot.workflow.step3_execute._offer_commit_instructions")
     @patch("ingot.workflow.step3_execute._run_post_implementation_tests")
     @patch("ingot.workflow.step3_execute._show_summary")
     @patch("ingot.workflow.step3_execute._execute_parallel_fallback")
@@ -1423,7 +1313,6 @@ class TestTwoPhaseExecution:
         mock_execute_parallel,
         mock_summary,
         mock_tests,
-        mock_commit,
         mock_backend,
         workflow_state,
         tmp_path,

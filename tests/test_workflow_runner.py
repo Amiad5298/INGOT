@@ -16,6 +16,7 @@ from ingot.workflow.runner import (
 )
 from ingot.workflow.state import WorkflowState
 from ingot.workflow.step4_update_docs import Step4Result
+from ingot.workflow.step5_commit import Step5Result
 
 
 # Use generic_ticket and generic_ticket_no_summary fixtures from conftest.py
@@ -356,6 +357,7 @@ class TestOfferCleanupBranchInfo:
 
 class TestRunIngotWorkflowInit:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -374,6 +376,7 @@ class TestRunIngotWorkflowInit:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -387,6 +390,7 @@ class TestRunIngotWorkflowInit:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         result = run_ingot_workflow(
             ticket=ticket,
@@ -437,6 +441,7 @@ class TestRunIngotWorkflowDirtyState:
 
 class TestRunIngotWorkflowUserContext:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -457,6 +462,7 @@ class TestRunIngotWorkflowUserContext:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -471,6 +477,7 @@ class TestRunIngotWorkflowUserContext:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
@@ -483,6 +490,7 @@ class TestRunIngotWorkflowUserContext:
 
 class TestRunIngotWorkflowBranchSetup:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -501,6 +509,7 @@ class TestRunIngotWorkflowBranchSetup:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -514,6 +523,7 @@ class TestRunIngotWorkflowBranchSetup:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
@@ -548,6 +558,7 @@ class TestRunIngotWorkflowBranchSetup:
 
 class TestRunIngotWorkflowStepOrchestration:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -566,6 +577,7 @@ class TestRunIngotWorkflowStepOrchestration:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -579,6 +591,7 @@ class TestRunIngotWorkflowStepOrchestration:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
@@ -654,6 +667,7 @@ class TestRunIngotWorkflowStepOrchestration:
         mock_step3.assert_not_called()
 
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -672,6 +686,7 @@ class TestRunIngotWorkflowStepOrchestration:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -685,6 +700,7 @@ class TestRunIngotWorkflowStepOrchestration:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         result = run_ingot_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
@@ -693,6 +709,7 @@ class TestRunIngotWorkflowStepOrchestration:
 
 class TestRunIngotWorkflowCompletion:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -711,6 +728,7 @@ class TestRunIngotWorkflowCompletion:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -724,6 +742,7 @@ class TestRunIngotWorkflowCompletion:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(ticket=ticket, config=mock_config, backend=mock_backend)
 
@@ -732,6 +751,7 @@ class TestRunIngotWorkflowCompletion:
 
 class TestRunIngotWorkflowStep3Arguments:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -750,6 +770,7 @@ class TestRunIngotWorkflowStep3Arguments:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -763,6 +784,7 @@ class TestRunIngotWorkflowStep3Arguments:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(
             ticket=ticket,
@@ -779,6 +801,7 @@ class TestRunIngotWorkflowStep3Arguments:
         assert call_kwargs["verbose"] is True
 
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -797,6 +820,7 @@ class TestRunIngotWorkflowStep3Arguments:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -810,6 +834,7 @@ class TestRunIngotWorkflowStep3Arguments:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(
             ticket=ticket,
@@ -826,6 +851,7 @@ class TestRunIngotWorkflowStep3Arguments:
         assert call_kwargs["verbose"] is False
 
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -844,6 +870,7 @@ class TestRunIngotWorkflowStep3Arguments:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -857,6 +884,7 @@ class TestRunIngotWorkflowStep3Arguments:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         # Call without specifying use_tui (defaults to None)
         run_ingot_workflow(
@@ -874,6 +902,7 @@ class TestRunIngotWorkflowStep3Arguments:
 
 class TestRunIngotWorkflowResumeLogic:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -894,6 +923,7 @@ class TestRunIngotWorkflowResumeLogic:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -907,6 +937,7 @@ class TestRunIngotWorkflowResumeLogic:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         # Create a mock state with current_step = 2
         mock_state = MagicMock()
@@ -923,6 +954,7 @@ class TestRunIngotWorkflowResumeLogic:
         mock_step3.assert_called_once()
 
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
     @patch("ingot.workflow.runner.step_1_create_plan")
@@ -943,6 +975,7 @@ class TestRunIngotWorkflowResumeLogic:
         mock_step1,
         mock_step2,
         mock_step3,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -956,6 +989,7 @@ class TestRunIngotWorkflowResumeLogic:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         # Create a mock state with current_step = 3
         mock_state = MagicMock()
@@ -1033,6 +1067,7 @@ class TestSetupBranchSpecialCharacters:
 
 class TestRunIngotWorkflowStep4:
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_4_update_docs")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -1053,6 +1088,7 @@ class TestRunIngotWorkflowStep4:
         mock_step2,
         mock_step3,
         mock_step4,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -1067,6 +1103,7 @@ class TestRunIngotWorkflowStep4:
         mock_step2.return_value = True
         mock_step3.return_value = True
         mock_step4.return_value = Step4Result(success=True)
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(
             ticket=ticket,
@@ -1078,6 +1115,7 @@ class TestRunIngotWorkflowStep4:
         mock_step4.assert_called_once()
 
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_4_update_docs")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -1098,6 +1136,7 @@ class TestRunIngotWorkflowStep4:
         mock_step2,
         mock_step3,
         mock_step4,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -1111,6 +1150,7 @@ class TestRunIngotWorkflowStep4:
         mock_step1.return_value = True
         mock_step2.return_value = True
         mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
 
         run_ingot_workflow(
             ticket=ticket,
@@ -1122,6 +1162,7 @@ class TestRunIngotWorkflowStep4:
         mock_step4.assert_not_called()
 
     @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
     @patch("ingot.workflow.runner.step_4_update_docs")
     @patch("ingot.workflow.runner.step_3_execute")
     @patch("ingot.workflow.runner.step_2_create_tasklist")
@@ -1142,6 +1183,7 @@ class TestRunIngotWorkflowStep4:
         mock_step2,
         mock_step3,
         mock_step4,
+        mock_step5,
         mock_completion,
         mock_backend,
         ticket,
@@ -1157,6 +1199,7 @@ class TestRunIngotWorkflowStep4:
         mock_step3.return_value = True
         # Step 4 result with error (non-blocking)
         mock_step4.return_value = Step4Result(success=True, error_message="Agent failed")
+        mock_step5.return_value = Step5Result()
 
         result = run_ingot_workflow(
             ticket=ticket,
@@ -1168,6 +1211,143 @@ class TestRunIngotWorkflowStep4:
         # Workflow should still succeed even if step 4 has issues
         assert result is True
         mock_completion.assert_called_once()
+
+
+class TestRunIngotWorkflowStep5:
+    @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
+    @patch("ingot.workflow.runner.step_3_execute")
+    @patch("ingot.workflow.runner.step_2_create_tasklist")
+    @patch("ingot.workflow.runner.step_1_create_plan")
+    @patch("ingot.workflow.runner.get_current_commit")
+    @patch("ingot.workflow.runner._setup_branch")
+    @patch("ingot.workflow.runner.prompt_confirm")
+    @patch("ingot.workflow.runner.is_dirty")
+    @patch("ingot.workflow.runner.get_current_branch")
+    def test_calls_step_5_when_auto_commit_enabled(
+        self,
+        mock_get_branch,
+        mock_is_dirty,
+        mock_confirm,
+        mock_setup_branch,
+        mock_commit,
+        mock_step1,
+        mock_step2,
+        mock_step3,
+        mock_step5,
+        mock_completion,
+        mock_backend,
+        ticket,
+        mock_config,
+    ):
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
+
+        run_ingot_workflow(
+            ticket=ticket,
+            config=mock_config,
+            backend=mock_backend,
+            auto_commit=True,
+        )
+
+        mock_step5.assert_called_once()
+
+    @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
+    @patch("ingot.workflow.runner.step_3_execute")
+    @patch("ingot.workflow.runner.step_2_create_tasklist")
+    @patch("ingot.workflow.runner.step_1_create_plan")
+    @patch("ingot.workflow.runner.get_current_commit")
+    @patch("ingot.workflow.runner._setup_branch")
+    @patch("ingot.workflow.runner.prompt_confirm")
+    @patch("ingot.workflow.runner.is_dirty")
+    @patch("ingot.workflow.runner.get_current_branch")
+    def test_skips_step_5_when_auto_commit_disabled(
+        self,
+        mock_get_branch,
+        mock_is_dirty,
+        mock_confirm,
+        mock_setup_branch,
+        mock_commit,
+        mock_step1,
+        mock_step2,
+        mock_step3,
+        mock_step5,
+        mock_completion,
+        mock_backend,
+        ticket,
+        mock_config,
+    ):
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+
+        run_ingot_workflow(
+            ticket=ticket,
+            config=mock_config,
+            backend=mock_backend,
+            auto_commit=False,
+        )
+
+        mock_step5.assert_not_called()
+
+    @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
+    @patch("ingot.workflow.runner.step_3_execute")
+    @patch("ingot.workflow.runner.step_2_create_tasklist")
+    @patch("ingot.workflow.runner.step_1_create_plan")
+    @patch("ingot.workflow.runner.get_current_commit")
+    @patch("ingot.workflow.runner._setup_branch")
+    @patch("ingot.workflow.runner.prompt_confirm")
+    @patch("ingot.workflow.runner.is_dirty")
+    @patch("ingot.workflow.runner.get_current_branch")
+    def test_step_5_passes_backend(
+        self,
+        mock_get_branch,
+        mock_is_dirty,
+        mock_confirm,
+        mock_setup_branch,
+        mock_commit,
+        mock_step1,
+        mock_step2,
+        mock_step3,
+        mock_step5,
+        mock_completion,
+        mock_backend,
+        ticket,
+        mock_config,
+    ):
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = True
+        mock_step5.return_value = Step5Result()
+
+        run_ingot_workflow(
+            ticket=ticket,
+            config=mock_config,
+            backend=mock_backend,
+        )
+
+        mock_step5.assert_called_once()
+        call_kwargs = mock_step5.call_args[1]
+        assert call_kwargs["backend"] is mock_backend
 
 
 class TestDetectContextConflict:

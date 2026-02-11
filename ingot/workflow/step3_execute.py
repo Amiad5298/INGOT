@@ -39,7 +39,7 @@ from typing import Literal
 from ingot.integrations.backends.base import AIBackend
 from ingot.integrations.backends.errors import BackendRateLimitError
 from ingot.integrations.backends.factory import BackendFactory
-from ingot.integrations.git import get_current_branch, is_dirty
+from ingot.integrations.git import get_current_branch
 from ingot.ui.log_buffer import TaskLogBuffer
 from ingot.ui.prompts import prompt_confirm
 from ingot.utils.console import (
@@ -304,7 +304,6 @@ def step_3_execute(
             )
             return False
 
-    _offer_commit_instructions(state)
     print_info(f"Task logs saved to: {log_dir}")
 
     return len(failed_tasks) == 0
@@ -986,36 +985,6 @@ def _run_post_implementation_tests(state: WorkflowState, backend: AIBackend) -> 
             print_info("Review test output above to identify issues")
     except Exception as e:
         print_error(f"Failed to run tests: {e}")
-
-
-def _offer_commit_instructions(state: WorkflowState) -> None:
-    """Offer commit instructions to the user if there are uncommitted changes.
-
-    Does NOT execute any git commands. Only prints suggested commands
-    for the user to run manually.
-    """
-    if not is_dirty():
-        return
-
-    console.print()
-    if not prompt_confirm("Would you like instructions to commit these changes?", default=True):
-        return
-
-    # Generate suggested commit message
-    task_count = len(state.completed_tasks)
-    commit_msg = f"feat({state.ticket.id}): implement {task_count} tasks"
-
-    console.print()
-    print_header("Suggested Commit Steps")
-    console.print()
-    console.print("Run the following commands to commit your changes:")
-    console.print()
-    console.print("[bold cyan]  git status[/bold cyan]")
-    console.print("[bold cyan]  git add -A[/bold cyan]")
-    console.print(f'[bold cyan]  git commit -m "{commit_msg}"[/bold cyan]')
-    console.print()
-    print_info("Review 'git status' output before adding files.")
-    console.print()
 
 
 __all__ = [

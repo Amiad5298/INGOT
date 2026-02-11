@@ -96,14 +96,12 @@ class TestFullWorkflowWithTaskMemory:
         assert mock_workflow_state.task_memories[0].files_modified == ["src/user.py"]
         assert "Python implementation" in mock_workflow_state.task_memories[0].patterns_used
 
-    @patch("ingot.workflow.step3_execute.is_dirty")
     @patch("ingot.workflow.task_memory._get_modified_files")
     @patch("ingot.workflow.task_memory._identify_patterns_in_changes")
     def test_pattern_context_used_in_subsequent_tasks(
         self,
         mock_identify,
         mock_get_files,
-        mock_is_dirty,
         mock_workflow_state,
     ):
         # Setup: Add a task memory to state
@@ -131,15 +129,11 @@ class TestFullWorkflowWithTaskMemory:
 
 
 class TestRetryWithErrorAnalysis:
-    @patch("ingot.workflow.step3_execute.is_dirty")
     def test_error_analysis_provides_structured_feedback(
         self,
-        mock_is_dirty,
         mock_workflow_state,
         mock_auggie_client,
     ):
-        mock_is_dirty.return_value = False
-
         # Simulate a Python error
         error_output = """Traceback (most recent call last):
   File "src/user.py", line 10, in create_user

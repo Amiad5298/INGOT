@@ -1,7 +1,7 @@
 """Workflow orchestration for INGOT.
 
 This module provides the main workflow runner that orchestrates
-all three steps of the spec-driven development workflow.
+all five steps of the spec-driven development workflow.
 """
 
 from collections.abc import Generator
@@ -42,6 +42,7 @@ from ingot.workflow.step1_plan import step_1_create_plan
 from ingot.workflow.step2_tasklist import step_2_create_tasklist
 from ingot.workflow.step3_execute import step_3_execute
 from ingot.workflow.step4_update_docs import Step4Result, step_4_update_docs
+from ingot.workflow.step5_commit import Step5Result, step_5_commit
 
 
 def run_ingot_workflow(
@@ -61,14 +62,16 @@ def run_ingot_workflow(
     enable_phase_review: bool = False,
     dirty_tree_policy: DirtyTreePolicy = DirtyTreePolicy.FAIL_FAST,
     auto_update_docs: bool = True,
+    auto_commit: bool = True,
 ) -> bool:
     """Run the complete spec-driven development workflow.
 
-    This orchestrates all four steps:
+    This orchestrates all five steps:
     1. Create implementation plan
     2. Create task list with approval
     3. Execute tasks with clean loop
     4. Update documentation based on code changes
+    5. Commit changes
     """
     # Guardrails: Handle potentially incomplete ticket data
     # Tickets may lack title if fetched without enrichment
@@ -204,6 +207,13 @@ def run_ingot_workflow(
                 )
             if step4_result.error_message:
                 log_message(f"Step 4 warning: {step4_result.error_message}")
+
+        # Step 5: Commit changes (optional, non-blocking)
+        if auto_commit:
+            print_info("Starting Step 5: Commit Changes")
+            step5_result: Step5Result = step_5_commit(state, backend=backend)
+            if step5_result.error_message:
+                log_message(f"Step 5 warning: {step5_result.error_message}")
 
         # Workflow complete
         _show_completion(state)
