@@ -112,6 +112,7 @@ class ClaudeBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
@@ -124,6 +125,7 @@ class ClaudeBackend(BaseBackend):
             model: Optional model override.
             dont_save_session: If True, don't persist the session.
             timeout_seconds: Optional timeout in seconds (None = no timeout).
+            plan_mode: If True, use --permission-mode plan.
 
         Returns:
             Tuple of (success, output).
@@ -141,6 +143,7 @@ class ClaudeBackend(BaseBackend):
                     system_prompt_file=prompt_file,
                     print_mode=True,
                     dont_save_session=dont_save_session,
+                    plan_mode=plan_mode,
                 )
                 exit_code, output = self._run_streaming_with_timeout(
                     cmd,
@@ -156,6 +159,7 @@ class ClaudeBackend(BaseBackend):
                 model=resolved_model,
                 system_prompt=system_prompt,
                 dont_save_session=dont_save_session,
+                plan_mode=plan_mode,
             )
 
     def run_print_with_output(
@@ -166,6 +170,7 @@ class ClaudeBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Run with -p flag, return success status and captured output.
 
@@ -180,6 +185,7 @@ class ClaudeBackend(BaseBackend):
                 system_prompt=system_prompt,
                 dont_save_session=dont_save_session,
                 timeout_seconds=timeout_seconds,
+                plan_mode=plan_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -195,6 +201,7 @@ class ClaudeBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Run with -p flag quietly, return output only.
 
@@ -209,6 +216,7 @@ class ClaudeBackend(BaseBackend):
                 system_prompt=system_prompt,
                 dont_save_session=dont_save_session,
                 timeout_seconds=timeout_seconds,
+                plan_mode=plan_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -223,6 +231,7 @@ class ClaudeBackend(BaseBackend):
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute in streaming mode (non-interactive).
 
@@ -242,6 +251,7 @@ class ClaudeBackend(BaseBackend):
             subagent=subagent,
             model=model,
             timeout_seconds=timeout_seconds,
+            plan_mode=plan_mode,
         )
 
     def check_installed(self) -> tuple[bool, str]:

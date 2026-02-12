@@ -7,6 +7,7 @@ an implementation plan based on the Jira ticket.
 import os
 from pathlib import Path
 
+from ingot.config.fetch_config import AgentPlatform
 from ingot.integrations.backends.base import AIBackend
 from ingot.ui.prompts import prompt_confirm
 from ingot.utils.console import (
@@ -52,12 +53,31 @@ def _create_plan_log_dir(safe_ticket_id: str) -> Path:
 # =============================================================================
 
 
+def _supports_plan_mode(backend: AIBackend) -> bool:
+    """Check if the backend maps plan_mode to a provider-specific CLI flag.
+
+    Backends that can restrict permissions (Claude, Aider, Gemini, Cursor)
+    return True. Backends that ignore plan_mode (Auggie, Codex) return False
+    so the prompt can instruct file-writing instead.
+    """
+    return backend.platform in {
+        AgentPlatform.CLAUDE,
+        AgentPlatform.AIDER,
+        AgentPlatform.GEMINI,
+        AgentPlatform.CURSOR,
+    }
+
+
 def _generate_plan_with_tui(
     state: WorkflowState,
     plan_path: Path,
     backend: AIBackend,
-) -> bool:
-    """Generate plan with TUI progress display using subagent."""
+) -> tuple[bool, str]:
+    """Generate plan with TUI progress display using subagent.
+
+    Returns:
+        Tuple of (success, captured_output).
+    """
     from ingot.ui.tui import TaskRunnerUI
 
     # Create log directory and log path (use safe_filename_stem for paths)
@@ -71,30 +91,41 @@ def _generate_plan_with_tui(
     )
     ui.set_log_path(log_path)
 
+    # Use plan_mode only for backends that map it to a CLI flag;
+    # others (Auggie, Codex) can write the plan file directly.
+    use_plan_mode = _supports_plan_mode(backend)
+
     # Build minimal prompt - agent has the instructions
-    prompt = _build_minimal_prompt(state, plan_path)
+    prompt = _build_minimal_prompt(state, plan_path, plan_mode=use_plan_mode)
 
     with ui:
-        success, _output = backend.run_with_callback(
+        success, output = backend.run_with_callback(
             prompt,
             subagent=state.subagent_names["planner"],
             output_callback=ui.handle_output_line,
             dont_save_session=True,
+            plan_mode=use_plan_mode,
         )
 
         # Check if user requested quit
         if ui.check_quit_requested():
             print_warning("Plan generation cancelled by user.")
-            return False
+            return False, ""
 
     ui.print_summary(success)
-    return success
+    return success, output
 
 
-def _build_minimal_prompt(state: WorkflowState, plan_path: Path) -> str:
+def _build_minimal_prompt(state: WorkflowState, plan_path: Path, *, plan_mode: bool = False) -> str:
     """Build minimal prompt for plan generation.
 
     The subagent has detailed instructions - we just pass context.
+
+    Args:
+        state: Current workflow state.
+        plan_path: Path where the plan should be saved.
+        plan_mode: If True, instruct the AI to output the plan to stdout
+            instead of writing a file (for read-only backends).
     """
     prompt = f"""Create implementation plan for: {state.ticket.id}
 
@@ -108,13 +139,43 @@ Description: {state.ticket.description or "Not available"}"""
 Additional Context:
 {state.user_context}"""
 
-    prompt += f"""
+    if plan_mode:
+        prompt += """
+
+Output the complete implementation plan in Markdown format to stdout.
+Do not attempt to create or write any files.
+
+Codebase context will be retrieved automatically."""
+    else:
+        prompt += f"""
 
 Save the plan to: {plan_path}
 
 Codebase context will be retrieved automatically."""
 
     return prompt
+
+
+def _extract_plan_markdown(output: str) -> str:
+    """Extract clean markdown plan from CLI output.
+
+    Strips tool-call logs, headers, and other noise.
+    Looks for the first markdown heading (any level) and returns everything
+    from there. Falls back to full output if no headings found.
+    """
+    lines = output.splitlines()
+
+    # Find first markdown heading (any level: #, ##, ###, etc.)
+    start_idx = 0
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith("#") and stripped.lstrip("#").startswith(" "):
+            start_idx = i
+            break
+
+    # Strip trailing empty lines
+    content = "\n".join(lines[start_idx:]).rstrip()
+    return content if content else output.strip()
 
 
 def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
@@ -143,7 +204,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     print_step("Generating implementation plan...")
     plan_path = state.get_plan_path()
 
-    success = _generate_plan_with_tui(state, plan_path, backend)
+    success, output = _generate_plan_with_tui(state, plan_path, backend)
 
     if not success:
         print_error("Failed to generate implementation plan")
@@ -153,7 +214,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     if not plan_path.exists():
         # Plan might be in output, save it
         print_info("Saving plan to file...")
-        _save_plan_from_output(plan_path, state)
+        _save_plan_from_output(plan_path, state, output=output)
 
     if plan_path.exists():
         print_success(f"Implementation plan saved to: {plan_path}")
@@ -174,9 +235,20 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
         return False
 
 
-def _save_plan_from_output(plan_path: Path, state: WorkflowState) -> None:
-    """Save plan from Auggie output if file wasn't created."""
-    # Create a basic plan template if Auggie didn't create the file
+def _save_plan_from_output(plan_path: Path, state: WorkflowState, *, output: str = "") -> None:
+    """Save plan from backend output if file wasn't created.
+
+    When output is non-empty (plan mode backends output to stdout),
+    sanitize and save the captured output. Falls back to a template
+    when output is empty.
+    """
+    if output.strip():
+        plan_content = _extract_plan_markdown(output)
+        plan_path.write_text(plan_content)
+        log_message(f"Saved plan from output at {plan_path}")
+        return
+
+    # Create a basic plan template if backend didn't create the file
     template = f"""# Implementation Plan: {state.ticket.id}
 
 ## Summary

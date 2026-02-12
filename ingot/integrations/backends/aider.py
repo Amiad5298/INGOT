@@ -75,6 +75,7 @@ class AiderBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
@@ -85,6 +86,7 @@ class AiderBackend(BaseBackend):
             model: Optional model override.
             dont_save_session: Unused (Aider has no session persistence).
             timeout_seconds: Optional timeout in seconds (None = no timeout).
+            plan_mode: If True, use --architect for two-model plan mode.
 
         Returns:
             Tuple of (success, output).
@@ -106,6 +108,7 @@ class AiderBackend(BaseBackend):
                     composed_prompt,
                     model=resolved_model,
                     message_file=message_file,
+                    architect=plan_mode,
                 )
                 exit_code, output = self._run_streaming_with_timeout(
                     cmd,
@@ -121,6 +124,7 @@ class AiderBackend(BaseBackend):
                 composed_prompt,
                 output_callback=output_callback,
                 model=resolved_model,
+                architect=plan_mode,
             )
 
     def run_print_with_output(
@@ -131,6 +135,7 @@ class AiderBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Run and return success status and captured output.
 
@@ -144,6 +149,7 @@ class AiderBackend(BaseBackend):
                 composed_prompt,
                 model=resolved_model,
                 timeout_seconds=timeout_seconds,
+                architect=plan_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -159,6 +165,7 @@ class AiderBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Run quietly, return output only.
 
@@ -172,6 +179,7 @@ class AiderBackend(BaseBackend):
                 composed_prompt,
                 model=resolved_model,
                 timeout_seconds=timeout_seconds,
+                architect=plan_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -186,6 +194,7 @@ class AiderBackend(BaseBackend):
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute in streaming mode (non-interactive).
 
@@ -196,6 +205,7 @@ class AiderBackend(BaseBackend):
             subagent=subagent,
             model=model,
             timeout_seconds=timeout_seconds,
+            plan_mode=plan_mode,
         )
 
     def check_installed(self) -> tuple[bool, str]:

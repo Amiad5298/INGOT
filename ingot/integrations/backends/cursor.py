@@ -78,6 +78,7 @@ class CursorBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
@@ -90,6 +91,7 @@ class CursorBackend(BaseBackend):
             model: Optional model override.
             dont_save_session: If True, don't persist the session.
             timeout_seconds: Optional timeout in seconds (None = no timeout).
+            plan_mode: If True, use --mode plan (if supported by CLI).
 
         Returns:
             Tuple of (success, output).
@@ -99,6 +101,7 @@ class CursorBackend(BaseBackend):
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         composed_prompt = self._compose_prompt(prompt, subagent_prompt)
+        mode = "plan" if plan_mode else None
 
         if timeout_seconds is not None:
             cmd = self._client.build_command(
@@ -106,6 +109,7 @@ class CursorBackend(BaseBackend):
                 model=resolved_model,
                 print_mode=True,
                 no_save=dont_save_session,
+                mode=mode,
             )
             exit_code, output = self._run_streaming_with_timeout(
                 cmd,
@@ -120,6 +124,7 @@ class CursorBackend(BaseBackend):
                 output_callback=output_callback,
                 model=resolved_model,
                 no_save=dont_save_session,
+                mode=mode,
             )
 
     def run_print_with_output(
@@ -130,6 +135,7 @@ class CursorBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Run with --print flag, return success status and captured output.
 
@@ -138,12 +144,14 @@ class CursorBackend(BaseBackend):
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         composed_prompt = self._compose_prompt(prompt, subagent_prompt)
+        mode = "plan" if plan_mode else None
         try:
             return self._client.run_print_with_output(
                 composed_prompt,
                 model=resolved_model,
                 no_save=dont_save_session,
                 timeout_seconds=timeout_seconds,
+                mode=mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -159,6 +167,7 @@ class CursorBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Run with --print flag quietly, return output only.
 
@@ -167,12 +176,14 @@ class CursorBackend(BaseBackend):
         """
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         composed_prompt = self._compose_prompt(prompt, subagent_prompt)
+        mode = "plan" if plan_mode else None
         try:
             return self._client.run_print_quiet(
                 composed_prompt,
                 model=resolved_model,
                 no_save=dont_save_session,
                 timeout_seconds=timeout_seconds,
+                mode=mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -187,6 +198,7 @@ class CursorBackend(BaseBackend):
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute in streaming mode (non-interactive).
 
@@ -206,6 +218,7 @@ class CursorBackend(BaseBackend):
             subagent=subagent,
             model=model,
             timeout_seconds=timeout_seconds,
+            plan_mode=plan_mode,
         )
 
     def check_installed(self) -> tuple[bool, str]:

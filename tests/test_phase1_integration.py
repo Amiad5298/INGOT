@@ -271,7 +271,7 @@ class TestBaselineRegressionChecks:
         # Known allowed differences between Backend and Client:
         # - 'subagent' (backend) vs 'agent' (client) - naming convention
         # - 'timeout_seconds' - added at Backend layer per spec Final Decision #18
-        allowed_backend_additions = {"timeout_seconds"}
+        allowed_backend_additions = {"timeout_seconds", "plan_mode"}
 
         # Normalize known renames: backend uses 'subagent', client uses 'agent'
         def normalize_param(name: str) -> str:

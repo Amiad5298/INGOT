@@ -73,6 +73,7 @@ class CodexBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
@@ -83,6 +84,8 @@ class CodexBackend(BaseBackend):
             model: Optional model override.
             dont_save_session: If True, use --ephemeral for session isolation.
             timeout_seconds: Optional timeout in seconds (None = no timeout).
+            plan_mode: Accepted for protocol compliance; not yet mapped to
+                a Codex CLI flag.
 
         Returns:
             Tuple of (success, output).
@@ -122,6 +125,7 @@ class CodexBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Run and return success status and captured output.
 
@@ -151,6 +155,7 @@ class CodexBackend(BaseBackend):
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Run quietly, return output only.
 
@@ -179,6 +184,7 @@ class CodexBackend(BaseBackend):
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Execute in streaming mode (non-interactive).
 

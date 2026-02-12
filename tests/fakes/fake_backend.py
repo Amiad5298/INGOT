@@ -98,12 +98,14 @@ class FakeBackend:
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         kwargs = {
             "subagent": subagent,
             "model": model,
             "dont_save_session": dont_save_session,
             "timeout_seconds": timeout_seconds,
+            "plan_mode": plan_mode,
         }
         self.calls.append((prompt, kwargs))
         success, output = self._next_response()
@@ -120,12 +122,14 @@ class FakeBackend:
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         kwargs = {
             "subagent": subagent,
             "model": model,
             "dont_save_session": dont_save_session,
             "timeout_seconds": timeout_seconds,
+            "plan_mode": plan_mode,
         }
         self.print_with_output_calls.append((prompt, kwargs))
         return self._next_response()
@@ -138,12 +142,14 @@ class FakeBackend:
         model: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         kwargs = {
             "subagent": subagent,
             "model": model,
             "dont_save_session": dont_save_session,
             "timeout_seconds": timeout_seconds,
+            "plan_mode": plan_mode,
         }
         self.quiet_calls.append((prompt, kwargs))
         return self._next_response()[1]
@@ -155,11 +161,13 @@ class FakeBackend:
         subagent: str | None = None,
         model: str | None = None,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         kwargs = {
             "subagent": subagent,
             "model": model,
             "timeout_seconds": timeout_seconds,
+            "plan_mode": plan_mode,
         }
         self.streaming_calls.append((prompt, kwargs))
         return self._next_response()

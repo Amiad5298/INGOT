@@ -132,6 +132,7 @@ class CursorClient:
         self._enable_startup_jitter = enable_startup_jitter
         self._cli_command: str | None = None
         self._model_flag_supported: bool | None = None
+        self._mode_flag_supported: bool | None = None
 
     def _detect_cli_command(self) -> str:
         """Detect the available CLI command.
@@ -181,6 +182,33 @@ class CursorClient:
 
         return self._model_flag_supported
 
+    def _supports_mode_flag(self) -> bool:
+        """Check if the CLI supports --mode flag.
+
+        Inspects --help output. Caches the result per session.
+
+        Returns:
+            True if --mode flag is supported.
+        """
+        if self._mode_flag_supported is not None:
+            return self._mode_flag_supported
+
+        cli = self._detect_cli_command()
+        try:
+            result = subprocess.run(
+                [cli, "--help"],
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+                timeout=10,
+            )
+            help_output = result.stdout + result.stderr
+            self._mode_flag_supported = "--mode" in help_output
+        except Exception:
+            self._mode_flag_supported = False
+
+        return self._mode_flag_supported
+
     def build_command(
         self,
         prompt: str,
@@ -188,6 +216,7 @@ class CursorClient:
         model: str | None = None,
         print_mode: bool = False,
         no_save: bool = False,
+        mode: str | None = None,
     ) -> list[str]:
         """Build cursor command list.
 
@@ -200,6 +229,8 @@ class CursorClient:
             model: Resolved model name (None = use instance default)
             print_mode: Use --print flag for non-interactive mode
             no_save: Use --no-save flag for session isolation
+            mode: Optional mode flag value (e.g., "plan"). Only added
+                if the CLI supports --mode (runtime-detected).
 
         Returns:
             List of command arguments for subprocess
@@ -217,6 +248,9 @@ class CursorClient:
 
         if no_save:
             cmd.append("--no-save")
+
+        if mode and self._supports_mode_flag():
+            cmd.extend(["--mode", mode])
 
         # Prompt as final positional argument
         cmd.append(prompt)
@@ -303,6 +337,7 @@ class CursorClient:
         output_callback: Callable[[str], None],
         model: str | None = None,
         no_save: bool = False,
+        mode: str | None = None,
     ) -> tuple[bool, str]:
         """Run with streaming output callback.
 
@@ -315,6 +350,7 @@ class CursorClient:
             output_callback: Callback function invoked for each output line
             model: Resolved model name
             no_save: If True, use --no-save for session isolation
+            mode: Optional mode flag value (e.g., "plan")
 
         Returns:
             Tuple of (success: bool, full_output: str)
@@ -331,6 +367,7 @@ class CursorClient:
                 model=model,
                 print_mode=True,
                 no_save=no_save,
+                mode=mode,
             )
 
             process = subprocess.Popen(
@@ -363,6 +400,7 @@ class CursorClient:
         model: str | None = None,
         no_save: bool = False,
         timeout_seconds: float | None = None,
+        mode: str | None = None,
     ) -> tuple[bool, str]:
         """Run with --print flag, return success status and captured output.
 
@@ -376,6 +414,7 @@ class CursorClient:
             no_save: If True, use --no-save for session isolation
             timeout_seconds: Maximum execution time. When exceeded the
                 subprocess is killed and subprocess.TimeoutExpired is raised.
+            mode: Optional mode flag value (e.g., "plan")
 
         Returns:
             Tuple of (success: bool, output: str)
@@ -395,6 +434,7 @@ class CursorClient:
                 model=model,
                 print_mode=True,
                 no_save=no_save,
+                mode=mode,
             )
 
             result = subprocess.run(
@@ -424,6 +464,7 @@ class CursorClient:
         model: str | None = None,
         no_save: bool = False,
         timeout_seconds: float | None = None,
+        mode: str | None = None,
     ) -> str:
         """Run with --print flag quietly, return output only.
 
@@ -435,6 +476,7 @@ class CursorClient:
             no_save: If True, use --no-save for session isolation
             timeout_seconds: Maximum execution time. When exceeded the
                 subprocess is killed and subprocess.TimeoutExpired is raised.
+            mode: Optional mode flag value (e.g., "plan")
 
         Returns:
             Command stdout (or stderr if stdout is empty and command failed)
@@ -454,6 +496,7 @@ class CursorClient:
                 model=model,
                 print_mode=True,
                 no_save=no_save,
+                mode=mode,
             )
 
             result = subprocess.run(

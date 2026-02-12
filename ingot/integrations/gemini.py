@@ -81,19 +81,23 @@ class GeminiClient:
         prompt: str,
         *,
         model: str | None = None,
+        approval_mode: str = "yolo",
     ) -> list[str]:
         """Build gemini command list.
 
         Args:
             prompt: The prompt to send to Gemini.
             model: Resolved model name (None = use instance default)
+            approval_mode: Approval mode for Gemini CLI. Default "yolo"
+                preserves existing auto-approve behavior. Use "plan" for
+                read-only plan/analysis mode.
 
         Returns:
             List of command arguments for subprocess
         """
         cmd = [GEMINI_CLI_NAME]
 
-        cmd.append("--yolo")
+        cmd.append(f"--approval-mode={approval_mode}")
 
         effective_model = model or self.model
         if effective_model:
@@ -126,6 +130,7 @@ class GeminiClient:
         output_callback: Callable[[str], None],
         model: str | None = None,
         env: dict[str, str] | None = None,
+        approval_mode: str = "yolo",
     ) -> tuple[bool, str]:
         """Run with streaming output callback.
 
@@ -134,6 +139,7 @@ class GeminiClient:
             output_callback: Callback function invoked for each output line
             model: Resolved model name
             env: Optional extra environment variables
+            approval_mode: Approval mode for Gemini CLI
 
         Returns:
             Tuple of (success: bool, full_output: str)
@@ -141,7 +147,7 @@ class GeminiClient:
         log_message(f"Running {GEMINI_CLI_NAME} with callback (streaming)")
         log_backend_metadata("gemini", model=model)
 
-        cmd = self.build_command(prompt, model=model)
+        cmd = self.build_command(prompt, model=model, approval_mode=approval_mode)
         process_env = self._build_env(env)
 
         process = subprocess.Popen(
@@ -173,6 +179,7 @@ class GeminiClient:
         model: str | None = None,
         timeout_seconds: float | None = None,
         env: dict[str, str] | None = None,
+        approval_mode: str = "yolo",
     ) -> tuple[bool, str]:
         """Run and return success status and captured output.
 
@@ -181,6 +188,7 @@ class GeminiClient:
             model: Resolved model name
             timeout_seconds: Maximum execution time.
             env: Optional extra environment variables
+            approval_mode: Approval mode for Gemini CLI
 
         Returns:
             Tuple of (success: bool, output: str)
@@ -191,7 +199,7 @@ class GeminiClient:
         log_message(f"Running {GEMINI_CLI_NAME} with output capture")
         log_backend_metadata("gemini", model=model, timeout=timeout_seconds)
 
-        cmd = self.build_command(prompt, model=model)
+        cmd = self.build_command(prompt, model=model, approval_mode=approval_mode)
         process_env = self._build_env(env)
 
         result = subprocess.run(
@@ -219,6 +227,7 @@ class GeminiClient:
         model: str | None = None,
         timeout_seconds: float | None = None,
         env: dict[str, str] | None = None,
+        approval_mode: str = "yolo",
     ) -> str:
         """Run quietly, return output only.
 
@@ -227,6 +236,7 @@ class GeminiClient:
             model: Resolved model name
             timeout_seconds: Maximum execution time.
             env: Optional extra environment variables
+            approval_mode: Approval mode for Gemini CLI
 
         Returns:
             Command stdout (or stderr if stdout is empty and command failed)
@@ -237,7 +247,7 @@ class GeminiClient:
         log_message(f"Running {GEMINI_CLI_NAME} quietly")
         log_backend_metadata("gemini", model=model, timeout=timeout_seconds)
 
-        cmd = self.build_command(prompt, model=model)
+        cmd = self.build_command(prompt, model=model, approval_mode=approval_mode)
         process_env = self._build_env(env)
 
         result = subprocess.run(

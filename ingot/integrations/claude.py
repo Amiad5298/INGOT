@@ -155,6 +155,7 @@ class ClaudeClient:
         system_prompt_file: str | None = None,
         print_mode: bool = False,
         dont_save_session: bool = False,
+        plan_mode: bool = False,
     ) -> list[str]:
         """Build claude command list.
 
@@ -168,6 +169,7 @@ class ClaudeClient:
                 (injected via --append-system-prompt-file, print mode only)
             print_mode: Use -p (print) flag
             dont_save_session: Use --no-session-persistence flag
+            plan_mode: Use --permission-mode plan for read-only analysis
 
         Returns:
             List of command arguments for subprocess
@@ -185,6 +187,9 @@ class ClaudeClient:
         if dont_save_session:
             cmd.append("--no-session-persistence")
 
+        if plan_mode:
+            cmd.extend(["--permission-mode", "plan"])
+
         # Inject subagent prompt via file (avoids ARG_MAX / ps exposure)
         if system_prompt_file:
             cmd.extend(["--append-system-prompt-file", system_prompt_file])
@@ -201,6 +206,7 @@ class ClaudeClient:
         model: str | None = None,
         system_prompt: str | None = None,
         dont_save_session: bool = False,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Run with streaming output callback.
 
@@ -213,6 +219,7 @@ class ClaudeClient:
             model: Resolved model name
             system_prompt: Resolved subagent prompt body
             dont_save_session: If True, use --no-session-persistence
+            plan_mode: If True, use --permission-mode plan
 
         Returns:
             Tuple of (success: bool, full_output: str)
@@ -227,6 +234,7 @@ class ClaudeClient:
                 system_prompt_file=prompt_file,
                 print_mode=True,
                 dont_save_session=dont_save_session,
+                plan_mode=plan_mode,
             )
 
             process = subprocess.Popen(
@@ -258,6 +266,7 @@ class ClaudeClient:
         system_prompt: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> tuple[bool, str]:
         """Run with -p flag, return success status and captured output.
 
@@ -271,6 +280,7 @@ class ClaudeClient:
             dont_save_session: If True, use --no-session-persistence
             timeout_seconds: Maximum execution time. When exceeded the
                 subprocess is killed and subprocess.TimeoutExpired is raised.
+            plan_mode: If True, use --permission-mode plan
 
         Returns:
             Tuple of (success: bool, output: str)
@@ -290,6 +300,7 @@ class ClaudeClient:
                 system_prompt_file=prompt_file,
                 print_mode=True,
                 dont_save_session=dont_save_session,
+                plan_mode=plan_mode,
             )
 
             result = subprocess.run(
@@ -318,6 +329,7 @@ class ClaudeClient:
         system_prompt: str | None = None,
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
+        plan_mode: bool = False,
     ) -> str:
         """Run with -p flag quietly, return output only.
 
@@ -328,6 +340,7 @@ class ClaudeClient:
             dont_save_session: If True, use --no-session-persistence
             timeout_seconds: Maximum execution time. When exceeded the
                 subprocess is killed and subprocess.TimeoutExpired is raised.
+            plan_mode: If True, use --permission-mode plan
 
         Returns:
             Command stdout (or stderr if stdout is empty and command failed)
@@ -347,6 +360,7 @@ class ClaudeClient:
                 system_prompt_file=prompt_file,
                 print_mode=True,
                 dont_save_session=dont_save_session,
+                plan_mode=plan_mode,
             )
 
             result = subprocess.run(
