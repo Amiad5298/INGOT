@@ -273,9 +273,6 @@ class AuggieBackend(BaseBackend):
             timeout_seconds=timeout_seconds,
         )
 
-    # NOTE: run_print() is NOT exposed - see Final Decision #4 in parent spec
-    # Legacy callers must be refactored to use TUI + run_streaming()
-
     def check_installed(self) -> tuple[bool, str]:
         """Check if Auggie CLI is installed.
 
@@ -295,4 +292,4 @@ class AuggieBackend(BaseBackend):
         """
         return looks_like_rate_limit(output)
 
-    # supports_parallel_execution() and close() inherited from BaseBackend
+    # close() inherited from BaseBackend

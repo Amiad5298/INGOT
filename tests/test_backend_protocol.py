@@ -45,20 +45,8 @@ class TestAIBackendProtocol:
     def test_protocol_has_detect_rate_limit_method(self):
         assert hasattr(AIBackend, "detect_rate_limit")
 
-    def test_protocol_has_supports_parallel_execution_method(self):
-        assert hasattr(AIBackend, "supports_parallel_execution")
-
     def test_protocol_has_close_method(self):
         assert hasattr(AIBackend, "close")
-
-    def test_protocol_does_not_have_run_print(self):
-        # Verify run_print is not defined as a method in the protocol.
-        # Check __protocol_attrs__ which contains the protocol's defined members.
-        protocol_attrs = getattr(AIBackend, "__protocol_attrs__", set())
-        assert "run_print" not in protocol_attrs, (
-            "run_print should NOT be in AIBackend protocol - "
-            "see Final Decision #4 (Non-Interactive Execution)"
-        )
 
 
 class TestAIBackendCompliance:
@@ -137,9 +125,6 @@ class TestAIBackendCompliance:
 
             def detect_rate_limit(self, output: str) -> bool:
                 return False
-
-            def supports_parallel_execution(self) -> bool:
-                return self.supports_parallel
 
             def close(self) -> None:
                 pass

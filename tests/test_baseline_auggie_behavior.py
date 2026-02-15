@@ -141,17 +141,6 @@ class TestAuggieClientSemantics:
 
         assert isinstance(output, str), "Must return str"
 
-    def test_run_print_returns_bool(self):
-        from ingot.integrations.auggie import AuggieClient
-
-        client = AuggieClient()
-        success = client.run_print(
-            "Say exactly: BASELINE_TEST_OK",
-            dont_save_session=True,
-        )
-
-        assert isinstance(success, bool), "Must return bool"
-
     def test_run_returns_completed_process(self):
         from ingot.integrations.auggie import AuggieClient
 
@@ -456,7 +445,6 @@ class TestParallelExecutionSemantics:
 
         methods_with_agent = [
             "run",
-            "run_print",
             "run_print_quiet",
             "run_print_with_output",
             "run_with_callback",

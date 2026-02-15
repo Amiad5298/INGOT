@@ -167,7 +167,7 @@ def run_ingot_workflow(
                     )
                     console.print()
 
-        # Create feature branch using ticket's branch_slug with feature/ prefix
+        # Create branch using ticket's semantic prefix (feat/, fix/, chore/, etc.)
         if not _setup_branch(state, state.ticket):
             return False
 
@@ -222,15 +222,12 @@ def run_ingot_workflow(
         return True
 
 
-def _setup_branch(
-    state: WorkflowState, ticket: GenericTicket, branch_prefix: str = "feature"
-) -> bool:
+def _setup_branch(state: WorkflowState, ticket: GenericTicket) -> bool:
     """Set up the feature branch for the workflow."""
     current_branch = get_current_branch()
 
-    # Use GenericTicket's branch_slug and prepend the prefix
-    # Policy: The prefix (e.g., "feature/") is a workflow concern, not model concern
-    branch_name = f"{branch_prefix}/{ticket.branch_slug}"
+    # Use the ticket's semantic prefix (feat, fix, chore, refactor, feature)
+    branch_name = f"{ticket.semantic_branch_prefix}/{ticket.branch_slug}"
 
     state.branch_name = branch_name
 

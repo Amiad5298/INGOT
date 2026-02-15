@@ -96,7 +96,6 @@ def mock_subprocess():
 def mock_auggie_client():
     """Mock AuggieClient for testing."""
     client = MagicMock()
-    client.run_print.return_value = True
     client.run_print_quiet.return_value = "BRANCH_SUMMARY: test-feature\nTITLE: Test\n"
     return client
 

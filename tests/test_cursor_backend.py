@@ -24,11 +24,6 @@ class TestCursorBackendProperties:
         backend = CursorBackend()
         assert backend.supports_parallel is True
 
-    def test_supports_parallel_execution_method(self):
-        backend = CursorBackend()
-        assert backend.supports_parallel_execution() is True
-        assert backend.supports_parallel_execution() == backend.supports_parallel
-
     def test_model_stored_in_client(self):
         backend = CursorBackend(model="test-model")
         assert backend._client.model == "test-model"
@@ -60,7 +55,6 @@ class TestCursorBackendProtocolCompliance:
         assert callable(backend.run_streaming)
         assert callable(backend.check_installed)
         assert callable(backend.detect_rate_limit)
-        assert callable(backend.supports_parallel_execution)
         assert callable(backend.close)
 
 

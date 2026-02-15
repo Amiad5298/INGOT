@@ -580,8 +580,26 @@ class FileBasedTicketCache(TicketCache):
             self._evict_lru()
 
 
-# Global cache singleton (internal - use dependency injection via TicketService)
-# These globals are maintained for testing convenience only.
+# =============================================================================
+# Global Cache Singleton (Internal API - Testing Only)
+# =============================================================================
+#
+# These internal functions (_get_global_cache, _set_global_cache, _clear_global_cache)
+# are intentionally kept for testing convenience. They provide a way to manage
+# global cache state in tests without requiring full TicketService setup.
+#
+# IMPORTANT: Production code should NOT use these functions directly.
+# Instead, use dependency injection via TicketService (see AMI-32 spec).
+#
+# Why keep them?
+# - Simplifies cache-related unit tests
+# - Allows testing cache behavior in isolation
+# - Used extensively in tests/test_cache.py
+#
+# These functions are NOT exported in __all__ and have underscore prefixes
+# to indicate their internal status.
+# =============================================================================
+
 _global_cache: TicketCache | None = None
 _global_cache_type: str | None = None
 _global_cache_kwargs: dict[str, Any] = {}

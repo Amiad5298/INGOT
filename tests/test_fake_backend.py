@@ -37,7 +37,6 @@ class TestFakeBackendProtocol:
             "run_streaming",
             "check_installed",
             "detect_rate_limit",
-            "supports_parallel_execution",
             "close",
         ):
             assert hasattr(fb, attr), f"Missing protocol member: {attr}"
@@ -138,10 +137,6 @@ class TestFakeBackendProperties:
     def test_custom_supports_parallel(self):
         fb = FakeBackend([(True, "ok")], supports_parallel=False)
         assert fb.supports_parallel is False
-
-    def test_supports_parallel_execution_delegates(self):
-        fb = FakeBackend([(True, "ok")], supports_parallel=False)
-        assert fb.supports_parallel_execution() is False
 
     def test_model_returns_empty_string(self):
         fb = FakeBackend([(True, "ok")])

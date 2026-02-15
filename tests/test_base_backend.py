@@ -124,11 +124,6 @@ class TestBaseBackendDefaults:
         backend = ConcreteTestBackend()
         assert backend.supports_parallel is True
 
-    def test_supports_parallel_execution_returns_property(self):
-        backend = ConcreteTestBackend()
-        assert backend.supports_parallel_execution() is True
-        assert backend.supports_parallel_execution() == backend.supports_parallel
-
     def test_close_is_noop(self):
         backend = ConcreteTestBackend()
         backend.close()  # Should not raise

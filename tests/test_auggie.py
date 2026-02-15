@@ -170,15 +170,6 @@ class TestAuggieClient:
         assert "claude-3" in cmd
 
     @patch("subprocess.run")
-    def test_run_print_returns_success(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        client = AuggieClient()
-
-        result = client.run_print("test prompt")
-
-        assert result is True
-
-    @patch("subprocess.run")
     def test_run_print_quiet_returns_output(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="test output")
         client = AuggieClient()
@@ -197,17 +188,6 @@ class TestAuggieClient:
         # Verify capture_output=True was used
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs.get("capture_output") is True
-
-    @patch("subprocess.run")
-    def test_run_print_without_quiet_does_not_capture(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        client = AuggieClient()
-
-        client.run_print("test prompt")
-
-        # Verify capture_output=False was used
-        call_kwargs = mock_run.call_args[1]
-        assert call_kwargs.get("capture_output") is False
 
 
 class TestExtractModelId:

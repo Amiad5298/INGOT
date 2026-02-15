@@ -103,7 +103,6 @@ class AIBackend(Protocol):
     All methods execute in non-interactive mode for deterministic behavior.
     User input is collected via the TUI, then included in prompts.
 
-    Note: This protocol does NOT include run_print() (interactive mode).
     INGOT owns interactive UX; backends operate in streaming/print mode only.
 
     Note on timeout_seconds: Timeout enforcement is optional per backend.
@@ -252,8 +251,7 @@ class AIBackend(Protocol):
     ) -> tuple[bool, str]:
         """Execute prompt in streaming/print mode (non-interactive).
 
-        This replaces interactive run_print() usage. User input should be
-        collected via TUI first, then included in the prompt.
+        User input should be collected via TUI first, then included in the prompt.
         """
         ...
 
@@ -285,14 +283,6 @@ class AIBackend(Protocol):
         """
         ...
 
-    def supports_parallel_execution(self) -> bool:
-        """Whether this backend can handle concurrent invocations.
-
-        Returns the value of the `supports_parallel` property.
-        This method exists for explicit API clarity in workflow code.
-        """
-        ...
-
     def close(self) -> None:
         """Release any resources held by the backend.
 
@@ -314,7 +304,7 @@ class BaseBackend(ABC):
     class to inherit shared logic while implementing backend-specific behavior.
 
     This class implements the AIBackend protocol, providing:
-    - Default implementations for supports_parallel_execution() and close()
+    - Default implementation for close()
     - Protected helper methods for subagent parsing, model resolution, and timeouts
     - Abstract method declarations that subclasses must implement
 
@@ -373,14 +363,6 @@ class BaseBackend(ABC):
         --permission-mode plan).
         """
         return False
-
-    def supports_parallel_execution(self) -> bool:
-        """Whether this backend can handle concurrent invocations.
-
-        Returns the value of the supports_parallel property.
-        This method exists for explicit API clarity in workflow code.
-        """
-        return self.supports_parallel
 
     def close(self) -> None:  # noqa: B027
         """Release any resources held by the backend.

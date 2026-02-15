@@ -479,34 +479,6 @@ class AuggieClient:
 
         return result
 
-    def run_print(
-        self,
-        prompt: str,
-        *,
-        agent: str | None = None,
-        model: str | None = None,
-        dont_save_session: bool = False,
-    ) -> bool:
-        """Run with --print flag, return success status.
-
-        Args:
-            prompt: The prompt to send
-            agent: Agent to use (model comes from agent definition file)
-            model: Override model for this command (takes precedence over agent model)
-            dont_save_session: Use --dont-save-session flag
-
-        Returns:
-            True if command succeeded
-        """
-        result = self.run(
-            prompt,
-            print_mode=True,
-            agent=agent,
-            model=model,
-            dont_save_session=dont_save_session,
-        )
-        return result.returncode == 0
-
     def run_print_quiet(
         self,
         prompt: str,

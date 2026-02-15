@@ -65,11 +65,6 @@ class TestBackendProtocolCompliance:
     def test_supports_parallel_is_bool(self, backend: AIBackend):
         assert isinstance(backend.supports_parallel, bool)
 
-    def test_supports_parallel_execution_returns_bool(self, backend: AIBackend):
-        result = backend.supports_parallel_execution()
-        assert isinstance(result, bool)
-        assert result == backend.supports_parallel
-
     def test_check_installed_returns_tuple(self, backend: AIBackend):
         result = backend.check_installed()
         assert isinstance(result, tuple)

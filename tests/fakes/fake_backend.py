@@ -187,9 +187,6 @@ class FakeBackend:
     def detect_rate_limit(self, output: str) -> bool:
         return matches_common_rate_limit(output)
 
-    def supports_parallel_execution(self) -> bool:
-        return self.supports_parallel
-
     def close(self) -> None:
         self.closed = True
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ingot.integrations.providers import GenericTicket, Platform
+from ingot.integrations.providers import GenericTicket, Platform, TicketType
 from ingot.utils.errors import IngotError, UserCancelledError
 from ingot.workflow.conflict_detection import _detect_context_conflict
 from ingot.workflow.runner import (
@@ -91,6 +91,51 @@ class TestSetupBranchNameGeneration:
         assert result is True
         # When no branch_summary, GenericTicket uses title to generate branch name
         assert workflow_state.branch_name == "feature/test-456-test-feature-no-summary"
+
+
+class TestSetupBranchSemanticPrefix:
+    @patch("ingot.workflow.runner.prompt_confirm")
+    @patch("ingot.workflow.runner.create_branch")
+    @patch("ingot.workflow.runner.get_current_branch")
+    @pytest.mark.parametrize(
+        "ticket_type, expected_prefix",
+        [
+            (TicketType.FEATURE, "feat"),
+            (TicketType.BUG, "fix"),
+            (TicketType.TASK, "chore"),
+            (TicketType.MAINTENANCE, "refactor"),
+            (TicketType.UNKNOWN, "feature"),
+        ],
+    )
+    def test_uses_semantic_prefix_based_on_ticket_type(
+        self,
+        mock_get_branch,
+        mock_create,
+        mock_confirm,
+        workflow_state,
+        ticket_type,
+        expected_prefix,
+    ):
+        mock_get_branch.return_value = "main"
+        mock_confirm.return_value = True
+        mock_create.return_value = True
+
+        typed_ticket = GenericTicket(
+            id="TEST-100",
+            platform=Platform.JIRA,
+            url="https://jira.example.com/TEST-100",
+            title="Some work",
+            branch_summary="some-work",
+            type=ticket_type,
+        )
+        workflow_state.ticket = typed_ticket
+
+        result = _setup_branch(workflow_state, typed_ticket)
+
+        assert result is True
+        expected_branch = f"{expected_prefix}/test-100-some-work"
+        assert workflow_state.branch_name == expected_branch
+        mock_create.assert_called_once_with(expected_branch)
 
 
 class TestSetupBranchAlreadyOnFeature:
@@ -1031,7 +1076,7 @@ class TestSetupBranchSpecialCharacters:
         result = _setup_branch(workflow_state, special_ticket)
 
         assert result is True
-        # _setup_branch prepends "feature/" to ticket.branch_slug which sanitizes special chars
+        # _setup_branch uses ticket.semantic_branch_prefix (UNKNOWN→"feature") + branch_slug
         expected_branch = "feature/test-789-update-graphql-query"
         assert workflow_state.branch_name == expected_branch
         mock_create.assert_called_once_with(expected_branch)
@@ -1060,7 +1105,7 @@ class TestSetupBranchSpecialCharacters:
         result = _setup_branch(workflow_state, special_ticket)
 
         assert result is True
-        # _setup_branch prepends "feature/" to ticket.branch_slug which sanitizes special chars
+        # _setup_branch uses ticket.semantic_branch_prefix (UNKNOWN→"feature") + branch_slug
         expected_branch = "feature/test-999-fix-api-endpoint-v2-urgent"
         assert workflow_state.branch_name == expected_branch
 
