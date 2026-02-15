@@ -64,7 +64,11 @@ class GeminiBackend(BaseBackend):
 
     @property
     def supports_plan_mode(self) -> bool:
-        """Gemini supports plan mode via --approval-mode=plan."""
+        """Whether this backend can enforce read-only plan mode via --approval-mode=plan.
+
+        Returns True, meaning callers can rely on plan_mode=True producing
+        enforced read-only behavior through Gemini CLI flags.
+        """
         return True
 
     # _resolve_subagent() inherited from BaseBackend
@@ -85,6 +89,7 @@ class GeminiBackend(BaseBackend):
                 "Gemini plan mode (--approval-mode=plan) requires the following "
                 "in ~/.gemini/settings.json:\n"
                 '  {"experimental": {"plan": true}}\n'
+                "Ensure your Gemini CLI version supports 'experimental.plan'. "
                 "A restart of the Gemini CLI may be required after changing settings.",
             )
             return "plan"

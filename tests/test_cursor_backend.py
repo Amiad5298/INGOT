@@ -605,6 +605,91 @@ class TestCursorDetectRateLimit:
         assert backend.detect_rate_limit("HTTP 429 error") is True
 
 
+class TestCursorBackendPlanMode:
+    """Tests for dynamic plan mode capability detection."""
+
+    def test_supports_plan_mode_true_when_cli_supports_mode_flag(self):
+        backend = CursorBackend()
+
+        with patch.object(backend._client, "_supports_mode_flag", return_value=True):
+            assert backend.supports_plan_mode is True
+
+    def test_supports_plan_mode_false_when_cli_lacks_mode_flag(self):
+        backend = CursorBackend()
+
+        with patch.object(backend._client, "_supports_mode_flag", return_value=False):
+            assert backend.supports_plan_mode is False
+
+    def test_plan_mode_passes_mode_plan_to_client(self):
+        backend = CursorBackend()
+
+        with patch.object(
+            backend._client, "run_with_callback", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=True,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("mode") == "plan"
+
+    def test_plan_mode_false_passes_no_mode(self):
+        backend = CursorBackend()
+
+        with patch.object(
+            backend._client, "run_with_callback", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=False,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("mode") is None
+
+    def test_plan_mode_run_print_with_output(self):
+        backend = CursorBackend()
+
+        with patch.object(
+            backend._client, "run_print_with_output", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_print_with_output("test prompt", plan_mode=True)
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("mode") == "plan"
+
+    def test_plan_mode_run_print_quiet(self):
+        backend = CursorBackend()
+
+        with patch.object(backend._client, "run_print_quiet", return_value="output") as mock_run:
+            backend.run_print_quiet("test prompt", plan_mode=True)
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("mode") == "plan"
+
+    def test_plan_mode_propagates_through_timeout_path(self, mocker):
+        backend = CursorBackend()
+        mock_callback = MagicMock()
+
+        mocker.patch.object(backend, "_run_streaming_with_timeout", return_value=(0, "output"))
+        mock_build = mocker.patch.object(
+            backend._client, "build_command", return_value=["cursor", "test"]
+        )
+
+        backend.run_with_callback(
+            "test prompt",
+            output_callback=mock_callback,
+            timeout_seconds=30.0,
+            plan_mode=True,
+        )
+
+        build_kwargs = mock_build.call_args.kwargs
+        assert build_kwargs.get("mode") == "plan"
+
+
 @pytest.mark.skipif(
     os.environ.get("INGOT_INTEGRATION_TESTS") != "1",
     reason="Integration tests require INGOT_INTEGRATION_TESTS=1",

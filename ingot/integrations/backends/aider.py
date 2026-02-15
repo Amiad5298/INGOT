@@ -68,7 +68,11 @@ class AiderBackend(BaseBackend):
 
     @property
     def supports_plan_mode(self) -> bool:
-        """Aider supports plan mode via --chat-mode ask."""
+        """Whether this backend can enforce read-only plan mode via --chat-mode ask.
+
+        Returns True, meaning callers can rely on plan_mode=True producing
+        enforced read-only behavior through Aider CLI flags.
+        """
         return True
 
     # _resolve_subagent() and _compose_prompt() inherited from BaseBackend
@@ -86,7 +90,20 @@ class AiderBackend(BaseBackend):
 
         Returns:
             The resolved AiderChatMode, or None for default behavior.
+
+        Raises:
+            ValueError: If both plan_mode=True and architect=True. These flags
+                are contradictory: plan_mode enforces read-only behavior while
+                architect enables file-writing. Remove the deprecated architect
+                flag to proceed.
         """
+        if plan_mode and architect:
+            raise ValueError(
+                "Cannot combine plan_mode=True (read-only) with architect=True "
+                "(write-enabled). Remove the deprecated 'architect' parameter "
+                "and use plan_mode=True for safe, read-only execution."
+            )
+
         if architect is not None:
             warnings.warn(
                 "The 'architect' parameter is deprecated. "

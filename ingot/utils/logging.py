@@ -12,6 +12,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 # Environment variable configuration
@@ -137,6 +138,7 @@ def check_cli_installed(cli_name: str) -> tuple[bool, str]:
 
 # Keys that have already been logged via log_once() in this process.
 _logged_once_keys: set[str] = set()
+_logged_once_lock = threading.Lock()
 
 
 def log_once(key: str, message: str) -> None:
@@ -145,13 +147,17 @@ def log_once(key: str, message: str) -> None:
     Useful for configuration warnings (e.g., "experimental plan mode")
     that should not spam the log on every ``run_*`` call.
 
+    Thread-safe: uses a lock to ensure atomicity of the check-and-add
+    operation on the global ``_logged_once_keys`` set.
+
     Args:
         key: A unique identifier for the message (e.g., "gemini_plan_mode").
         message: The message to log.
     """
-    if key in _logged_once_keys:
-        return
-    _logged_once_keys.add(key)
+    with _logged_once_lock:
+        if key in _logged_once_keys:
+            return
+        _logged_once_keys.add(key)
     log_message(message)
 
 
