@@ -34,8 +34,8 @@ class TestFetchAnthropicModels:
         models = fetch_anthropic_models("test-key")
 
         assert len(models) == 2
-        assert models[0].id == "claude-sonnet-4"
-        assert models[1].id == "claude-opus-4"
+        assert models[0].id == "claude-opus-4"
+        assert models[1].id == "claude-sonnet-4"
 
     @patch("ingot.integrations.backends.model_discovery.httpx.get")
     def test_timeout_returns_empty(self, mock_get):

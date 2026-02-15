@@ -279,13 +279,13 @@ class ClaudeBackend(BaseBackend):
         """
         return looks_like_rate_limit(output)
 
-    _FALLBACK_MODELS: list[BackendModel] = [
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
         BackendModel(id="claude-sonnet-4", name="Claude Sonnet 4"),
         BackendModel(id="claude-opus-4", name="Claude Opus 4"),
         BackendModel(id="claude-haiku-3.5", name="Claude Haiku 3.5"),
         BackendModel(id="claude-sonnet-4-thinking", name="Claude Sonnet 4 (Thinking)"),
         BackendModel(id="claude-opus-4-thinking", name="Claude Opus 4 (Thinking)"),
-    ]
+    )
 
     def list_models(self) -> list[BackendModel]:
         """Return models via Anthropic API with hardcoded fallback."""
@@ -293,9 +293,9 @@ class ClaudeBackend(BaseBackend):
 
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            return self._FALLBACK_MODELS
+            return list(self._FALLBACK_MODELS)
 
         models = fetch_anthropic_models(api_key)
-        return models if models else self._FALLBACK_MODELS
+        return models if models else list(self._FALLBACK_MODELS)
 
     # close() inherited from BaseBackend

@@ -15,7 +15,7 @@ from ingot.integrations.backends.base import BackendModel
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = 5.0  # seconds
+_TIMEOUT = 10.0  # seconds
 
 
 def fetch_anthropic_models(api_key: str) -> list[BackendModel]:
@@ -49,7 +49,7 @@ def fetch_anthropic_models(api_key: str) -> list[BackendModel]:
                 display_name = item.get("display_name", model_id)
                 models.append(BackendModel(id=model_id, name=display_name))
 
-        return models
+        return sorted(models, key=lambda m: m.id)
     except Exception:
         logger.debug("Failed to fetch Anthropic models", exc_info=True)
         return []
@@ -88,7 +88,7 @@ def fetch_openai_models(api_key: str) -> list[BackendModel]:
                 continue
             models.append(BackendModel(id=model_id, name=model_id))
 
-        return models
+        return sorted(models, key=lambda m: m.id)
     except Exception:
         logger.debug("Failed to fetch OpenAI models", exc_info=True)
         return []
@@ -127,7 +127,7 @@ def fetch_gemini_models(api_key: str) -> list[BackendModel]:
             description = item.get("description", "")
             models.append(BackendModel(id=model_id, name=display_name, description=description))
 
-        return models
+        return sorted(models, key=lambda m: m.id)
     except Exception:
         logger.debug("Failed to fetch Gemini models", exc_info=True)
         return []

@@ -16,10 +16,10 @@ from ingot.integrations.git import DirtyStateAction
 from ingot.ui.prompts import custom_style
 from ingot.utils.console import console, print_header, print_info
 from ingot.utils.errors import UserCancelledError
+from ingot.utils.logging import log_message
 
 if TYPE_CHECKING:
     from ingot.integrations.backends.base import AIBackend
-from ingot.utils.logging import log_message
 
 
 class MainMenuChoice(Enum):

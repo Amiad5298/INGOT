@@ -251,14 +251,14 @@ class CursorBackend(BaseBackend):
         """
         return looks_like_rate_limit(output)
 
-    _FALLBACK_MODELS: list[BackendModel] = [
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
         BackendModel(id="claude-sonnet-4", name="Claude Sonnet 4"),
         BackendModel(id="claude-opus-4", name="Claude Opus 4"),
         BackendModel(id="gpt-4.1", name="GPT-4.1"),
         BackendModel(id="gpt-4o", name="GPT-4o"),
         BackendModel(id="gemini-2.5-pro", name="Gemini 2.5 Pro"),
         BackendModel(id="cursor-small", name="Cursor Small"),
-    ]
+    )
 
     def list_models(self) -> list[BackendModel]:
         """Return hardcoded model list for Cursor.
@@ -266,7 +266,7 @@ class CursorBackend(BaseBackend):
         Cursor is an IDE wrapper routing to multiple providers with no
         programmatic model listing API.
         """
-        return self._FALLBACK_MODELS
+        return list(self._FALLBACK_MODELS)
 
     # close() inherited from BaseBackend
 

@@ -206,11 +206,11 @@ class CodexBackend(BaseBackend):
         """Detect if output indicates a rate limit error."""
         return looks_like_rate_limit(output)
 
-    _FALLBACK_MODELS: list[BackendModel] = [
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
         BackendModel(id="o3", name="o3"),
         BackendModel(id="o4-mini", name="o4-mini"),
         BackendModel(id="gpt-4.1", name="GPT-4.1"),
-    ]
+    )
 
     def list_models(self) -> list[BackendModel]:
         """Return models via OpenAI API with hardcoded fallback."""
@@ -218,10 +218,10 @@ class CodexBackend(BaseBackend):
 
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            return self._FALLBACK_MODELS
+            return list(self._FALLBACK_MODELS)
 
         models = fetch_openai_models(api_key)
-        return models if models else self._FALLBACK_MODELS
+        return models if models else list(self._FALLBACK_MODELS)
 
 
 __all__ = [

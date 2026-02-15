@@ -278,11 +278,11 @@ class GeminiBackend(BaseBackend):
         """Detect if output indicates a rate limit error."""
         return looks_like_rate_limit(output)
 
-    _FALLBACK_MODELS: list[BackendModel] = [
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
         BackendModel(id="gemini-2.5-pro", name="Gemini 2.5 Pro"),
         BackendModel(id="gemini-2.5-flash", name="Gemini 2.5 Flash"),
         BackendModel(id="gemini-2.0-flash", name="Gemini 2.0 Flash"),
-    ]
+    )
 
     def list_models(self) -> list[BackendModel]:
         """Return models via Gemini API with hardcoded fallback."""
@@ -290,10 +290,10 @@ class GeminiBackend(BaseBackend):
 
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            return self._FALLBACK_MODELS
+            return list(self._FALLBACK_MODELS)
 
         models = fetch_gemini_models(api_key)
-        return models if models else self._FALLBACK_MODELS
+        return models if models else list(self._FALLBACK_MODELS)
 
 
 __all__ = [
