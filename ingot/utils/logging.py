@@ -135,6 +135,26 @@ def check_cli_installed(cli_name: str) -> tuple[bool, str]:
     return False, f"{cli_name} CLI is not installed or not in PATH"
 
 
+# Keys that have already been logged via log_once() in this process.
+_logged_once_keys: set[str] = set()
+
+
+def log_once(key: str, message: str) -> None:
+    """Log a message at most once per process lifecycle.
+
+    Useful for configuration warnings (e.g., "experimental plan mode")
+    that should not spam the log on every ``run_*`` call.
+
+    Args:
+        key: A unique identifier for the message (e.g., "gemini_plan_mode").
+        message: The message to log.
+    """
+    if key in _logged_once_keys:
+        return
+    _logged_once_keys.add(key)
+    log_message(message)
+
+
 def log_backend_metadata(
     backend_name: str,
     *,
@@ -166,6 +186,7 @@ __all__ = [
     "setup_logging",
     "get_logger",
     "log_message",
+    "log_once",
     "log_command",
     "log_backend_metadata",
     "check_cli_installed",

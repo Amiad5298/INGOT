@@ -4,6 +4,9 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import ingot.utils.logging as logging_mod
+from ingot.utils.logging import log_once
+
 
 class TestLogging:
     def test_log_disabled_by_default(self):
@@ -129,3 +132,33 @@ class TestLogging:
             content = log_file.read_text()
             assert "COMMAND: git status" in content
             assert "EXIT_CODE: 0" in content
+
+
+class TestLogOnce:
+    def setup_method(self):
+        """Clear the logged-once state before each test.
+
+        Access via module attribute (not a stale import) because
+        TestLogging reloads the module, replacing the set object.
+        """
+        logging_mod._logged_once_keys.clear()
+
+    def test_logs_first_call(self):
+        with patch("ingot.utils.logging.log_message") as mock_log:
+            log_once("test_key_a", "hello")
+
+        mock_log.assert_called_once_with("hello")
+
+    def test_suppresses_second_call_same_key(self):
+        with patch("ingot.utils.logging.log_message") as mock_log:
+            log_once("test_key_b", "first")
+            log_once("test_key_b", "second")
+
+        mock_log.assert_called_once_with("first")
+
+    def test_different_keys_both_logged(self):
+        with patch("ingot.utils.logging.log_message") as mock_log:
+            log_once("test_key_c", "message a")
+            log_once("test_key_d", "message b")
+
+        assert mock_log.call_count == 2

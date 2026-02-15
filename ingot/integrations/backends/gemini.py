@@ -22,7 +22,7 @@ from ingot.integrations.gemini import (
     check_gemini_installed,
     looks_like_rate_limit,
 )
-from ingot.utils.logging import log_message
+from ingot.utils.logging import log_once
 
 
 class GeminiBackend(BaseBackend):
@@ -121,9 +121,12 @@ class GeminiBackend(BaseBackend):
         approval_mode = "plan" if plan_mode else "yolo"
 
         if plan_mode:
-            log_message(
-                "Gemini plan mode (--approval-mode=plan) requires "
-                "'experimental.plan: true' in ~/.gemini/settings.json"
+            log_once(
+                "gemini_plan_mode",
+                "Gemini plan mode (--approval-mode=plan) requires the following "
+                "in ~/.gemini/settings.json:\n"
+                '  {"experimental": {"plan": true}}\n'
+                "A restart of the Gemini CLI may be required after changing settings.",
             )
 
         try:
@@ -171,9 +174,12 @@ class GeminiBackend(BaseBackend):
         approval_mode = "plan" if plan_mode else "yolo"
 
         if plan_mode:
-            log_message(
-                "Gemini plan mode (--approval-mode=plan) requires "
-                "'experimental.plan: true' in ~/.gemini/settings.json"
+            log_once(
+                "gemini_plan_mode",
+                "Gemini plan mode (--approval-mode=plan) requires the following "
+                "in ~/.gemini/settings.json:\n"
+                '  {"experimental": {"plan": true}}\n'
+                "A restart of the Gemini CLI may be required after changing settings.",
             )
 
         try:
@@ -213,9 +219,12 @@ class GeminiBackend(BaseBackend):
         approval_mode = "plan" if plan_mode else "yolo"
 
         if plan_mode:
-            log_message(
-                "Gemini plan mode (--approval-mode=plan) requires "
-                "'experimental.plan: true' in ~/.gemini/settings.json"
+            log_once(
+                "gemini_plan_mode",
+                "Gemini plan mode (--approval-mode=plan) requires the following "
+                "in ~/.gemini/settings.json:\n"
+                '  {"experimental": {"plan": true}}\n'
+                "A restart of the Gemini CLI may be required after changing settings.",
             )
 
         try:

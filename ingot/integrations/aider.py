@@ -15,8 +15,12 @@ import subprocess
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 from ingot.utils.logging import check_cli_installed, log_backend_metadata, log_command, log_message
+
+# Valid chat modes for Aider CLI's --chat-mode flag.
+AiderChatMode = Literal["ask", "code", "architect", "help"]
 
 AIDER_CLI_NAME = "aider"
 
@@ -77,7 +81,7 @@ class AiderClient:
         *,
         model: str | None = None,
         message_file: str | None = None,
-        chat_mode: str | None = None,
+        chat_mode: AiderChatMode | None = None,
     ) -> list[str]:
         """Build aider command list.
 
@@ -122,7 +126,7 @@ class AiderClient:
         *,
         output_callback: Callable[[str], None],
         model: str | None = None,
-        chat_mode: str | None = None,
+        chat_mode: AiderChatMode | None = None,
     ) -> tuple[bool, str]:
         """Run with streaming output callback.
 
@@ -180,7 +184,7 @@ class AiderClient:
         *,
         model: str | None = None,
         timeout_seconds: float | None = None,
-        chat_mode: str | None = None,
+        chat_mode: AiderChatMode | None = None,
     ) -> tuple[bool, str]:
         """Run and return success status and captured output.
 
@@ -237,7 +241,7 @@ class AiderClient:
         *,
         model: str | None = None,
         timeout_seconds: float | None = None,
-        chat_mode: str | None = None,
+        chat_mode: AiderChatMode | None = None,
     ) -> str:
         """Run quietly, return output only.
 
@@ -290,6 +294,7 @@ class AiderClient:
 
 __all__ = [
     "AIDER_CLI_NAME",
+    "AiderChatMode",
     "AiderClient",
     "check_aider_installed",
     "looks_like_rate_limit",

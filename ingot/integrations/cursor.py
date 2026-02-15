@@ -17,7 +17,7 @@ import subprocess
 import time
 from collections.abc import Callable
 
-from ingot.utils.logging import log_command, log_message
+from ingot.utils.logging import log_command, log_message, log_once
 
 CURSOR_CLI_NAME = "cursor"
 
@@ -253,9 +253,12 @@ class CursorClient:
             if self._supports_mode_flag():
                 cmd.extend(["--mode", mode])
             else:
-                log_message(
+                log_once(
+                    "cursor_mode_unsupported",
                     f"Warning: --mode {mode} requested but not supported by "
-                    f"detected Cursor CLI; falling back to default mode"
+                    f"detected Cursor CLI (command: '{cli}'). "
+                    f"Falling back to default mode. "
+                    f"Run '{cli} --help' to check available flags.",
                 )
 
         # Prompt as final positional argument

@@ -14,11 +14,13 @@ instructions are embedded directly in the user prompt (via _compose_prompt).
 
 import subprocess
 import tempfile
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 
 from ingot.config.fetch_config import AgentPlatform
 from ingot.integrations.aider import (
+    AiderChatMode,
     AiderClient,
     check_aider_installed,
     looks_like_rate_limit,
@@ -66,6 +68,35 @@ class AiderBackend(BaseBackend):
 
     # _resolve_subagent() and _compose_prompt() inherited from BaseBackend
 
+    @staticmethod
+    def _resolve_chat_mode(
+        plan_mode: bool,
+        architect: bool | None,
+    ) -> AiderChatMode | None:
+        """Resolve the effective chat_mode from plan_mode and deprecated architect flag.
+
+        Args:
+            plan_mode: If True, maps to chat_mode="ask" for read-only mode.
+            architect: Deprecated. If True, maps to chat_mode="architect".
+
+        Returns:
+            The resolved AiderChatMode, or None for default behavior.
+        """
+        if architect is not None:
+            warnings.warn(
+                "The 'architect' parameter is deprecated. "
+                "Use plan_mode=True or pass chat_mode directly instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if architect:
+                return "architect"
+
+        if plan_mode:
+            return "ask"
+
+        return None
+
     def run_with_callback(
         self,
         prompt: str,
@@ -76,6 +107,7 @@ class AiderBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
         plan_mode: bool = False,
+        architect: bool | None = None,
     ) -> tuple[bool, str]:
         """Execute with streaming callback and optional timeout.
 
@@ -87,6 +119,7 @@ class AiderBackend(BaseBackend):
             dont_save_session: Unused (Aider has no session persistence).
             timeout_seconds: Optional timeout in seconds (None = no timeout).
             plan_mode: If True, use --chat-mode ask for read-only mode.
+            architect: Deprecated. Use plan_mode=True instead.
 
         Returns:
             Tuple of (success, output).
@@ -94,6 +127,7 @@ class AiderBackend(BaseBackend):
         Raises:
             BackendTimeoutError: If timeout_seconds is specified and exceeded.
         """
+        chat_mode = self._resolve_chat_mode(plan_mode, architect)
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         composed_prompt = self._compose_prompt(prompt, subagent_prompt)
 
@@ -108,7 +142,7 @@ class AiderBackend(BaseBackend):
                     composed_prompt,
                     model=resolved_model,
                     message_file=message_file,
-                    chat_mode="ask" if plan_mode else None,
+                    chat_mode=chat_mode,
                 )
                 exit_code, output = self._run_streaming_with_timeout(
                     cmd,
@@ -124,7 +158,7 @@ class AiderBackend(BaseBackend):
                 composed_prompt,
                 output_callback=output_callback,
                 model=resolved_model,
-                chat_mode="ask" if plan_mode else None,
+                chat_mode=chat_mode,
             )
 
     def run_print_with_output(
@@ -136,12 +170,23 @@ class AiderBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
         plan_mode: bool = False,
+        architect: bool | None = None,
     ) -> tuple[bool, str]:
         """Run and return success status and captured output.
+
+        Args:
+            prompt: The prompt to send to Aider.
+            subagent: Optional subagent name.
+            model: Optional model override.
+            dont_save_session: Unused (Aider has no session persistence).
+            timeout_seconds: Optional timeout in seconds.
+            plan_mode: If True, use --chat-mode ask for read-only mode.
+            architect: Deprecated. Use plan_mode=True instead.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
         """
+        chat_mode = self._resolve_chat_mode(plan_mode, architect)
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         composed_prompt = self._compose_prompt(prompt, subagent_prompt)
         try:
@@ -149,7 +194,7 @@ class AiderBackend(BaseBackend):
                 composed_prompt,
                 model=resolved_model,
                 timeout_seconds=timeout_seconds,
-                chat_mode="ask" if plan_mode else None,
+                chat_mode=chat_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(
@@ -166,12 +211,23 @@ class AiderBackend(BaseBackend):
         dont_save_session: bool = False,
         timeout_seconds: float | None = None,
         plan_mode: bool = False,
+        architect: bool | None = None,
     ) -> str:
         """Run quietly, return output only.
+
+        Args:
+            prompt: The prompt to send to Aider.
+            subagent: Optional subagent name.
+            model: Optional model override.
+            dont_save_session: Unused (Aider has no session persistence).
+            timeout_seconds: Optional timeout in seconds.
+            plan_mode: If True, use --chat-mode ask for read-only mode.
+            architect: Deprecated. Use plan_mode=True instead.
 
         Raises:
             BackendTimeoutError: If timeout_seconds is exceeded.
         """
+        chat_mode = self._resolve_chat_mode(plan_mode, architect)
         resolved_model, subagent_prompt = self._resolve_subagent(subagent, model)
         composed_prompt = self._compose_prompt(prompt, subagent_prompt)
         try:
@@ -179,7 +235,7 @@ class AiderBackend(BaseBackend):
                 composed_prompt,
                 model=resolved_model,
                 timeout_seconds=timeout_seconds,
-                chat_mode="ask" if plan_mode else None,
+                chat_mode=chat_mode,
             )
         except subprocess.TimeoutExpired:
             raise BackendTimeoutError(

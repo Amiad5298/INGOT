@@ -363,12 +363,12 @@ class TestGeminiBackendTimeout:
 
 
 class TestGeminiBackendPlanMode:
-    def test_plan_mode_logs_experimental_warning(self):
+    def test_plan_mode_logs_actionable_warning_once(self):
         backend = GeminiBackend()
 
         with (
             patch.object(backend._client, "run_with_callback", return_value=(True, "output")),
-            patch("ingot.integrations.backends.gemini.log_message") as mock_log,
+            patch("ingot.integrations.backends.gemini.log_once") as mock_log_once,
         ):
             backend.run_with_callback(
                 "test prompt",
@@ -376,12 +376,14 @@ class TestGeminiBackendPlanMode:
                 plan_mode=True,
             )
 
-        # Find the warning call among potentially multiple log_message calls
-        warning_calls = [c for c in mock_log.call_args_list if "experimental.plan" in str(c)]
-        assert len(warning_calls) == 1
-        msg = warning_calls[0][0][0]
-        assert "--approval-mode=plan" in msg
-        assert "~/.gemini/settings.json" in msg
+        mock_log_once.assert_called_once()
+        key_arg = mock_log_once.call_args[0][0]
+        msg_arg = mock_log_once.call_args[0][1]
+        assert key_arg == "gemini_plan_mode"
+        assert "--approval-mode=plan" in msg_arg
+        assert "~/.gemini/settings.json" in msg_arg
+        assert '{"experimental": {"plan": true}}' in msg_arg
+        assert "restart" in msg_arg.lower()
 
     def test_plan_mode_passes_approval_mode_plan(self):
         backend = GeminiBackend()
@@ -403,7 +405,7 @@ class TestGeminiBackendPlanMode:
 
         with (
             patch.object(backend._client, "run_with_callback", return_value=(True, "output")),
-            patch("ingot.integrations.backends.gemini.log_message") as mock_log,
+            patch("ingot.integrations.backends.gemini.log_once") as mock_log_once,
         ):
             backend.run_with_callback(
                 "test prompt",
@@ -411,9 +413,7 @@ class TestGeminiBackendPlanMode:
                 plan_mode=False,
             )
 
-        # No warning calls should contain experimental.plan
-        warning_calls = [c for c in mock_log.call_args_list if "experimental.plan" in str(c)]
-        assert len(warning_calls) == 0
+        mock_log_once.assert_not_called()
 
 
 class TestGeminiBackendClose:

@@ -24,7 +24,24 @@ from ingot.utils.logging import log_message
 from ingot.workflow.events import format_run_directory
 from ingot.workflow.state import WorkflowState
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+# Robust ANSI/terminal escape sequence patterns (ECMA-48 compliant).
+# Matches:
+# - CSI sequences: \x1b[ followed by parameter bytes (0x30-0x3f, including ?),
+#   intermediate bytes (0x20-0x2f), and a final byte (0x40-0x7e).
+#   Examples: \x1b[32m (color), \x1b[?25l (hide cursor), \x1b[38;2;255;0;0m (24-bit color)
+# - OSC sequences: \x1b] ... ST (terminated by \x1b\\ or \x07).
+#   Examples: \x1b]0;title\x07 (set window title)
+_ANSI_RE = re.compile(
+    r"\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]"  # CSI sequences
+    r"|\x1b\].*?(?:\x1b\\|\x07)"  # OSC sequences
+    r"|\x1b[()][A-Z0-9]"  # Character set designation
+)
+
+# Matches <thinking>...</thinking> blocks (case-insensitive, multi-line).
+_THINKING_BLOCK_RE = re.compile(
+    r"<thinking>.*?</thinking>",
+    re.DOTALL | re.IGNORECASE,
+)
 
 # =============================================================================
 # Log Directory Management
@@ -162,11 +179,13 @@ Codebase context will be retrieved automatically."""
 def _extract_plan_markdown(output: str) -> str:
     """Extract clean markdown plan from CLI output.
 
-    Strips tool-call logs, headers, ANSI escape codes, and other noise.
-    Looks for the first markdown heading (any level) and returns everything
-    from there. Falls back to full output if no headings found.
+    Strips ANSI escape codes, ``<thinking>`` blocks, tool-call logs,
+    and other noise. Looks for the first markdown heading (any level)
+    and returns everything from there. Falls back to full output if no
+    headings found.
     """
     output = _ANSI_RE.sub("", output)
+    output = _THINKING_BLOCK_RE.sub("", output)
     lines = output.splitlines()
 
     # Find first markdown heading (any level: #, ##, ###, etc.)

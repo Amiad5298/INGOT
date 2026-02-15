@@ -309,6 +309,89 @@ class TestExtractPlanMarkdown:
         assert result.startswith("# Real Heading")
         assert "#tag" not in result
 
+    def test_strips_csi_with_parameter_byte(self):
+        """CSI sequences with ? parameter byte (e.g., cursor hide/show)."""
+        output = "\x1b[?25lHidden cursor\x1b[?25h\n# Plan\n\nContent"
+        result = _extract_plan_markdown(output)
+        assert result == "# Plan\n\nContent"
+        assert "\x1b" not in result
+
+    def test_strips_24bit_color_sequences(self):
+        """24-bit (true color) ANSI sequences: ESC[38;2;R;G;Bm."""
+        output = "\x1b[38;2;255;0;128mColorful\x1b[0m preamble\n# Plan\n\nBody"
+        result = _extract_plan_markdown(output)
+        assert result == "# Plan\n\nBody"
+        assert "\x1b" not in result
+
+    def test_strips_osc_sequences(self):
+        """OSC sequences like window title setting."""
+        output = "\x1b]0;My Title\x07Some output\n# Plan\n\nContent"
+        result = _extract_plan_markdown(output)
+        assert result == "# Plan\n\nContent"
+        assert "\x1b" not in result
+
+    def test_strips_osc_with_st_terminator(self):
+        """OSC sequences terminated with ST (ESC \\)."""
+        output = "\x1b]0;My Title\x1b\\Some output\n# Plan\n\nContent"
+        result = _extract_plan_markdown(output)
+        assert result == "# Plan\n\nContent"
+        assert "\x1b" not in result
+
+    def test_strips_complex_mixed_ansi(self):
+        """Mix of cursor hiding, 24-bit color, bold, reset, and OSC."""
+        output = (
+            "\x1b[?25l"  # Hide cursor
+            "\x1b[1m\x1b[38;2;0;255;0m"  # Bold + 24-bit green
+            "Thinking...\n"
+            "\x1b[0m"  # Reset
+            "\x1b]0;Agent Running\x07"  # OSC: set title
+            "Tool: search_code\n"
+            "# Implementation Plan\n\n"
+            "## Step 1\n"
+            "Do something\n"
+            "\x1b[?25h"  # Show cursor
+        )
+        result = _extract_plan_markdown(output)
+        assert result.startswith("# Implementation Plan")
+        assert "## Step 1" in result
+        assert "Do something" in result
+        assert "\x1b" not in result
+
+    def test_strips_thinking_blocks(self):
+        """<thinking> blocks should be removed before heading extraction."""
+        output = (
+            "<thinking>\n# Internal Heading\nSome reasoning\n</thinking>\n"
+            "# Actual Plan\n\nReal content"
+        )
+        result = _extract_plan_markdown(output)
+        assert result.startswith("# Actual Plan")
+        assert "Internal Heading" not in result
+        assert "Some reasoning" not in result
+
+    def test_strips_thinking_blocks_case_insensitive(self):
+        output = "<Thinking>reasoning</Thinking>\n# Plan\n\nContent"
+        result = _extract_plan_markdown(output)
+        assert result == "# Plan\n\nContent"
+        assert "reasoning" not in result
+
+    def test_thinking_block_with_nested_markdown(self):
+        """Thinking blocks containing markdown headings should not leak."""
+        output = (
+            "Preamble\n"
+            "<thinking>\n"
+            "## Analysis\n"
+            "- point 1\n"
+            "- point 2\n"
+            "</thinking>\n"
+            "# Real Plan\n\n"
+            "## Steps\n"
+            "1. First step"
+        )
+        result = _extract_plan_markdown(output)
+        assert result.startswith("# Real Plan")
+        assert "## Steps" in result
+        assert "Analysis" not in result
+
 
 class TestSavePlanFromOutput:
     def test_creates_template_with_ticket_id(self, workflow_state, tmp_path):
