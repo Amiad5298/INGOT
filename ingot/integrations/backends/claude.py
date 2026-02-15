@@ -19,11 +19,12 @@ them to temp files for --append-system-prompt-file (avoids ARG_MAX
 and hides prompts from the process list).
 """
 
+import os
 import subprocess
 from collections.abc import Callable
 
 from ingot.config.fetch_config import AgentPlatform
-from ingot.integrations.backends.base import BaseBackend
+from ingot.integrations.backends.base import BackendModel, BaseBackend
 from ingot.integrations.backends.errors import BackendTimeoutError
 from ingot.integrations.claude import (
     ClaudeClient,
@@ -277,5 +278,24 @@ class ClaudeBackend(BaseBackend):
             True if output looks like a rate limit error.
         """
         return looks_like_rate_limit(output)
+
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
+        BackendModel(id="claude-sonnet-4", name="Claude Sonnet 4"),
+        BackendModel(id="claude-opus-4", name="Claude Opus 4"),
+        BackendModel(id="claude-haiku-3.5", name="Claude Haiku 3.5"),
+        BackendModel(id="claude-sonnet-4-thinking", name="Claude Sonnet 4 (Thinking)"),
+        BackendModel(id="claude-opus-4-thinking", name="Claude Opus 4 (Thinking)"),
+    )
+
+    def list_models(self) -> list[BackendModel]:
+        """Return models via Anthropic API with hardcoded fallback."""
+        from ingot.integrations.backends.model_discovery import fetch_anthropic_models
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            return list(self._FALLBACK_MODELS)
+
+        models = fetch_anthropic_models(api_key)
+        return models if models else list(self._FALLBACK_MODELS)
 
     # close() inherited from BaseBackend

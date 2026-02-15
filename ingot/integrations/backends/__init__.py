@@ -18,6 +18,7 @@ Modules:
 # Eager imports: base types, errors, factory (no circular risk)
 from ingot.integrations.backends.base import (
     AIBackend,
+    BackendModel,
     BaseBackend,
     SubagentMetadata,
 )
@@ -58,6 +59,7 @@ def __getattr__(name: str) -> type:
 __all__ = [
     # Protocol and base class
     "AIBackend",
+    "BackendModel",
     "BaseBackend",
     "SubagentMetadata",
     # Backend implementations

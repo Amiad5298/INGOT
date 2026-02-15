@@ -248,6 +248,84 @@ class TestSaveConfiguration:
         with pytest.raises(IngotError, match="readback mismatch"):
             flow._save_configuration(AgentPlatform.CLAUDE)
 
+    @patch("ingot.onboarding.flow.print_success")
+    def test_save_with_models(self, mock_print_success):
+        config = _make_config()
+        config.get.side_effect = lambda key, default="": (
+            "claude" if key == "AI_BACKEND" else default
+        )
+
+        flow = OnboardingFlow(config)
+        flow._save_configuration(
+            AgentPlatform.CLAUDE,
+            planning_model="claude-sonnet-4",
+            impl_model="claude-opus-4",
+        )
+
+        assert config.save.call_count == 3
+        config.save.assert_any_call("AI_BACKEND", "claude")
+        config.save.assert_any_call("PLANNING_MODEL", "claude-sonnet-4")
+        config.save.assert_any_call("IMPLEMENTATION_MODEL", "claude-opus-4")
+
+    @patch("ingot.onboarding.flow.print_success")
+    def test_save_with_no_models(self, mock_print_success):
+        config = _make_config()
+        config.get.side_effect = lambda key, default="": (
+            "claude" if key == "AI_BACKEND" else default
+        )
+
+        flow = OnboardingFlow(config)
+        flow._save_configuration(
+            AgentPlatform.CLAUDE,
+            planning_model=None,
+            impl_model=None,
+        )
+
+        config.save.assert_called_once_with("AI_BACKEND", "claude")
+
+
+# ---------------------------------------------------------------------------
+# OnboardingFlow._select_models
+# ---------------------------------------------------------------------------
+
+
+class TestSelectModels:
+    @patch("ingot.onboarding.flow.prompt_confirm")
+    def test_user_declines_returns_none(self, mock_confirm):
+        mock_confirm.return_value = False
+
+        flow = OnboardingFlow(_make_config())
+        result = flow._select_models(AgentPlatform.CLAUDE)
+
+        assert result == (None, None)
+
+    @patch("ingot.onboarding.flow.show_model_selection")
+    @patch("ingot.onboarding.flow.BackendFactory")
+    @patch("ingot.onboarding.flow.prompt_confirm")
+    def test_user_accepts_returns_selected_models(
+        self, mock_confirm, mock_factory, mock_show_model
+    ):
+        mock_confirm.return_value = True
+        mock_factory.create.return_value = MagicMock()
+        mock_show_model.side_effect = ["claude-sonnet-4", "claude-opus-4"]
+
+        flow = OnboardingFlow(_make_config())
+        result = flow._select_models(AgentPlatform.CLAUDE)
+
+        assert result == ("claude-sonnet-4", "claude-opus-4")
+        assert mock_show_model.call_count == 2
+
+    @patch("ingot.onboarding.flow.BackendFactory")
+    @patch("ingot.onboarding.flow.prompt_confirm")
+    def test_factory_failure_returns_none(self, mock_confirm, mock_factory):
+        mock_confirm.return_value = True
+        mock_factory.create.side_effect = Exception("Cannot create backend")
+
+        flow = OnboardingFlow(_make_config())
+        result = flow._select_models(AgentPlatform.CLAUDE)
+
+        assert result == (None, None)
+
 
 # ---------------------------------------------------------------------------
 # Full flow
@@ -255,6 +333,7 @@ class TestSaveConfiguration:
 
 
 class TestFullFlow:
+    @patch("ingot.onboarding.flow.prompt_confirm")
     @patch("ingot.onboarding.flow.print_success")
     @patch("ingot.onboarding.flow.print_info")
     @patch("ingot.onboarding.flow.print_header")
@@ -267,12 +346,16 @@ class TestFullFlow:
         mock_header,
         mock_info,
         mock_print_success,
+        mock_confirm,
     ):
         mock_select.return_value = "Auggie (Augment Code CLI)"
 
         backend_instance = MagicMock()
         backend_instance.check_installed.return_value = (True, "Auggie v1.0")
         mock_factory.create.return_value = backend_instance
+
+        # Decline model selection
+        mock_confirm.return_value = False
 
         config = _make_config()
         config.get.side_effect = lambda key, default="": (
@@ -312,8 +395,8 @@ class TestFullFlow:
         claude_instance.check_installed.return_value = (True, "Claude v1.0 found")
         mock_factory.create.side_effect = [auggie_instance, claude_instance]
 
-        # Decline retry, accept switch
-        mock_confirm.side_effect = [False, True]
+        # Decline retry, accept switch, decline model selection
+        mock_confirm.side_effect = [False, True, False]
 
         config = _make_config()
         config.get.side_effect = lambda key, default="": (
@@ -339,6 +422,7 @@ class TestFullFlow:
         assert result.success is False
         assert "cancelled" in result.error_message.lower()
 
+    @patch("ingot.onboarding.flow.prompt_confirm")
     @patch("ingot.onboarding.flow.print_error")
     @patch("ingot.onboarding.flow.print_success")
     @patch("ingot.onboarding.flow.print_info")
@@ -353,12 +437,16 @@ class TestFullFlow:
         mock_info,
         mock_print_success,
         mock_print_error,
+        mock_confirm,
     ):
         mock_select.return_value = "Auggie (Augment Code CLI)"
 
         backend_instance = MagicMock()
         backend_instance.check_installed.return_value = (True, "Auggie v1.0")
         mock_factory.create.return_value = backend_instance
+
+        # Decline model selection
+        mock_confirm.return_value = False
 
         config = _make_config()
         # Simulate readback mismatch: save succeeds but readback returns wrong value

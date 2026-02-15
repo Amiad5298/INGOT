@@ -24,7 +24,7 @@ from ingot.integrations.aider import (
     check_aider_installed,
     looks_like_rate_limit,
 )
-from ingot.integrations.backends.base import BaseBackend
+from ingot.integrations.backends.base import BackendModel, BaseBackend
 from ingot.integrations.backends.errors import BackendTimeoutError
 
 
@@ -244,6 +244,22 @@ class AiderBackend(BaseBackend):
     def detect_rate_limit(self, output: str) -> bool:
         """Detect if output indicates a rate limit error."""
         return looks_like_rate_limit(output)
+
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
+        BackendModel(id="sonnet", name="Claude Sonnet"),
+        BackendModel(id="opus", name="Claude Opus"),
+        BackendModel(id="gpt-4.1", name="GPT-4.1"),
+        BackendModel(id="gemini/gemini-2.5-pro", name="Gemini 2.5 Pro"),
+        BackendModel(id="deepseek/deepseek-chat", name="DeepSeek Chat"),
+    )
+
+    def list_models(self) -> list[BackendModel]:
+        """Return hardcoded model list for Aider.
+
+        Aider's ``--list-models`` requires API keys for every configured
+        provider and has complex output. Hardcoded list is more reliable.
+        """
+        return list(self._FALLBACK_MODELS)
 
 
 __all__ = [

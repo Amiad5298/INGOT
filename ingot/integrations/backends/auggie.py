@@ -19,7 +19,10 @@ from ingot.integrations.auggie import (
     check_auggie_installed,
     looks_like_rate_limit,
 )
-from ingot.integrations.backends.base import BaseBackend
+from ingot.integrations.auggie import (
+    list_models as auggie_list_models,
+)
+from ingot.integrations.backends.base import BackendModel, BaseBackend
 from ingot.integrations.backends.errors import BackendTimeoutError
 
 
@@ -291,5 +294,12 @@ class AuggieBackend(BaseBackend):
             True if output looks like a rate limit error.
         """
         return looks_like_rate_limit(output)
+
+    def list_models(self) -> list[BackendModel]:
+        """Return models from the Auggie CLI ``auggie models list`` command."""
+        auggie_models = auggie_list_models()
+        return [
+            BackendModel(id=m.id, name=m.name, description=m.description) for m in auggie_models
+        ]
 
     # close() inherited from BaseBackend

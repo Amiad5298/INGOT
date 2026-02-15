@@ -93,6 +93,21 @@ class SubagentMetadata:
     temperature: float | None = None
 
 
+@dataclass
+class BackendModel:
+    """A model available from a backend.
+
+    Attributes:
+        id: Model identifier for CLI usage (e.g., "claude-sonnet-4")
+        name: Human-readable display name (e.g., "Claude Sonnet 4")
+        description: Optional description of the model
+    """
+
+    id: str
+    name: str
+    description: str = ""
+
+
 @runtime_checkable
 class AIBackend(Protocol):
     """Protocol for AI backend integrations.
@@ -296,6 +311,19 @@ class AIBackend(Protocol):
         """
         ...
 
+    def list_models(self) -> list[BackendModel]:
+        """Return the list of models available for this backend.
+
+        Backends may fetch models dynamically from provider APIs
+        (with graceful fallback to hardcoded lists) or return a
+        static list of known models.
+
+        Returns:
+            List of BackendModel instances. Empty list if no models
+            are known or discovery fails.
+        """
+        ...
+
 
 class BaseBackend(ABC):
     """Abstract base class with common functionality for all backends.
@@ -375,6 +403,14 @@ class BaseBackend(ABC):
         - Clean up temporary files
         """
         pass
+
+    def list_models(self) -> list[BackendModel]:
+        """Return the list of models available for this backend.
+
+        Default returns empty list. Override in subclasses to provide
+        backend-specific model listings.
+        """
+        return []
 
     def _parse_subagent_prompt(self, subagent: str) -> tuple[SubagentMetadata, str]:
         """Parse subagent prompt file and extract frontmatter.

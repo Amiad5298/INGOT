@@ -126,6 +126,9 @@ class TestAIBackendCompliance:
             def detect_rate_limit(self, output: str) -> bool:
                 return False
 
+            def list_models(self) -> list:
+                return []
+
             def close(self) -> None:
                 pass
 

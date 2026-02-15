@@ -14,6 +14,7 @@ from ingot.config.fetch_config import AgentPlatform
 from ingot.config.manager import ConfigManager
 from ingot.integrations.backends.factory import BackendFactory
 from ingot.onboarding import OnboardingResult
+from ingot.ui.menus import show_model_selection
 from ingot.ui.prompts import prompt_confirm, prompt_select
 from ingot.utils.console import print_error, print_header, print_info, print_success
 from ingot.utils.errors import IngotError, UserCancelledError
@@ -76,7 +77,12 @@ class OnboardingFlow:
                     error_message="Backend verification failed.",
                 )
 
-            self._save_configuration(verified_backend)
+            planning_model, impl_model = self._select_models(verified_backend)
+            self._save_configuration(
+                verified_backend,
+                planning_model=planning_model,
+                impl_model=impl_model,
+            )
             return OnboardingResult(success=True, backend=verified_backend)
 
         except UserCancelledError:
@@ -150,7 +156,45 @@ class OnboardingFlow:
         if url:
             print_info(f"Install instructions: {url}")
 
-    def _save_configuration(self, backend: AgentPlatform) -> None:
+    def _select_models(self, backend_platform: AgentPlatform) -> tuple[str | None, str | None]:
+        """Optionally prompt user to configure AI models.
+
+        Args:
+            backend_platform: The verified backend platform.
+
+        Returns:
+            Tuple of (planning_model, implementation_model). Both None
+            if user declines or selection fails.
+        """
+        if not prompt_confirm(
+            "Configure AI models now? (you can do this later with 'ingot config')",
+            default=False,
+        ):
+            return None, None
+
+        try:
+            backend_instance = BackendFactory.create(backend_platform)
+        except Exception:
+            logger.debug("Could not create backend for model selection", exc_info=True)
+            return None, None
+
+        planning_model = show_model_selection(
+            purpose="planning (Steps 1-2)",
+            backend=backend_instance,
+        )
+        impl_model = show_model_selection(
+            purpose="implementation (Step 3)",
+            backend=backend_instance,
+        )
+        return planning_model, impl_model
+
+    def _save_configuration(
+        self,
+        backend: AgentPlatform,
+        *,
+        planning_model: str | None = None,
+        impl_model: str | None = None,
+    ) -> None:
         """Persist the selected backend and verify the save.
 
         Args:
@@ -160,6 +204,14 @@ class OnboardingFlow:
             IngotError: If readback verification fails
         """
         self._config.save("AI_BACKEND", backend.value)
+
+        if planning_model:
+            self._config.save("PLANNING_MODEL", planning_model)
+            print_success(f"Planning model set to '{planning_model}'.")
+
+        if impl_model:
+            self._config.save("IMPLEMENTATION_MODEL", impl_model)
+            print_success(f"Implementation model set to '{impl_model}'.")
 
         # Readback verification
         self._config.load()

@@ -98,34 +98,66 @@ class TestShowGitDirtyMenu:
 
 class TestShowModelSelection:
     @patch("ingot.ui.menus.print_header")
-    @patch("ingot.ui.menus.list_models")
     @patch("questionary.select")
-    def test_returns_selected_model(self, mock_select, mock_list, mock_header):
-        from ingot.integrations.auggie import AuggieModel
+    def test_returns_selected_model(self, mock_select, mock_header):
+        from ingot.integrations.backends.base import BackendModel
+        from tests.fakes.fake_backend import FakeBackend
 
-        mock_list.return_value = [
-            AuggieModel(name="Claude 3", id="claude-3"),
-            AuggieModel(name="GPT-4", id="gpt-4"),
-        ]
+        backend = FakeBackend(
+            [],
+            models=[
+                BackendModel(name="Claude 3", id="claude-3"),
+                BackendModel(name="GPT-4", id="gpt-4"),
+            ],
+        )
         mock_select.return_value.ask.return_value = "claude-3"
 
-        result = show_model_selection()
+        result = show_model_selection(backend=backend)
 
         assert result == "claude-3"
 
     @patch("ingot.ui.menus.print_header")
-    @patch("ingot.ui.menus.list_models")
     @patch("ingot.ui.menus.print_info")
     @patch("ingot.ui.prompts.prompt_input")
-    def test_prompts_manual_input_when_no_models(
-        self, mock_input, mock_info, mock_list, mock_header
-    ):
-        mock_list.return_value = []
+    def test_prompts_manual_input_when_no_backend(self, mock_input, mock_info, mock_header):
         mock_input.return_value = "custom-model"
 
         result = show_model_selection()
 
         assert result == "custom-model"
+
+    @patch("ingot.ui.menus.print_header")
+    @patch("ingot.ui.menus.print_info")
+    @patch("ingot.ui.prompts.prompt_input")
+    def test_prompts_manual_input_when_backend_returns_no_models(
+        self, mock_input, mock_info, mock_header
+    ):
+        from tests.fakes.fake_backend import FakeBackend
+
+        backend = FakeBackend([], models=[])
+        mock_input.return_value = "custom-model"
+
+        result = show_model_selection(backend=backend)
+
+        assert result == "custom-model"
+
+    @patch("ingot.ui.menus.print_header")
+    @patch("questionary.select")
+    @patch("ingot.ui.prompts.prompt_input")
+    def test_manual_entry_choice(self, mock_input, mock_select, mock_header):
+        from ingot.integrations.backends.base import BackendModel
+        from tests.fakes.fake_backend import FakeBackend
+
+        backend = FakeBackend(
+            [],
+            models=[BackendModel(name="Claude 3", id="claude-3")],
+        )
+        mock_select.return_value.ask.return_value = "__manual__"
+        mock_input.return_value = "my-custom-model"
+
+        result = show_model_selection(backend=backend)
+
+        assert result == "my-custom-model"
 
 
 class TestShowTaskCheckboxes:

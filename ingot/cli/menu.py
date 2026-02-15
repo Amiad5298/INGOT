@@ -3,9 +3,16 @@
 Provides the main menu loop and interactive configuration.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ingot.config.manager import ConfigManager
 from ingot.ui.menus import MainMenuChoice, show_main_menu
 from ingot.utils.console import print_error, print_header, print_info
+
+if TYPE_CHECKING:
+    from ingot.integrations.backends.base import AIBackend
 
 
 def show_help() -> None:
@@ -74,6 +81,21 @@ def _run_main_menu(config: ConfigManager) -> None:
             break
 
 
+def _get_current_backend(config: ConfigManager) -> AIBackend | None:
+    """Resolve the current backend instance for model listing.
+
+    Returns None on any error (no backend configured, import failure, etc.).
+    """
+    try:
+        from ingot.config.backend_resolver import resolve_backend_platform
+        from ingot.integrations.backends.factory import BackendFactory
+
+        platform = resolve_backend_platform(config)
+        return BackendFactory.create(platform)
+    except Exception:
+        return None
+
+
 def _configure_settings(config: ConfigManager) -> None:
     """Interactive configuration menu."""
     from ingot.ui.menus import show_model_selection
@@ -81,11 +103,14 @@ def _configure_settings(config: ConfigManager) -> None:
 
     print_header("Configure Settings")
 
+    backend = _get_current_backend(config)
+
     # Planning model
     if prompt_confirm("Configure planning model?", default=False):
         model = show_model_selection(
             current_model=config.settings.planning_model,
             purpose="planning (Steps 1-2)",
+            backend=backend,
         )
         if model:
             config.save("PLANNING_MODEL", model)
@@ -95,6 +120,7 @@ def _configure_settings(config: ConfigManager) -> None:
         model = show_model_selection(
             current_model=config.settings.implementation_model,
             purpose="implementation (Step 3)",
+            backend=backend,
         )
         if model:
             config.save("IMPLEMENTATION_MODEL", model)

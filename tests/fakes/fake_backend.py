@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ingot.config.fetch_config import AgentPlatform
-from ingot.integrations.backends.base import matches_common_rate_limit
+from ingot.integrations.backends.base import BackendModel, matches_common_rate_limit
 
 
 class FakeBackend:
@@ -40,6 +40,7 @@ class FakeBackend:
         name: str = "FakeBackend",
         supports_parallel: bool = True,
         supports_plan_mode: bool = False,
+        models: list[BackendModel] | None = None,
     ) -> None:
         """Initialize with a list of (success, output) responses.
 
@@ -51,6 +52,7 @@ class FakeBackend:
             name: Human-readable backend name. Default "FakeBackend".
             supports_parallel: Whether backend supports parallel execution. Default True.
             supports_plan_mode: Whether backend supports plan mode. Default False.
+            models: Optional list of BackendModel to return from list_models(). Default None (empty).
         """
         self._responses = responses
         self._installed = installed
@@ -58,6 +60,7 @@ class FakeBackend:
         self._name = name
         self._supports_parallel = supports_parallel
         self._supports_plan_mode = supports_plan_mode
+        self._models = models
         self.closed: bool = False
         self.call_count: int = 0
         self.calls: list[tuple[str, dict]] = []
@@ -186,6 +189,9 @@ class FakeBackend:
 
     def detect_rate_limit(self, output: str) -> bool:
         return matches_common_rate_limit(output)
+
+    def list_models(self) -> list[BackendModel]:
+        return self._models or []
 
     def close(self) -> None:
         self.closed = True

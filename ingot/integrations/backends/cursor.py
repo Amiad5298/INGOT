@@ -20,7 +20,7 @@ import subprocess
 from collections.abc import Callable
 
 from ingot.config.fetch_config import AgentPlatform
-from ingot.integrations.backends.base import BaseBackend
+from ingot.integrations.backends.base import BackendModel, BaseBackend
 from ingot.integrations.backends.errors import BackendTimeoutError
 from ingot.integrations.cursor import (
     CursorClient,
@@ -250,6 +250,23 @@ class CursorBackend(BaseBackend):
             True if output looks like a rate limit error.
         """
         return looks_like_rate_limit(output)
+
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
+        BackendModel(id="claude-sonnet-4", name="Claude Sonnet 4"),
+        BackendModel(id="claude-opus-4", name="Claude Opus 4"),
+        BackendModel(id="gpt-4.1", name="GPT-4.1"),
+        BackendModel(id="gpt-4o", name="GPT-4o"),
+        BackendModel(id="gemini-2.5-pro", name="Gemini 2.5 Pro"),
+        BackendModel(id="cursor-small", name="Cursor Small"),
+    )
+
+    def list_models(self) -> list[BackendModel]:
+        """Return hardcoded model list for Cursor.
+
+        Cursor is an IDE wrapper routing to multiple providers with no
+        programmatic model listing API.
+        """
+        return list(self._FALLBACK_MODELS)
 
     # close() inherited from BaseBackend
 

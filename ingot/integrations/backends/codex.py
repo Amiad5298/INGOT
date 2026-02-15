@@ -12,11 +12,12 @@ Like CursorBackend, Codex has no system prompt file equivalent. Subagent
 instructions are embedded directly in the user prompt (via _compose_prompt).
 """
 
+import os
 import subprocess
 from collections.abc import Callable
 
 from ingot.config.fetch_config import AgentPlatform
-from ingot.integrations.backends.base import BaseBackend
+from ingot.integrations.backends.base import BackendModel, BaseBackend
 from ingot.integrations.backends.errors import BackendTimeoutError
 from ingot.integrations.codex import (
     CodexClient,
@@ -204,6 +205,23 @@ class CodexBackend(BaseBackend):
     def detect_rate_limit(self, output: str) -> bool:
         """Detect if output indicates a rate limit error."""
         return looks_like_rate_limit(output)
+
+    _FALLBACK_MODELS: tuple[BackendModel, ...] = (
+        BackendModel(id="o3", name="o3"),
+        BackendModel(id="o4-mini", name="o4-mini"),
+        BackendModel(id="gpt-4.1", name="GPT-4.1"),
+    )
+
+    def list_models(self) -> list[BackendModel]:
+        """Return models via OpenAI API with hardcoded fallback."""
+        from ingot.integrations.backends.model_discovery import fetch_openai_models
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return list(self._FALLBACK_MODELS)
+
+        models = fetch_openai_models(api_key)
+        return models if models else list(self._FALLBACK_MODELS)
 
 
 __all__ = [
