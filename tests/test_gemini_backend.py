@@ -362,6 +362,60 @@ class TestGeminiBackendTimeout:
         assert exc_info.value.timeout_seconds == 15.0
 
 
+class TestGeminiBackendPlanMode:
+    def test_plan_mode_logs_actionable_warning_once(self):
+        backend = GeminiBackend()
+
+        with (
+            patch.object(backend._client, "run_with_callback", return_value=(True, "output")),
+            patch("ingot.integrations.backends.gemini.log_once") as mock_log_once,
+        ):
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=True,
+            )
+
+        mock_log_once.assert_called_once()
+        key_arg = mock_log_once.call_args[0][0]
+        msg_arg = mock_log_once.call_args[0][1]
+        assert key_arg == "gemini_plan_mode"
+        assert "--approval-mode=plan" in msg_arg
+        assert "~/.gemini/settings.json" in msg_arg
+        assert '{"experimental": {"plan": true}}' in msg_arg
+        assert "restart" in msg_arg.lower()
+
+    def test_plan_mode_passes_approval_mode_plan(self):
+        backend = GeminiBackend()
+
+        with patch.object(
+            backend._client, "run_with_callback", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=True,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("approval_mode") == "plan"
+
+    def test_no_warning_when_plan_mode_false(self):
+        backend = GeminiBackend()
+
+        with (
+            patch.object(backend._client, "run_with_callback", return_value=(True, "output")),
+            patch("ingot.integrations.backends.gemini.log_once") as mock_log_once,
+        ):
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=False,
+            )
+
+        mock_log_once.assert_not_called()
+
+
 class TestGeminiBackendClose:
     def test_close_is_noop(self):
         backend = GeminiBackend()

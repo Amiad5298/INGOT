@@ -643,6 +643,58 @@ class TestCursorStabilityMechanism:
             client._run_with_spawn_retry(mock_run)
 
 
+class TestCursorClientModeFlag:
+    def _make_client(self) -> CursorClient:
+        client = CursorClient(enable_startup_jitter=False)
+        client._cli_command = "cursor"
+        client._model_flag_supported = True
+        return client
+
+    def test_mode_added_when_supported(self):
+        client = self._make_client()
+        client._mode_flag_supported = True
+        cmd = client.build_command("test", mode="plan")
+
+        assert "--mode" in cmd
+        mode_idx = cmd.index("--mode")
+        assert cmd[mode_idx + 1] == "plan"
+
+    def test_mode_omitted_when_not_supported(self):
+        client = self._make_client()
+        client._mode_flag_supported = False
+        cmd = client.build_command("test", mode="plan")
+
+        assert "--mode" not in cmd
+
+    def test_degradation_logs_warning(self):
+        import ingot.utils.logging as logging_mod
+
+        logging_mod._logged_once_keys.discard("cursor_mode_unsupported")
+
+        client = self._make_client()
+        client._mode_flag_supported = False
+
+        with patch("ingot.integrations.cursor.log_once") as mock_log_once:
+            client.build_command("test", mode="plan")
+
+        mock_log_once.assert_called_once()
+        key_arg = mock_log_once.call_args[0][0]
+        msg_arg = mock_log_once.call_args[0][1]
+        assert key_arg == "cursor_mode_unsupported"
+        assert "Warning" in msg_arg
+        assert "--mode plan" in msg_arg
+        assert "not supported" in msg_arg
+
+    def test_no_warning_when_mode_none(self):
+        client = self._make_client()
+        client._mode_flag_supported = False
+
+        with patch("ingot.integrations.cursor.log_once") as mock_log_once:
+            client.build_command("test", mode=None)
+
+        mock_log_once.assert_not_called()
+
+
 class TestCursorClientModuleExports:
     def test_no_private_functions_exported(self):
         from ingot.integrations.cursor import __all__

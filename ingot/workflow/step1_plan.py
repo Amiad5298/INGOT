@@ -5,9 +5,9 @@ an implementation plan based on the Jira ticket.
 """
 
 import os
+import re
 from pathlib import Path
 
-from ingot.config.fetch_config import AgentPlatform
 from ingot.integrations.backends.base import AIBackend
 from ingot.ui.prompts import prompt_confirm
 from ingot.utils.console import (
@@ -22,6 +22,29 @@ from ingot.utils.console import (
 from ingot.utils.logging import log_message
 from ingot.workflow.events import format_run_directory
 from ingot.workflow.state import WorkflowState
+
+# Robust ANSI/terminal escape sequence patterns (ECMA-48 compliant).
+# Matches:
+# - CSI sequences: \x1b[ followed by parameter bytes (0x30-0x3f, including ?),
+#   intermediate bytes (0x20-0x2f), and a final byte (0x40-0x7e).
+#   Examples: \x1b[32m (color), \x1b[?25l (hide cursor), \x1b[38;2;255;0;0m (24-bit color)
+# - OSC sequences: \x1b] ... ST (terminated by \x1b\\ or \x07).
+#   Examples: \x1b]0;title\x07 (set window title)
+# - Character set designation: \x1b( or \x1b) followed by a charset ID.
+#
+# Known limitation: Does not match bare two-byte ESC sequences like \x1bM
+# (reverse index) or \x1bc (terminal reset). These are rare in AI CLI output.
+_ANSI_RE = re.compile(
+    r"\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]"  # CSI sequences
+    r"|\x1b\].*?(?:\x1b\\|\x07)"  # OSC sequences
+    r"|\x1b[()][A-Z0-9]"  # Character set designation
+)
+
+# Matches <thinking>...</thinking> blocks (case-insensitive, multi-line).
+_THINKING_BLOCK_RE = re.compile(
+    r"<thinking>.*?</thinking>",
+    re.DOTALL | re.IGNORECASE,
+)
 
 # =============================================================================
 # Log Directory Management
@@ -53,21 +76,6 @@ def _create_plan_log_dir(safe_ticket_id: str) -> Path:
 # =============================================================================
 
 
-def _supports_plan_mode(backend: AIBackend) -> bool:
-    """Check if the backend maps plan_mode to a provider-specific CLI flag.
-
-    Backends that can restrict permissions (Claude, Aider, Gemini, Cursor)
-    return True. Backends that ignore plan_mode (Auggie, Codex) return False
-    so the prompt can instruct file-writing instead.
-    """
-    return backend.platform in {
-        AgentPlatform.CLAUDE,
-        AgentPlatform.AIDER,
-        AgentPlatform.GEMINI,
-        AgentPlatform.CURSOR,
-    }
-
-
 def _generate_plan_with_tui(
     state: WorkflowState,
     plan_path: Path,
@@ -93,7 +101,7 @@ def _generate_plan_with_tui(
 
     # Use plan_mode only for backends that map it to a CLI flag;
     # others (Auggie, Codex) can write the plan file directly.
-    use_plan_mode = _supports_plan_mode(backend)
+    use_plan_mode = backend.supports_plan_mode
 
     # Build minimal prompt - agent has the instructions
     prompt = _build_minimal_prompt(state, plan_path, plan_mode=use_plan_mode)
@@ -159,10 +167,17 @@ Codebase context will be retrieved automatically."""
 def _extract_plan_markdown(output: str) -> str:
     """Extract clean markdown plan from CLI output.
 
-    Strips tool-call logs, headers, and other noise.
-    Looks for the first markdown heading (any level) and returns everything
-    from there. Falls back to full output if no headings found.
+    Strips ANSI escape codes, ``<thinking>`` blocks, tool-call logs,
+    and other noise. Looks for the first markdown heading (any level)
+    and returns everything from there. Falls back to full output if no
+    headings found.
+
+    Known limitation: Heading detection does not account for fenced code
+    blocks — a ``# comment`` inside a code fence would be matched as a
+    heading. This is low risk for typical plan output.
     """
+    output = _ANSI_RE.sub("", output)
+    output = _THINKING_BLOCK_RE.sub("", output)
     lines = output.splitlines()
 
     # Find first markdown heading (any level: #, ##, ###, etc.)

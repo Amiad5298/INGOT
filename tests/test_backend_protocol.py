@@ -80,6 +80,10 @@ class TestAIBackendCompliance:
             def supports_parallel(self) -> bool:
                 return True
 
+            @property
+            def supports_plan_mode(self) -> bool:
+                return False
+
             def run_with_callback(
                 self,
                 prompt: str,
@@ -89,6 +93,7 @@ class TestAIBackendCompliance:
                 model: str | None = None,
                 dont_save_session: bool = False,
                 timeout_seconds: float | None = None,
+                plan_mode: bool = False,
             ) -> tuple[bool, str]:
                 return True, "output"
 
@@ -100,6 +105,7 @@ class TestAIBackendCompliance:
                 model: str | None = None,
                 dont_save_session: bool = False,
                 timeout_seconds: float | None = None,
+                plan_mode: bool = False,
             ) -> tuple[bool, str]:
                 return True, "output"
 
@@ -111,6 +117,7 @@ class TestAIBackendCompliance:
                 model: str | None = None,
                 dont_save_session: bool = False,
                 timeout_seconds: float | None = None,
+                plan_mode: bool = False,
             ) -> str:
                 return "output"
 
@@ -121,6 +128,7 @@ class TestAIBackendCompliance:
                 subagent: str | None = None,
                 model: str | None = None,
                 timeout_seconds: float | None = None,
+                plan_mode: bool = False,
             ) -> tuple[bool, str]:
                 return True, "output"
 

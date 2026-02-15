@@ -346,6 +346,48 @@ class TestLooksLikeRateLimit:
         assert looks_like_rate_limit("") is False
 
 
+class TestAiderClientChatMode:
+    def test_chat_mode_ask_adds_flag(self):
+        client = AiderClient()
+        cmd = client.build_command("test prompt", chat_mode="ask")
+
+        assert "--chat-mode" in cmd
+        mode_idx = cmd.index("--chat-mode")
+        assert cmd[mode_idx + 1] == "ask"
+
+    def test_chat_mode_none_omits_flag(self):
+        client = AiderClient()
+        cmd = client.build_command("test prompt", chat_mode=None)
+
+        assert "--chat-mode" not in cmd
+
+    def test_architect_flag_never_generated(self):
+        client = AiderClient()
+
+        # With chat_mode
+        cmd_ask = client.build_command("test", chat_mode="ask")
+        assert "--architect" not in cmd_ask
+
+        # Without chat_mode
+        cmd_none = client.build_command("test")
+        assert "--architect" not in cmd_none
+
+    def test_chat_mode_with_model_and_message_file(self):
+        client = AiderClient()
+        cmd = client.build_command(
+            "test prompt",
+            model="gpt-4",
+            message_file="/tmp/prompt.md",
+            chat_mode="ask",
+        )
+
+        assert "--chat-mode" in cmd
+        mode_idx = cmd.index("--chat-mode")
+        assert cmd[mode_idx + 1] == "ask"
+        assert "--model" in cmd
+        assert "--message-file" in cmd
+
+
 class TestAiderClientModuleExports:
     def test_no_private_functions_exported(self):
         from ingot.integrations.aider import __all__
@@ -358,6 +400,7 @@ class TestAiderClientModuleExports:
 
         assert set(__all__) == {
             "AIDER_CLI_NAME",
+            "AiderChatMode",
             "AiderClient",
             "check_aider_installed",
             "looks_like_rate_limit",

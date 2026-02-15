@@ -158,6 +158,19 @@ class AIBackend(Protocol):
         """
         ...
 
+    @property
+    def supports_plan_mode(self) -> bool:
+        """Whether this backend maps plan_mode to a provider-specific CLI flag.
+
+        Backends that can restrict permissions (Claude, Aider, Gemini, Cursor)
+        return True. Backends that accept plan_mode for protocol compliance
+        but don't enforce read-only behavior (Auggie, Codex) return False.
+
+        When False, the workflow instructs the AI to write the plan file
+        directly instead of capturing stdout output.
+        """
+        ...
+
     def run_with_callback(
         self,
         prompt: str,
@@ -350,6 +363,16 @@ class BaseBackend(ABC):
         Most backends support concurrent CLI invocations.
         """
         return True
+
+    @property
+    def supports_plan_mode(self) -> bool:
+        """Whether this backend maps plan_mode to a provider-specific CLI flag.
+
+        Default is False. Override in subclasses that enforce read-only
+        behavior via provider-specific flags (e.g., --chat-mode ask,
+        --permission-mode plan).
+        """
+        return False
 
     def supports_parallel_execution(self) -> bool:
         """Whether this backend can handle concurrent invocations.

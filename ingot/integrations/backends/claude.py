@@ -71,6 +71,11 @@ class ClaudeBackend(BaseBackend):
         """Return whether this backend supports parallel execution."""
         return True
 
+    @property
+    def supports_plan_mode(self) -> bool:
+        """Claude supports plan mode via --permission-mode plan."""
+        return True
+
     def _resolve_subagent(
         self,
         subagent: str | None,

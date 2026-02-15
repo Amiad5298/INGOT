@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import warnings
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -408,6 +409,256 @@ class TestAiderDetectRateLimit:
     )
     def test_negative_detection(self, backend, output):
         assert backend.detect_rate_limit(output) is False
+
+
+class TestAiderBackendPlanMode:
+    def test_plan_mode_true_passes_chat_mode_ask(self):
+        backend = AiderBackend()
+
+        with patch.object(
+            backend._client, "run_with_callback", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=True,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "ask"
+
+    def test_plan_mode_false_passes_no_chat_mode(self):
+        backend = AiderBackend()
+
+        with patch.object(
+            backend._client, "run_with_callback", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=False,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") is None
+
+    def test_plan_mode_run_print_with_output(self):
+        backend = AiderBackend()
+
+        with patch.object(
+            backend._client, "run_print_with_output", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_print_with_output("test prompt", plan_mode=True)
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "ask"
+
+    def test_plan_mode_run_print_quiet(self):
+        backend = AiderBackend()
+
+        with patch.object(backend._client, "run_print_quiet", return_value="output") as mock_run:
+            backend.run_print_quiet("test prompt", plan_mode=True)
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "ask"
+
+    def test_plan_mode_propagates_through_timeout_path(self, mocker):
+        """Verify chat_mode='ask' is passed when timeout triggers build_command directly."""
+        backend = AiderBackend()
+        mock_callback = MagicMock()
+
+        mocker.patch.object(backend, "_run_streaming_with_timeout", return_value=(0, "output"))
+        mock_build = mocker.patch.object(
+            backend._client, "build_command", return_value=["aider", "test"]
+        )
+
+        backend.run_with_callback(
+            "test prompt",
+            output_callback=mock_callback,
+            timeout_seconds=30.0,
+            plan_mode=True,
+        )
+
+        build_kwargs = mock_build.call_args.kwargs
+        assert build_kwargs.get("chat_mode") == "ask"
+
+    def test_plan_mode_false_no_chat_mode_through_timeout_path(self, mocker):
+        """Verify chat_mode is None when plan_mode=False via timeout path."""
+        backend = AiderBackend()
+        mock_callback = MagicMock()
+
+        mocker.patch.object(backend, "_run_streaming_with_timeout", return_value=(0, "output"))
+        mock_build = mocker.patch.object(
+            backend._client, "build_command", return_value=["aider", "test"]
+        )
+
+        backend.run_with_callback(
+            "test prompt",
+            output_callback=mock_callback,
+            timeout_seconds=30.0,
+            plan_mode=False,
+        )
+
+        build_kwargs = mock_build.call_args.kwargs
+        assert build_kwargs.get("chat_mode") is None
+
+
+class TestAiderBackendDeprecatedArchitect:
+    """Tests for backward compatibility with the deprecated architect parameter."""
+
+    def test_architect_true_maps_to_chat_mode_architect(self):
+        backend = AiderBackend()
+
+        with (
+            patch.object(
+                backend._client, "run_with_callback", return_value=(True, "output")
+            ) as mock_run,
+            warnings.catch_warnings(record=True) as w,
+        ):
+            warnings.simplefilter("always")
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                architect=True,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "architect"
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert "deprecated" in str(w[0].message).lower()
+
+    def test_architect_false_no_chat_mode(self):
+        backend = AiderBackend()
+
+        with (
+            patch.object(
+                backend._client, "run_with_callback", return_value=(True, "output")
+            ) as mock_run,
+            warnings.catch_warnings(record=True) as w,
+        ):
+            warnings.simplefilter("always")
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                architect=False,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") is None
+        # Still warns about usage of deprecated param
+        assert len(w) == 1
+
+    def test_architect_none_no_warning(self):
+        backend = AiderBackend()
+
+        with (
+            patch.object(backend._client, "run_with_callback", return_value=(True, "output")),
+            warnings.catch_warnings(record=True) as w,
+        ):
+            warnings.simplefilter("always")
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                architect=None,
+            )
+
+        assert len(w) == 0
+
+    def test_plan_mode_takes_precedence_when_architect_not_set(self):
+        backend = AiderBackend()
+
+        with patch.object(
+            backend._client, "run_with_callback", return_value=(True, "output")
+        ) as mock_run:
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=True,
+                architect=None,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "ask"
+
+    def test_plan_mode_and_architect_true_raises_value_error(self):
+        """Combining plan_mode=True with architect=True is a safety violation."""
+        backend = AiderBackend()
+
+        with pytest.raises(ValueError, match="Cannot combine plan_mode=True"):
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=True,
+                architect=True,
+            )
+
+    def test_plan_mode_and_architect_true_raises_in_run_print_with_output(self):
+        """ValueError also raised through run_print_with_output."""
+        backend = AiderBackend()
+
+        with pytest.raises(ValueError, match="Cannot combine plan_mode=True"):
+            backend.run_print_with_output("test prompt", plan_mode=True, architect=True)
+
+    def test_plan_mode_and_architect_true_raises_in_run_print_quiet(self):
+        """ValueError also raised through run_print_quiet."""
+        backend = AiderBackend()
+
+        with pytest.raises(ValueError, match="Cannot combine plan_mode=True"):
+            backend.run_print_quiet("test prompt", plan_mode=True, architect=True)
+
+    def test_architect_false_falls_through_to_plan_mode(self):
+        """When architect=False and plan_mode=True, plan_mode applies after deprecation warning."""
+        backend = AiderBackend()
+
+        with (
+            patch.object(
+                backend._client, "run_with_callback", return_value=(True, "output")
+            ) as mock_run,
+            warnings.catch_warnings(record=True) as w,
+        ):
+            warnings.simplefilter("always")
+            backend.run_with_callback(
+                "test prompt",
+                output_callback=MagicMock(),
+                plan_mode=True,
+                architect=False,
+            )
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "ask"
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+
+    def test_architect_run_print_with_output(self):
+        backend = AiderBackend()
+
+        with (
+            patch.object(
+                backend._client, "run_print_with_output", return_value=(True, "output")
+            ) as mock_run,
+            warnings.catch_warnings(record=True) as w,
+        ):
+            warnings.simplefilter("always")
+            backend.run_print_with_output("test prompt", architect=True)
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "architect"
+        assert len(w) == 1
+
+    def test_architect_run_print_quiet(self):
+        backend = AiderBackend()
+
+        with (
+            patch.object(backend._client, "run_print_quiet", return_value="output") as mock_run,
+            warnings.catch_warnings(record=True) as w,
+        ):
+            warnings.simplefilter("always")
+            backend.run_print_quiet("test prompt", architect=True)
+
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get("chat_mode") == "architect"
+        assert len(w) == 1
 
 
 @pytest.mark.skipif(

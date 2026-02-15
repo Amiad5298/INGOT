@@ -67,6 +67,17 @@ class CursorBackend(BaseBackend):
         """Return whether this backend supports parallel execution."""
         return True
 
+    @property
+    def supports_plan_mode(self) -> bool:
+        """Whether this backend can enforce read-only plan mode via --mode plan.
+
+        Dynamically checks if the Cursor CLI version supports the --mode flag.
+        Returns False if the CLI is outdated, so the workflow correctly treats
+        this as a standard (write-enabled) execution rather than assuming
+        read-only safety.
+        """
+        return self._client._supports_mode_flag()
+
     # _resolve_subagent() and _compose_prompt() inherited from BaseBackend
 
     def run_with_callback(

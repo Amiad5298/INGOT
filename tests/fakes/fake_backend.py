@@ -39,6 +39,7 @@ class FakeBackend:
         platform: AgentPlatform = AgentPlatform.AUGGIE,
         name: str = "FakeBackend",
         supports_parallel: bool = True,
+        supports_plan_mode: bool = False,
     ) -> None:
         """Initialize with a list of (success, output) responses.
 
@@ -49,12 +50,14 @@ class FakeBackend:
             platform: AgentPlatform to report. Default AUGGIE.
             name: Human-readable backend name. Default "FakeBackend".
             supports_parallel: Whether backend supports parallel execution. Default True.
+            supports_plan_mode: Whether backend supports plan mode. Default False.
         """
         self._responses = responses
         self._installed = installed
         self._platform = platform
         self._name = name
         self._supports_parallel = supports_parallel
+        self._supports_plan_mode = supports_plan_mode
         self.closed: bool = False
         self.call_count: int = 0
         self.calls: list[tuple[str, dict]] = []
@@ -88,6 +91,10 @@ class FakeBackend:
     @property
     def supports_parallel(self) -> bool:
         return self._supports_parallel
+
+    @property
+    def supports_plan_mode(self) -> bool:
+        return self._supports_plan_mode
 
     def run_with_callback(
         self,
