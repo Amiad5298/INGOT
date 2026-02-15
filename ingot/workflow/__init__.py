@@ -38,7 +38,7 @@ from ingot.workflow.events import (
     format_timestamp,
     slugify_task_name,
 )
-from ingot.workflow.runner import run_ingot_workflow, workflow_cleanup
+from ingot.workflow.runner import WorkflowResult, run_ingot_workflow, workflow_cleanup
 from ingot.workflow.state import WorkflowState
 from ingot.workflow.step1_5_clarification import step_1_5_clarification
 from ingot.workflow.step1_plan import step_1_create_plan
@@ -108,6 +108,7 @@ __all__ = [
     "step_2_create_tasklist",
     "step_3_execute",
     # Runner
+    "WorkflowResult",
     "run_ingot_workflow",
     "workflow_cleanup",
 ]

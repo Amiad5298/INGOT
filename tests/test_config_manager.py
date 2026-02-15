@@ -232,9 +232,9 @@ class TestConfigManagerGet:
 
 
 class TestConfigManagerShow:
-    @patch("ingot.config.manager.print_header")
-    @patch("ingot.config.manager.print_info")
-    @patch("ingot.config.manager.console")
+    @patch("ingot.config.display.print_header")
+    @patch("ingot.config.display.print_info")
+    @patch("ingot.config.display.console")
     def test_show_missing_file(self, mock_console, mock_info, mock_header, tmp_path):
         config_path = tmp_path / "missing"
         manager = ConfigManager(config_path)
@@ -244,9 +244,9 @@ class TestConfigManagerShow:
         mock_header.assert_called_once()
         assert mock_info.call_count >= 1
 
-    @patch("ingot.config.manager.print_header")
-    @patch("ingot.config.manager.print_info")
-    @patch("ingot.config.manager.console")
+    @patch("ingot.config.display.print_header")
+    @patch("ingot.config.display.print_info")
+    @patch("ingot.config.display.console")
     def test_show_displays_settings(self, mock_console, mock_info, mock_header, temp_config_file):
         manager = ConfigManager(temp_config_file)
         manager.load()
@@ -262,9 +262,9 @@ class TestConfigManagerShow:
         assert any("Platform Settings" in str(call) for call in print_calls)
         assert any("Default Platform" in str(call) for call in print_calls)
 
-    @patch("ingot.config.manager.print_header")
-    @patch("ingot.config.manager.print_info")
-    @patch("ingot.config.manager.console")
+    @patch("ingot.config.display.print_header")
+    @patch("ingot.config.display.print_info")
+    @patch("ingot.config.display.console")
     def test_show_displays_platform_status_table(
         self, mock_console, mock_info, mock_header, temp_config_file
     ):
@@ -398,18 +398,19 @@ class TestPlatformStatusHelpers:
         assert ready["linear"] is True  # fallback=True
         assert ready["github"] is False  # neither
 
-    @patch("ingot.config.manager.print_header")
-    @patch("ingot.config.manager.print_info")
-    @patch("ingot.config.manager.console")
+    @patch("ingot.config.display.print_header")
+    @patch("ingot.config.display.print_info")
+    @patch("ingot.config.display.console")
     def test_show_platform_status_error_handling(
         self, mock_console, mock_info, mock_header, temp_config_file
     ):
         manager = ConfigManager(temp_config_file)
         manager.load()
 
-        # Mock _get_agent_integrations to raise an exception
-        with patch.object(
-            manager, "_get_agent_integrations", side_effect=RuntimeError("Test error")
+        # Mock get_agent_integrations to raise an exception
+        with patch(
+            "ingot.config.display.get_agent_integrations",
+            side_effect=RuntimeError("Test error"),
         ):
             # Should not raise, should display error message
             manager._show_platform_status()
@@ -439,9 +440,9 @@ class TestPlatformStatusHelpers:
         essential_platforms = {"jira", "linear", "github"}
         assert essential_platforms.issubset(set(platforms1))
 
-    @patch("ingot.config.manager.print_header")
-    @patch("ingot.config.manager.print_info")
-    @patch("ingot.config.manager.console")
+    @patch("ingot.config.display.print_header")
+    @patch("ingot.config.display.print_info")
+    @patch("ingot.config.display.console")
     def test_show_platform_status_plain_text_fallback(
         self, mock_console, mock_info, mock_header, temp_config_file, capsys
     ):
@@ -460,8 +461,8 @@ class TestPlatformStatusHelpers:
         # Should show status columns
         assert "Agent" in captured.out or "Yes" in captured.out or "No" in captured.out
 
-    @patch("ingot.config.manager.print_header")
-    @patch("ingot.config.manager.print_info")
+    @patch("ingot.config.display.print_header")
+    @patch("ingot.config.display.print_info")
     def test_show_platform_status_fallback_when_rich_import_fails(
         self, mock_info, mock_header, temp_config_file, capsys
     ):

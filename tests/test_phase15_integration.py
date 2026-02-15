@@ -154,11 +154,11 @@ class TestPhase15FactoryFlow:
                 "ingot.integrations.backends.factory.BackendFactory",
             ) as mock_factory_class,
             patch(
-                "ingot.cli.AuthenticationManager",
+                "ingot.cli.ticket.AuthenticationManager",
                 return_value=MagicMock(),
             ) as mock_auth_class,
             patch(
-                "ingot.cli.create_ticket_service",
+                "ingot.cli.ticket.create_ticket_service",
                 new_callable=AsyncMock,
                 return_value=mock_service,
             ) as mock_create_svc,

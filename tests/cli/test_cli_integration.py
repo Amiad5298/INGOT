@@ -71,9 +71,9 @@ class TestPlatformFlagValidation:
             ("trello", Platform.TRELLO),
         ],
     )
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_valid_platform_values(
         self,
         mock_config_class,
@@ -89,7 +89,7 @@ class TestPlatformFlagValidation:
 
         # Mock at create_ticket_service_from_config factory (Layer A approach)
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             mock_ticket_service_factory({"PROJ-123": mock_jira_ticket}),
         ):
             result = runner.invoke(app, ["PROJ-123", "--platform", platform_name])
@@ -98,9 +98,9 @@ class TestPlatformFlagValidation:
         assert "Invalid platform" not in result.output
 
     @pytest.mark.parametrize("variant", ["JIRA", "Jira", "JiRa", "jira"])
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_platform_flag_case_insensitive(
         self,
         mock_config_class,
@@ -114,7 +114,7 @@ class TestPlatformFlagValidation:
         mock_config_class.return_value = mock_config
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             mock_ticket_service_factory({"PROJ-123": mock_jira_ticket}),
         ):
             result = runner.invoke(app, ["PROJ-123", "--platform", variant])
@@ -125,9 +125,9 @@ class TestPlatformFlagValidation:
         "platform_name",
         ["jira", "linear", "github", "azure_devops", "monday", "trello"],
     )
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_short_flag_alias(
         self,
         mock_config_class,
@@ -141,7 +141,7 @@ class TestPlatformFlagValidation:
         mock_config_class.return_value = mock_config
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             mock_ticket_service_factory({"TEST-123": mock_jira_ticket}),
         ):
             result = runner.invoke(app, ["TEST-123", "-p", platform_name])
@@ -151,7 +151,7 @@ class TestPlatformFlagValidation:
 
 class TestDisambiguationFlow:
     @patch("ingot.ui.prompts.prompt_select")
-    @patch("ingot.cli.print_info")
+    @patch("ingot.cli.app.print_info")
     def test_disambiguation_prompts_user(self, mock_print, mock_prompt):
         from ingot.cli import _disambiguate_platform
 
@@ -165,7 +165,7 @@ class TestDisambiguationFlow:
         mock_prompt.assert_called_once()
 
     @patch("ingot.ui.prompts.prompt_select")
-    @patch("ingot.cli.print_info")
+    @patch("ingot.cli.app.print_info")
     def test_default_platform_skips_prompt(self, mock_print, mock_prompt):
         from ingot.cli import _disambiguate_platform
 
@@ -177,9 +177,9 @@ class TestDisambiguationFlow:
         assert result == Platform.LINEAR
         mock_prompt.assert_not_called()
 
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     @patch("ingot.ui.prompts.prompt_select")
     def test_ambiguous_id_triggers_disambiguation_via_cli(
         self,
@@ -196,7 +196,7 @@ class TestDisambiguationFlow:
         mock_prompt.return_value = "jira"
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             mock_ticket_service_factory({"PROJ-123": mock_jira_ticket}),
         ):
             _result = runner.invoke(app, ["PROJ-123"])
@@ -204,9 +204,9 @@ class TestDisambiguationFlow:
         # Prompt should have been called for disambiguation
         mock_prompt.assert_called_once()
 
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     @patch("ingot.ui.prompts.prompt_select")
     def test_flag_overrides_disambiguation(
         self,
@@ -222,7 +222,7 @@ class TestDisambiguationFlow:
         mock_config_class.return_value = mock_config
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             mock_ticket_service_factory({"PROJ-123": mock_jira_ticket}),
         ):
             _result = runner.invoke(app, ["PROJ-123", "--platform", "linear"])
@@ -238,7 +238,7 @@ class TestDisambiguationFlow:
         assert _is_ambiguous_ticket_id("my-org/my-repo#123") is False
 
     @patch("ingot.ui.prompts.prompt_select")
-    @patch("ingot.cli.print_info")
+    @patch("ingot.cli.app.print_info")
     def test_config_default_platform_used(self, mock_print, mock_prompt):
         from ingot.cli import _disambiguate_platform
 
@@ -299,9 +299,9 @@ class TestCLIServiceIntegration:
     @patch("ingot.workflow.runner.run_ingot_workflow")  # Mock at workflow runner level
     @patch("ingot.integrations.backends.factory.BackendFactory.create")  # Mock backend creation
     @patch("ingot.config.backend_resolver.resolve_backend_platform")  # Mock backend resolution
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_platform_via_cli_real_service(
         self,
         mock_config_class,
@@ -392,9 +392,9 @@ class TestFallbackBehaviorViaCLI:
     @patch("ingot.workflow.runner.run_ingot_workflow")  # Mock at workflow runner level
     @patch("ingot.integrations.backends.factory.BackendFactory.create")  # Mock backend creation
     @patch("ingot.config.backend_resolver.resolve_backend_platform")  # Mock backend resolution
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_fallback_on_primary_failure(
         self,
         mock_config_class,
@@ -489,9 +489,9 @@ class TestFallbackBehaviorViaCLI:
     @patch("ingot.workflow.runner.run_ingot_workflow")  # Mock at workflow runner level
     @patch("ingot.integrations.backends.factory.BackendFactory.create")  # Mock backend creation
     @patch("ingot.config.backend_resolver.resolve_backend_platform")  # Mock backend resolution
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_primary_success_skips_fallback(
         self,
         mock_config_class,
@@ -555,9 +555,9 @@ class TestCLIErrorContract:
     Exit code assertions use ExitCode.X.value for explicit int comparison.
     """
 
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_ticket_not_found_via_cli(
         self,
         mock_config_class,
@@ -580,7 +580,7 @@ class TestCLIErrorContract:
             return make_async_context_manager(mock_service), MagicMock()
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             side_effect=mock_create_service,
         ):
             with runner.isolated_filesystem():
@@ -596,9 +596,9 @@ class TestCLIErrorContract:
             "NOTFOUND-999" in output or "not found" in output.lower()
         ), f"Expected 'NOTFOUND-999' or 'not found' in output: {output}"
 
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_auth_error_via_cli(
         self,
         mock_config_class,
@@ -620,7 +620,7 @@ class TestCLIErrorContract:
             return make_async_context_manager(mock_service), MagicMock()
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             side_effect=mock_create_service,
         ):
             with runner.isolated_filesystem():
@@ -634,9 +634,9 @@ class TestCLIErrorContract:
             "auth" in output.lower() or "token" in output.lower() or "jira" in output.lower()
         ), f"Expected auth-related message in output: {output}"
 
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_unconfigured_platform_error_via_cli(
         self,
         mock_config_class,
@@ -664,7 +664,7 @@ class TestCLIErrorContract:
             return make_async_context_manager(mock_service), MagicMock()
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             side_effect=mock_create_service,
         ):
             with runner.isolated_filesystem():
@@ -680,9 +680,9 @@ class TestCLIErrorContract:
             or "not supported" in output.lower()
         ), f"Expected platform-related message in output: {output}"
 
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_backend_not_configured_error_via_cli(
         self,
         mock_config_class,
@@ -696,7 +696,7 @@ class TestCLIErrorContract:
         mock_config_class.return_value = mock_config
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             side_effect=BackendNotConfiguredError(
                 "No AI backend configured. Run 'spec init' or use --backend flag."
             ),
@@ -712,9 +712,9 @@ class TestCLIErrorContract:
             "spec init" in output or "backend" in output
         ), f"Expected 'spec init' or 'backend' in output: {result.output}"
 
-    @patch("ingot.cli.show_banner")
-    @patch("ingot.cli._check_prerequisites", return_value=True)
-    @patch("ingot.cli.ConfigManager")
+    @patch("ingot.cli.app.show_banner")
+    @patch("ingot.cli.app._check_prerequisites", return_value=True)
+    @patch("ingot.cli.app.ConfigManager")
     def test_backend_not_installed_error_via_cli(
         self,
         mock_config_class,
@@ -728,7 +728,7 @@ class TestCLIErrorContract:
         mock_config_class.return_value = mock_config
 
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             side_effect=BackendNotInstalledError(
                 "Auggie CLI is not installed. Install with: pip install auggie"
             ),

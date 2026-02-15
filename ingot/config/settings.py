@@ -114,7 +114,7 @@ class Settings:
     fetch_retry_delay_seconds: float = 1.0
 
     # Config key to attribute mapping
-    _key_mapping: dict[str, str] = field(
+    _config_key_to_attribute: dict[str, str] = field(
         default_factory=lambda: {
             "DEFAULT_MODEL": "default_model",
             "PLANNING_MODEL": "planning_model",
@@ -154,11 +154,11 @@ class Settings:
 
     def get_attribute_for_key(self, key: str) -> str | None:
         """Get the attribute name for a config key."""
-        return self._key_mapping.get(key)
+        return self._config_key_to_attribute.get(key)
 
     def get_key_for_attribute(self, attr: str) -> str | None:
         """Get the config key for an attribute name."""
-        for key, value in self._key_mapping.items():
+        for key, value in self._config_key_to_attribute.items():
             if value == attr:
                 return key
         return None
@@ -168,7 +168,7 @@ class Settings:
         """Get list of all valid configuration keys."""
         # Create a temporary instance to get the keys
         temp = cls()
-        return list(temp._key_mapping.keys())
+        return list(temp._config_key_to_attribute.keys())
 
     def get_default_platform(self) -> Platform | None:
         """Get default platform as Platform enum, or None if not configured.

@@ -29,9 +29,9 @@ class AuggieBackend(BaseBackend):
     Extends BaseBackend to inherit shared logic (subagent parsing, model resolution).
     Wraps the existing AuggieClient for actual CLI execution.
 
-    Note: This class depends on AuggieClient._build_command() which is a private
-    method. This is an intentional design choice per the parent specification
-    (delegation pattern). If AuggieClient internals change, this class may need
+    Note: This class depends on AuggieClient.build_command() for command
+    construction. This is an intentional design choice per the delegation
+    pattern. If AuggieClient internals change, this class may need
     updates.
 
     Attributes:
@@ -100,9 +100,9 @@ class AuggieBackend(BaseBackend):
         if timeout_seconds is not None:
             # Build auggie CLI command using AuggieClient's private method
             # Note: This coupling is intentional per the delegation pattern.
-            # We only call _build_command() here to avoid duplicate work when
+            # We only call build_command() here to avoid duplicate work when
             # delegating to AuggieClient.run_with_callback() in the else branch.
-            cmd = self._client._build_command(
+            cmd = self._client.build_command(
                 prompt,
                 agent=subagent,
                 model=resolved_model,
@@ -118,7 +118,7 @@ class AuggieBackend(BaseBackend):
             return success, output
         else:
             # No timeout - delegate directly to client's implementation
-            # (which calls _build_command() internally)
+            # (which calls build_command() internally)
             return self._client.run_with_callback(
                 prompt,
                 output_callback=output_callback,
@@ -155,7 +155,7 @@ class AuggieBackend(BaseBackend):
         resolved_model = self._resolve_model(model, subagent)
 
         if timeout_seconds is not None:
-            cmd = self._client._build_command(
+            cmd = self._client.build_command(
                 prompt,
                 agent=subagent,
                 model=resolved_model,
@@ -213,7 +213,7 @@ class AuggieBackend(BaseBackend):
         resolved_model = self._resolve_model(model, subagent)
 
         if timeout_seconds is not None:
-            cmd = self._client._build_command(
+            cmd = self._client.build_command(
                 prompt,
                 agent=subagent,
                 model=resolved_model,

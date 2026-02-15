@@ -365,7 +365,7 @@ class AuggieClient:
         # Extract model ID if in "Name [id]" format
         self.model = extract_model_id(model)
 
-    def _build_command(
+    def build_command(
         self,
         prompt: str,
         agent: str | None = None,
@@ -376,7 +376,7 @@ class AuggieClient:
     ) -> list[str]:
         """Build auggie command list.
 
-        This internal helper consolidates command construction logic.
+        This helper consolidates command construction logic.
 
         When an agent is specified, the agent definition file is parsed to extract
         the model and system prompt. The agent's prompt is prepended to the user's
@@ -459,7 +459,7 @@ class AuggieClient:
         Returns:
             CompletedProcess with command results
         """
-        cmd = self._build_command(
+        cmd = self.build_command(
             prompt,
             agent=agent,
             model=model,
@@ -568,7 +568,7 @@ class AuggieClient:
         Returns:
             Tuple of (success: bool, full_output: str)
         """
-        cmd = self._build_command(
+        cmd = self.build_command(
             prompt,
             agent=agent,
             model=model,

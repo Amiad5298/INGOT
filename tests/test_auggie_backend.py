@@ -216,7 +216,7 @@ class TestAuggieBackendModelResolution:
     2. Subagent frontmatter model field
     3. Instance default model (lowest priority)
 
-    Note: AuggieClient._build_command() now respects explicit model overrides
+    Note: AuggieClient.build_command() now respects explicit model overrides
     even when a subagent is set (explicit > agent definition > default).
     """
 
@@ -345,8 +345,8 @@ class TestAuggieBackendTimeout:
         mock_timeout_wrapper = mocker.patch.object(
             backend, "_run_streaming_with_timeout", return_value=(0, "timeout output")
         )
-        # Mock _build_command to return a simple command
-        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        # Mock build_command to return a simple command
+        mocker.patch.object(backend._client, "build_command", return_value=["auggie", "test"])
 
         success, output = backend.run_with_callback(
             "test prompt",
@@ -390,7 +390,7 @@ class TestAuggieBackendTimeout:
             "_run_streaming_with_timeout",
             side_effect=BackendTimeoutError("Timed out", timeout_seconds=30.0),
         )
-        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch.object(backend._client, "build_command", return_value=["auggie", "test"])
 
         with pytest.raises(BackendTimeoutError) as exc_info:
             backend.run_with_callback(
@@ -405,7 +405,7 @@ class TestAuggieBackendTimeout:
         import subprocess
 
         backend = AuggieBackend()
-        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch.object(backend._client, "build_command", return_value=["auggie", "test"])
         mocker.patch(
             "ingot.integrations.backends.auggie.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd=["auggie"], timeout=10.0),
@@ -422,7 +422,7 @@ class TestAuggieBackendTimeout:
         mock_result.stdout = "output text"
 
         backend = AuggieBackend()
-        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch.object(backend._client, "build_command", return_value=["auggie", "test"])
         mocker.patch("ingot.integrations.backends.auggie.subprocess.run", return_value=mock_result)
 
         success, output = backend.run_print_with_output("test prompt", timeout_seconds=30.0)
@@ -448,7 +448,7 @@ class TestAuggieBackendTimeout:
         import subprocess
 
         backend = AuggieBackend()
-        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch.object(backend._client, "build_command", return_value=["auggie", "test"])
         mocker.patch(
             "ingot.integrations.backends.auggie.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd=["auggie"], timeout=15.0),
@@ -465,7 +465,7 @@ class TestAuggieBackendTimeout:
         mock_result.stdout = "quiet output"
 
         backend = AuggieBackend()
-        mocker.patch.object(backend._client, "_build_command", return_value=["auggie", "test"])
+        mocker.patch.object(backend._client, "build_command", return_value=["auggie", "test"])
         mocker.patch("ingot.integrations.backends.auggie.subprocess.run", return_value=mock_result)
 
         output = backend.run_print_quiet("test prompt", timeout_seconds=30.0)
@@ -487,7 +487,7 @@ class TestAuggieBackendTimeout:
 class TestAuggieClientContract:
     """Tests verifying AuggieClient private API contract.
 
-    These tests ensure _build_command() behavior matches AuggieBackend's expectations.
+    These tests ensure build_command() behavior matches AuggieBackend's expectations.
     If these fail, AuggieBackend may need updates.
     """
 
@@ -495,7 +495,7 @@ class TestAuggieClientContract:
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
-        cmd = client._build_command("test prompt", print_mode=True)
+        cmd = client.build_command("test prompt", print_mode=True)
         assert cmd[0] == "auggie"
         assert "--print" in cmd
         assert cmd[-1] == "test prompt"
@@ -504,7 +504,7 @@ class TestAuggieClientContract:
         from ingot.integrations.auggie import AuggieClient
 
         client = AuggieClient()
-        cmd = client._build_command("test prompt", model="test-model", print_mode=True)
+        cmd = client.build_command("test prompt", model="test-model", print_mode=True)
         assert "--model" in cmd
         model_idx = cmd.index("--model")
         assert cmd[model_idx + 1] == "test-model"
@@ -525,7 +525,7 @@ class TestAuggieClientContract:
             "ingot.integrations.auggie._parse_agent_definition",
             return_value=mock_agent_def,
         ):
-            cmd = client._build_command(
+            cmd = client.build_command(
                 "test prompt",
                 agent="test-agent",
                 model="explicit-override-model",
@@ -551,7 +551,7 @@ class TestAuggieClientContract:
             "ingot.integrations.auggie._parse_agent_definition",
             return_value=mock_agent_def,
         ):
-            cmd = client._build_command(
+            cmd = client.build_command(
                 "test prompt",
                 agent="test-agent",
                 # No explicit model - agent model should be used

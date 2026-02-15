@@ -6,6 +6,7 @@ all five steps of the spec-driven development workflow.
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 
 from ingot.config.manager import ConfigManager
 from ingot.integrations.backends.base import AIBackend
@@ -30,10 +31,7 @@ from ingot.utils.console import (
 )
 from ingot.utils.errors import IngotError, UserCancelledError
 from ingot.utils.logging import log_message
-from ingot.workflow.conflict_detection import (
-    _detect_context_conflict,
-    detect_context_conflict,
-)
+from ingot.workflow.conflict_detection import detect_context_conflict
 from ingot.workflow.git_utils import DirtyTreePolicy
 from ingot.workflow.state import RateLimitConfig, WorkflowState
 from ingot.workflow.step1_5_clarification import step_1_5_clarification
@@ -42,6 +40,18 @@ from ingot.workflow.step2_tasklist import step_2_create_tasklist
 from ingot.workflow.step3_execute import step_3_execute
 from ingot.workflow.step4_update_docs import Step4Result, step_4_update_docs
 from ingot.workflow.step5_commit import Step5Result, step_5_commit
+
+
+@dataclass
+class WorkflowResult:
+    """Result of a workflow run."""
+
+    success: bool
+    error: str | None = None
+    steps_completed: int = 0
+
+    def __bool__(self) -> bool:
+        return self.success
 
 
 def run_ingot_workflow(
@@ -62,7 +72,7 @@ def run_ingot_workflow(
     dirty_tree_policy: DirtyTreePolicy = DirtyTreePolicy.FAIL_FAST,
     auto_update_docs: bool = True,
     auto_commit: bool = True,
-) -> bool:
+) -> WorkflowResult:
     """Run the complete spec-driven development workflow.
 
     This orchestrates all five steps:
@@ -71,6 +81,9 @@ def run_ingot_workflow(
     3. Execute tasks with clean loop
     4. Update documentation based on code changes
     5. Commit changes
+
+    Returns:
+        WorkflowResult with success status, optional error message, and steps completed count.
     """
     # Guardrails: Handle potentially incomplete ticket data
     # Tickets may lack title if fetched without enrichment
@@ -116,7 +129,7 @@ def run_ingot_workflow(
         if is_dirty():
             action = show_git_dirty_menu("starting workflow")
             if not handle_dirty_state("starting workflow", action):
-                return False
+                return WorkflowResult(success=False, error="Dirty state handling failed")
 
         # Ensure INGOT subagent files are installed (includes .gitignore configuration)
         # This is done AFTER dirty state handling so the .gitignore updates aren't discarded
@@ -125,7 +138,7 @@ def run_ingot_workflow(
 
         if not ensure_agents_installed():
             print_error("Failed to install INGOT subagent files")
-            return False
+            return WorkflowResult(success=False, error="Failed to install subagent files")
 
         # Display ticket information (already fetched via TicketService before workflow)
         print_success(f"Ticket: {state.ticket.title}")
@@ -146,7 +159,7 @@ def run_ingot_workflow(
 
                 # Fail-Fast Semantic Check: Detect conflicts between ticket and user context
                 print_step("Checking for conflicts between ticket and your context...")
-                conflict_detected, conflict_summary = _detect_context_conflict(
+                conflict_detected, conflict_summary = detect_context_conflict(
                     state.ticket, state.user_context, backend, state
                 )
                 state.conflict_detected = conflict_detected
@@ -169,7 +182,7 @@ def run_ingot_workflow(
 
         # Create branch using ticket's semantic prefix (feat/, fix/, chore/, etc.)
         if not _setup_branch(state, state.ticket):
-            return False
+            return WorkflowResult(success=False, error="Branch setup failed")
 
         # Record base commit
         state.base_commit = get_current_commit()
@@ -179,24 +192,32 @@ def run_ingot_workflow(
         if state.current_step <= 1:
             print_info("Starting Step 1: Create Implementation Plan")
             if not step_1_create_plan(state, backend):
-                return False
+                return WorkflowResult(
+                    success=False, error="Step 1 (plan) failed", steps_completed=0
+                )
 
         # Step 1.5: Interactive clarification (optional)
         if state.current_step == 2 and not state.skip_clarification:
             if not step_1_5_clarification(state, backend):
-                return False
+                return WorkflowResult(
+                    success=False, error="Step 1.5 (clarification) failed", steps_completed=1
+                )
 
         # Step 2: Create task list
         if state.current_step <= 2:
             print_info("Starting Step 2: Create Task List")
             if not step_2_create_tasklist(state, backend):
-                return False
+                return WorkflowResult(
+                    success=False, error="Step 2 (tasklist) failed", steps_completed=1
+                )
 
         # Step 3: Execute implementation
         if state.current_step <= 3:
             print_info("Starting Step 3: Execute Implementation")
             if not step_3_execute(state, backend=backend, use_tui=use_tui, verbose=verbose):
-                return False
+                return WorkflowResult(
+                    success=False, error="Step 3 (execute) failed", steps_completed=2
+                )
 
         # Step 4: Update documentation (optional, non-blocking)
         if auto_update_docs:
@@ -219,7 +240,7 @@ def run_ingot_workflow(
 
         # Workflow complete
         _show_completion(state)
-        return True
+        return WorkflowResult(success=True, steps_completed=5)
 
 
 def _setup_branch(state: WorkflowState, ticket: GenericTicket) -> bool:
@@ -317,8 +338,8 @@ def _offer_cleanup(state: WorkflowState, original_branch: str) -> None:
 
 
 __all__ = [
+    "WorkflowResult",
     "run_ingot_workflow",
     "workflow_cleanup",
-    "_detect_context_conflict",
     "detect_context_conflict",
 ]

@@ -159,8 +159,8 @@ class TestResolveBackendPlatformEnvironmentVariable:
         # Verify AI_BACKEND is in the key mapping
         settings = Settings()
         assert (
-            "AI_BACKEND" in settings._key_mapping
-        ), "AI_BACKEND must be in Settings._key_mapping for env var support"
+            "AI_BACKEND" in settings._config_key_to_attribute
+        ), "AI_BACKEND must be in Settings._config_key_to_attribute for env var support"
 
         # Set environment variable
         monkeypatch.setenv("AI_BACKEND", "cursor")

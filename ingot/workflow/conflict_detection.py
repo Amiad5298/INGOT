@@ -125,12 +125,8 @@ def detect_context_conflict(
         return False, ""
 
 
-# Private alias for backward compatibility with existing imports
-_detect_context_conflict = detect_context_conflict
-
 __all__ = [
     "detect_context_conflict",
-    "_detect_context_conflict",
     "CONFLICT_DETECTION_PROMPT_TEMPLATE",
     "CONFLICT_PATTERN",
     "SUMMARY_PATTERN",

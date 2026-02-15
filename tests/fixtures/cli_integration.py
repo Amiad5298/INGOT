@@ -287,7 +287,7 @@ def mock_ticket_service_factory():
 
     Usage:
         with patch(
-            "ingot.cli.create_ticket_service_from_config",
+            "ingot.cli.ticket.create_ticket_service_from_config",
             mock_ticket_service_factory({"PROJ-123": mock_jira_ticket})
         ):
             result = runner.invoke(app, ["PROJ-123", "--platform", "jira"])

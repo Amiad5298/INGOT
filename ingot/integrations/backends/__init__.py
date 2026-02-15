@@ -15,16 +15,12 @@ Modules:
 - factory: Backend factory for instantiation (Phase 1.6+)
 """
 
-from ingot.integrations.backends.aider import AiderBackend
-from ingot.integrations.backends.auggie import AuggieBackend
+# Eager imports: base types, errors, factory (no circular risk)
 from ingot.integrations.backends.base import (
     AIBackend,
     BaseBackend,
     SubagentMetadata,
 )
-from ingot.integrations.backends.claude import ClaudeBackend
-from ingot.integrations.backends.codex import CodexBackend
-from ingot.integrations.backends.cursor import CursorBackend
 from ingot.integrations.backends.errors import (
     BackendNotConfiguredError,
     BackendNotInstalledError,
@@ -32,7 +28,30 @@ from ingot.integrations.backends.errors import (
     BackendTimeoutError,
 )
 from ingot.integrations.backends.factory import BackendFactory
-from ingot.integrations.backends.gemini import GeminiBackend
+
+# Lazy imports for concrete backend classes to break circular import chains.
+# The eager import of all 6 backends triggers: backends/__init__ → auggie.py →
+# ingot.utils → ingot.utils.retry → backends/__init__ (cycle).
+# __getattr__ defers the import until the class is actually accessed.
+_LAZY_BACKENDS = {
+    "AiderBackend": "ingot.integrations.backends.aider",
+    "AuggieBackend": "ingot.integrations.backends.auggie",
+    "ClaudeBackend": "ingot.integrations.backends.claude",
+    "CodexBackend": "ingot.integrations.backends.codex",
+    "CursorBackend": "ingot.integrations.backends.cursor",
+    "GeminiBackend": "ingot.integrations.backends.gemini",
+}
+
+
+def __getattr__(name: str) -> type:
+    if name in _LAZY_BACKENDS:
+        import importlib
+
+        mod = importlib.import_module(_LAZY_BACKENDS[name])
+        cls: type = getattr(mod, name)
+        return cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Explicit public API for IDE support and documentation.
 # All exported symbols should be listed here.

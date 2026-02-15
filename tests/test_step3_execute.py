@@ -1434,7 +1434,7 @@ class TestParallelExecution:
         assert len(failed) == 1
         assert "Failed Task" in failed
 
-    @patch("ingot.workflow.step3_execute.mark_task_complete")
+    @patch("ingot.workflow.parallel_executor.mark_task_complete")
     @patch("ingot.workflow.step3_execute._execute_task_with_retry")
     def test_marks_successful_tasks_complete(
         self, mock_execute_retry, mock_mark, mock_backend, workflow_state, tmp_path

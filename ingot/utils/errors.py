@@ -37,13 +37,13 @@ class IngotError(Exception):
     def __init__(self, message: str, exit_code: ExitCode | None = None) -> None:
         """Initialize the exception."""
         super().__init__(message)
-        self._exit_code = exit_code
+        self._exit_code_override = exit_code
 
     @property
     def exit_code(self) -> ExitCode:
         """Get the exit code for this exception."""
-        if self._exit_code is not None:
-            return self._exit_code
+        if self._exit_code_override is not None:
+            return self._exit_code_override
         return self.__class__._default_exit_code
 
 

@@ -25,20 +25,16 @@ from typing import Literal
 from ingot.config.fetch_config import (
     AgentConfig,
     AgentPlatform,
-    ConfigValidationError,
     FetchPerformanceConfig,
     FetchStrategy,
     FetchStrategyConfig,
     canonicalize_credentials,
-    get_active_platforms,
     parse_ai_backend,
     parse_fetch_strategy,
     validate_credentials,
-    validate_strategy_for_platform,
 )
 from ingot.config.settings import CONFIG_FILE, Settings
 from ingot.integrations.git import find_repo_root
-from ingot.utils.console import console, print_header, print_info
 from ingot.utils.env_utils import (
     SENSITIVE_KEY_PATTERNS,
     EnvVarExpansionError,
@@ -231,7 +227,17 @@ class ConfigManager:
             try:
                 setattr(self.settings, attr, int(value))
             except ValueError:
-                pass  # Keep default on parse error
+                logger.warning(
+                    "Cannot parse %r as int for config key %r, keeping default", value, key
+                )
+        elif isinstance(current_value, float):
+            # Parse float values
+            try:
+                setattr(self.settings, attr, float(value))
+            except ValueError:
+                logger.warning(
+                    "Cannot parse %r as float for config key %r, keeping default", value, key
+                )
         else:
             # String values - extract model ID for model-related keys
             if key in ("DEFAULT_MODEL", "PLANNING_MODEL", "IMPLEMENTATION_MODEL"):
@@ -274,6 +280,9 @@ class ConfigManager:
         # Validate key name
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", key):
             raise ValueError(f"Invalid config key: {key}")
+
+        if not re.match(r"^[A-Z][A-Z0-9_]*$", key):
+            logger.warning("Config key %r is not in UPPER_SNAKE_CASE format", key)
 
         if scope not in ("global", "local"):
             raise ValueError(f"Invalid scope: {scope}. Must be 'global' or 'local'")
@@ -673,261 +682,48 @@ class ConfigManager:
         return credentials
 
     def _get_active_platforms(self) -> set[str]:
-        """Get the set of 'active' platforms that need validation.
+        """Get the set of 'active' platforms that need validation."""
+        from ingot.config.validation import get_active_platforms_from_config
 
-        Active platforms are those explicitly defined in per_platform
-        strategy overrides, agent integrations, or fallback_credentials.
-        """
-        # Delegate to the extracted helper function
-        return get_active_platforms(
-            raw_config_keys=set(self._raw_values.keys()),
-            strategy_config=self.get_fetch_strategy_config(),
-            agent_config=self.get_agent_config(),
-        )
+        return get_active_platforms_from_config(self)
 
     def validate_fetch_config(self, strict: bool = True) -> list[str]:
         """Validate the complete fetch configuration.
 
-        Performs scoped validation only on 'active' platforms that are explicitly
-        configured (defined in per_platform, integrations, or fallback_credentials).
-        This reduces noise by not checking all KNOWN_PLATFORMS by default.
-
-        Validation includes:
-        - Strategy/platform compatibility
-        - Credential availability and completeness
-        - Per-platform override references
-        - Enum parsing (agent platform, fetch strategies)
-
         Raises:
             ConfigValidationError: If strict=True and validation fails.
         """
-        errors: list[str] = []
+        from ingot.config.validation import validate_fetch_config as _validate_fetch_config
 
-        # Get agent config - may raise ConfigValidationError for invalid enum values
-        try:
-            agent_config = self.get_agent_config()
-        except ConfigValidationError as e:
-            if strict:
-                raise
-            errors.append(str(e))
-            # Use default agent config to continue validation
-            agent_config = AgentConfig(
-                platform=AgentPlatform.AUGGIE,
-                integrations={},
-            )
-
-        # Get strategy config - may raise ConfigValidationError for invalid enum values
-        try:
-            strategy_config = self.get_fetch_strategy_config()
-        except ConfigValidationError as e:
-            if strict:
-                raise
-            errors.append(str(e))
-            # Use default strategy config to continue validation
-            strategy_config = FetchStrategyConfig(
-                default=FetchStrategy.AUTO,
-                per_platform={},
-            )
-
-        # Validate per-platform overrides reference known platforms
-        override_warnings = strategy_config.validate_platform_overrides(strict=False)
-        errors.extend(override_warnings)
-
-        # Get only the active platforms that need validation
-        # Use the already-parsed configs to avoid re-calling getters (which could raise)
-        active_platforms = get_active_platforms(
-            raw_config_keys=set(self._raw_values.keys()),
-            strategy_config=strategy_config,
-            agent_config=agent_config,
-        )
-
-        # Validate only active platforms' strategies
-        for platform in active_platforms:
-            strategy = strategy_config.get_strategy(platform)
-            has_agent_support = agent_config.supports_platform(platform)
-
-            # Determine if credentials are required for this platform
-            # - DIRECT strategy: always requires credentials
-            # - AUTO strategy: requires credentials if no agent support (direct is only path)
-            credentials_required = strategy == FetchStrategy.DIRECT or (
-                strategy == FetchStrategy.AUTO and not has_agent_support
-            )
-
-            # Use strict mode for env var expansion when credentials are required
-            # This fail-fast behavior prevents silent 401/403 errors at runtime
-            credentials = None
-            try:
-                credentials = self.get_fallback_credentials(platform, strict=credentials_required)
-            except EnvVarExpansionError as e:
-                # Missing env vars in required credentials is a config error
-                errors.append(
-                    f"Platform '{platform}' requires credentials but has missing "
-                    f"environment variable(s): {e}"
-                )
-
-            has_credentials = credentials is not None and len(credentials) > 0
-
-            platform_errors = validate_strategy_for_platform(
-                platform=platform,
-                strategy=strategy,
-                agent_config=agent_config,
-                has_credentials=has_credentials,
-                strict=False,
-            )
-            errors.extend(platform_errors)
-
-            # If direct or auto strategy with credentials, validate credential fields
-            if has_credentials and strategy.value in ("direct", "auto"):
-                cred_errors = validate_credentials(platform, credentials, strict=False)
-                errors.extend(cred_errors)
-
-        if strict and errors:
-            raise ConfigValidationError(
-                "Fetch configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
-            )
-
-        return errors
+        return _validate_fetch_config(self, strict=strict)
 
     def _get_agent_integrations(self) -> dict[str, bool]:
-        """Get agent integration status for all platforms.
+        """Get agent integration status for all platforms."""
+        from ingot.config.display import get_agent_integrations
 
-        Reads from AgentConfig which is populated from AGENT_INTEGRATION_* config keys.
-        Falls back to default Auggie integrations ONLY if:
-        1. No explicit config is set (integrations is None, not empty dict), AND
-        2. The agent platform is AUGGIE
-
-        For non-Auggie platforms (manual, cursor, etc.) with no explicit integrations,
-        returns False for all platforms to avoid falsely reporting agent support.
-
-        Note: An empty dict `{}` means the user explicitly disabled all integrations,
-        which is different from None (no config set).
-        """
-        known_platforms = _get_known_platforms()
-        agent_config = self.get_agent_config()
-
-        # Now that AgentConfig.supports_platform handles defaults, we can simplify
-        result = {}
-        for platform in known_platforms:
-            result[platform] = agent_config.supports_platform(platform)
-
-        return result
+        return get_agent_integrations(self)
 
     def _get_fallback_status(self) -> dict[str, bool]:
         """Get fallback credential status for all platforms."""
-        # Lazy imports to avoid circular dependencies
-        from ingot.integrations.auth import AuthenticationManager
-        from ingot.integrations.providers import Platform
+        from ingot.config.display import get_fallback_status
 
-        known_platforms = _get_known_platforms()
-        auth = AuthenticationManager(self)
-        result: dict[str, bool] = {}
-        for platform_name in known_platforms:
-            try:
-                platform_enum = Platform[platform_name.upper()]
-                result[platform_name] = auth.has_fallback_configured(platform_enum)
-            except KeyError:
-                # Platform enum not found - mark as not configured
-                logger.debug(f"Platform enum not found for '{platform_name}'")
-                result[platform_name] = False
-            except Exception as e:
-                # Catch all exceptions to prevent one platform from crashing
-                # the entire status table. Log to debug and continue.
-                logger.debug(f"Error checking fallback for {platform_name}: {e}")
-                result[platform_name] = False
-
-        return result
+        return get_fallback_status(self)
 
     def _get_platform_ready_status(
         self,
         agent_integrations: dict[str, bool],
         fallback_status: dict[str, bool],
     ) -> dict[str, bool]:
-        """Determine if each platform is ready to use.
+        """Determine if each platform is ready to use."""
+        from ingot.config.display import get_platform_ready_status
 
-        A platform is ready if it has agent integration OR fallback
-        credentials configured.
-        """
-        known_platforms = _get_known_platforms()
-        return {
-            p: agent_integrations.get(p, False) or fallback_status.get(p, False)
-            for p in known_platforms
-        }
+        return get_platform_ready_status(agent_integrations, fallback_status)
 
     def _show_platform_status(self) -> None:
-        """Display platform configuration status as a Rich table.
+        """Display platform configuration status as a Rich table."""
+        from ingot.config.display import show_platform_status
 
-        Handles errors gracefully - if Rich is unavailable or fails,
-        falls back to plain-text output to maintain status visibility.
-
-        Error handling strategy:
-        1. If status computation fails: show error message and return
-        2. If Rich Table creation/printing fails: fall back to plain-text
-        3. Uses standard print() for error messages to avoid Rich dependency issues
-        """
-        # Get status data first (before Rich-specific code)
-        # This allows fallback to use the same data
-        agent_integrations: dict[str, bool] | None = None
-        fallback_status: dict[str, bool] | None = None
-        ready_status: dict[str, bool] | None = None
-
-        try:
-            agent_integrations = self._get_agent_integrations()
-            fallback_status = self._get_fallback_status()
-            ready_status = self._get_platform_ready_status(agent_integrations, fallback_status)
-        except Exception as e:
-            # Status computation failed - use standard print() for robustness
-            # (console.print may fail if Rich is not installed or broken)
-            try:
-                console.print("  [bold]Platform Status:[/bold]")
-                console.print(f"  [dim]Unable to determine platform status: {e}[/dim]")
-                console.print()
-            except Exception:
-                # Fall back to standard print if Rich console also fails
-                print("  Platform Status:")
-                print(f"  Unable to determine platform status: {e}")
-                print()
-            return
-
-        try:
-            from rich.table import Table
-
-            # Create table
-            table = Table(title=None, show_header=True, header_style="bold")
-            table.add_column("Platform", style="cyan")
-            table.add_column("Agent Support")
-            table.add_column("Credentials")
-            table.add_column("Status")
-
-            # Sort platforms for consistent display order
-            known_platforms = _get_known_platforms()
-            for platform in sorted(known_platforms):
-                display_name = PLATFORM_DISPLAY_NAMES.get(platform, platform.title())
-                agent = "✅ Yes" if agent_integrations.get(platform, False) else "❌ No"
-                creds = "✅ Configured" if fallback_status.get(platform, False) else "❌ None"
-
-                if ready_status.get(platform, False):
-                    status = "[green]✅ Ready[/green]"
-                else:
-                    status = "[yellow]❌ Needs Config[/yellow]"
-
-                table.add_row(display_name, agent, creds, status)
-
-            console.print("  [bold]Platform Status:[/bold]")
-            console.print(table)
-
-            # Show hint for unconfigured platforms
-            unconfigured = [p for p, ready in ready_status.items() if not ready]
-            if unconfigured:
-                console.print()
-                console.print(
-                    "  [dim]Tip: See docs/platform-configuration.md for credential setup[/dim]"
-                )
-            console.print()
-
-        except Exception:
-            # Rich failed - fall back to plain-text output using standard print()
-            logger.debug("Rich rendering failed; falling back to plain text", exc_info=True)
-            self._show_platform_status_plain_text(agent_integrations, fallback_status, ready_status)
+        show_platform_status(self)
 
     def _show_platform_status_plain_text(
         self,
@@ -935,108 +731,16 @@ class ConfigManager:
         fallback_status: dict[str, bool],
         ready_status: dict[str, bool],
     ) -> None:
-        """Display platform status as plain text (fallback when Rich fails).
+        """Display platform status as plain text (fallback when Rich fails)."""
+        from ingot.config.display import show_platform_status_plain_text
 
-        Uses dynamic column widths to accommodate platform names of any length.
-        """
-        known_platforms = _get_known_platforms()
-
-        # Build row data first to calculate dynamic column widths
-        rows: list[tuple[str, str, str, str]] = []
-        for platform in sorted(known_platforms):
-            display_name = PLATFORM_DISPLAY_NAMES.get(platform, platform.title())
-            agent = "Yes" if agent_integrations.get(platform, False) else "No"
-            creds = "Configured" if fallback_status.get(platform, False) else "None"
-            status = "Ready" if ready_status.get(platform, False) else "Needs Config"
-            rows.append((display_name, agent, creds, status))
-
-        # Calculate dynamic column widths (max of header vs content + padding)
-        headers = ("Platform", "Agent", "Credentials", "Status")
-        col_widths = [
-            max(len(headers[i]), max((len(row[i]) for row in rows), default=0)) + 2
-            for i in range(4)
-        ]
-
-        # Total width for separator line
-        total_width = sum(col_widths)
-
-        print("  Platform Status:")
-        print("  " + "-" * total_width)
-        print(
-            f"  {headers[0]:<{col_widths[0]}}"
-            f"{headers[1]:<{col_widths[1]}}"
-            f"{headers[2]:<{col_widths[2]}}"
-            f"{headers[3]:<{col_widths[3]}}"
-        )
-        print("  " + "-" * total_width)
-
-        for row in rows:
-            print(
-                f"  {row[0]:<{col_widths[0]}}"
-                f"{row[1]:<{col_widths[1]}}"
-                f"{row[2]:<{col_widths[2]}}"
-                f"{row[3]:<{col_widths[3]}}"
-            )
-
-        print("  " + "-" * total_width)
-
-        # Show hint for unconfigured platforms
-        unconfigured = [p for p, ready in ready_status.items() if not ready]
-        if unconfigured:
-            print()
-            print("  Tip: See docs/platform-configuration.md for credential setup")
-        print()
+        show_platform_status_plain_text(agent_integrations, fallback_status, ready_status)
 
     def show(self) -> None:
         """Display current configuration using Rich formatting."""
-        print_header("Current Configuration")
+        from ingot.config.display import show_config
 
-        # Show config file locations
-        print_info(f"Global config: {self.global_config_path}")
-        if self.local_config_path:
-            print_info(f"Local config:  {self.local_config_path}")
-        else:
-            print_info("Local config:  (not found)")
-        console.print()
-
-        s = self.settings
-
-        # Platform Settings section
-        console.print("  [bold]Platform Settings:[/bold]")
-        console.print(f"    Default Platform: {s.default_platform or '(not set)'}")
-        # Jira-specific: Used when parsing numeric-only ticket IDs (e.g., 123 → PROJ-123)
-        console.print(f"    Default Jira Project: {s.default_jira_project or '(not set)'}")
-        console.print()
-
-        # Platform Status table (NEW)
-        self._show_platform_status()
-
-        # Model Settings section (reorganized)
-        console.print("  [bold]Model Settings:[/bold]")
-        console.print(f"    Default Model (Legacy): {s.default_model or '(not set)'}")
-        console.print(f"    Planning Model: {s.planning_model or '(not set)'}")
-        console.print(f"    Implementation Model: {s.implementation_model or '(not set)'}")
-        console.print()
-
-        # General Settings section (reorganized)
-        console.print("  [bold]General Settings:[/bold]")
-        console.print(f"    Auto-open Files: {s.auto_open_files}")
-        console.print(f"    Preferred Editor: {s.preferred_editor or '(auto-detect)'}")
-        console.print(f"    Skip Clarification: {s.skip_clarification}")
-        console.print(f"    Squash Commits at End: {s.squash_at_end}")
-        console.print()
-
-        console.print("  [bold]Parallel Execution:[/bold]")
-        console.print(f"    Enabled: {s.parallel_execution_enabled}")
-        console.print(f"    Max Parallel Tasks: {s.max_parallel_tasks}")
-        console.print(f"    Fail Fast: {s.fail_fast}")
-        console.print()
-        console.print("  [bold]Subagents:[/bold]")
-        console.print(f"    Planner: {s.subagent_planner}")
-        console.print(f"    Tasklist: {s.subagent_tasklist}")
-        console.print(f"    Implementer: {s.subagent_implementer}")
-        console.print(f"    Reviewer: {s.subagent_reviewer}")
-        console.print()
+        show_config(self)
 
 
 __all__ = [

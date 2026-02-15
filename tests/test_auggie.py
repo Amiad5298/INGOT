@@ -212,43 +212,43 @@ class TestExtractModelId:
 class TestBuildCommand:
     def test_basic_command(self):
         client = AuggieClient()
-        cmd = client._build_command("test prompt")
+        cmd = client.build_command("test prompt")
 
         assert cmd == ["auggie", "test prompt"]
 
     def test_with_model(self):
         client = AuggieClient(model="claude-3")
-        cmd = client._build_command("test prompt")
+        cmd = client.build_command("test prompt")
 
         assert cmd == ["auggie", "--model", "claude-3", "test prompt"]
 
     def test_with_model_override(self):
         client = AuggieClient(model="claude-3")
-        cmd = client._build_command("test prompt", model="gpt-4")
+        cmd = client.build_command("test prompt", model="gpt-4")
 
         assert cmd == ["auggie", "--model", "gpt-4", "test prompt"]
 
     def test_with_print_mode(self):
         client = AuggieClient()
-        cmd = client._build_command("test prompt", print_mode=True)
+        cmd = client.build_command("test prompt", print_mode=True)
 
         assert "--print" in cmd
 
     def test_with_quiet(self):
         client = AuggieClient()
-        cmd = client._build_command("test prompt", quiet=True)
+        cmd = client.build_command("test prompt", quiet=True)
 
         assert "--quiet" in cmd
 
     def test_with_dont_save_session(self):
         client = AuggieClient()
-        cmd = client._build_command("test prompt", dont_save_session=True)
+        cmd = client.build_command("test prompt", dont_save_session=True)
 
         assert "--dont-save-session" in cmd
 
     def test_all_flags_combined(self):
         client = AuggieClient(model="claude-3")
-        cmd = client._build_command(
+        cmd = client.build_command(
             "test prompt",
             print_mode=True,
             quiet=True,
@@ -270,7 +270,7 @@ class TestBuildCommand:
             prompt="You are a planner agent.",
         )
         client = AuggieClient()
-        cmd = client._build_command("test prompt", agent="ingot-planner")
+        cmd = client.build_command("test prompt", agent="ingot-planner")
 
         # Should use --model from agent definition, not --agent flag
         assert "--model" in cmd
@@ -288,7 +288,7 @@ class TestBuildCommand:
             prompt="Agent instructions.",
         )
         client = AuggieClient(model="claude-3")
-        cmd = client._build_command("test prompt", agent="ingot-implementer")
+        cmd = client.build_command("test prompt", agent="ingot-implementer")
 
         # Should use agent's model, not client's model
         assert "--model" in cmd
@@ -303,7 +303,7 @@ class TestBuildCommand:
             prompt="Review instructions.",
         )
         client = AuggieClient()
-        cmd = client._build_command(
+        cmd = client.build_command(
             "test prompt",
             agent="ingot-reviewer",
             print_mode=True,
@@ -323,7 +323,7 @@ class TestBuildCommand:
     def test_agent_not_found_falls_back_to_default_model(self, mock_parse_agent):
         mock_parse_agent.return_value = None
         client = AuggieClient(model="fallback-model")
-        cmd = client._build_command("test prompt", agent="nonexistent-agent")
+        cmd = client.build_command("test prompt", agent="nonexistent-agent")
 
         # Should fall back to client's model
         assert "--model" in cmd

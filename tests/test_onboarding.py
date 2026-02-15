@@ -385,9 +385,9 @@ class TestFullFlow:
 
 
 class TestCLIIntegration:
-    @patch("ingot.cli.run_onboarding")
-    @patch("ingot.cli.is_first_run")
-    @patch("ingot.cli.is_git_repo")
+    @patch("ingot.cli.workflow.run_onboarding")
+    @patch("ingot.cli.workflow.is_first_run")
+    @patch("ingot.cli.workflow.is_git_repo")
     def test_check_prerequisites_triggers_onboarding(self, mock_git, mock_first_run, mock_onboard):
         from ingot.cli import _check_prerequisites
 
@@ -399,9 +399,9 @@ class TestCLIIntegration:
         assert _check_prerequisites(config, force_integration_check=False) is True
         mock_onboard.assert_called_once_with(config)
 
-    @patch("ingot.cli.run_onboarding")
-    @patch("ingot.cli.is_first_run")
-    @patch("ingot.cli.is_git_repo")
+    @patch("ingot.cli.workflow.run_onboarding")
+    @patch("ingot.cli.workflow.is_first_run")
+    @patch("ingot.cli.workflow.is_git_repo")
     def test_check_prerequisites_onboarding_failure(self, mock_git, mock_first_run, mock_onboard):
         from ingot.cli import _check_prerequisites
 
@@ -412,8 +412,8 @@ class TestCLIIntegration:
         config = _make_config()
         assert _check_prerequisites(config, force_integration_check=False) is False
 
-    @patch("ingot.cli.is_first_run")
-    @patch("ingot.cli.is_git_repo")
+    @patch("ingot.cli.workflow.is_first_run")
+    @patch("ingot.cli.workflow.is_git_repo")
     def test_check_prerequisites_skips_onboarding_when_configured(self, mock_git, mock_first_run):
         from ingot.cli import _check_prerequisites
 
@@ -467,7 +467,7 @@ class TestCompatibilityMatrix:
 
 
 class TestFetchTicketWithOnboarding:
-    @patch("ingot.cli.run_async")
+    @patch("ingot.cli.ticket.run_async")
     def test_success_no_onboarding(self, mock_run_async):
         from ingot.cli import _fetch_ticket_with_onboarding
 
@@ -479,9 +479,9 @@ class TestFetchTicketWithOnboarding:
         result = _fetch_ticket_with_onboarding("TICKET-1", config, None, None)
         assert result == (mock_ticket, mock_backend)
 
-    @patch("ingot.cli.run_async")
-    @patch("ingot.cli.is_first_run")
-    @patch("ingot.cli.run_onboarding")
+    @patch("ingot.cli.ticket.run_async")
+    @patch("ingot.cli.ticket.is_first_run")
+    @patch("ingot.cli.ticket.run_onboarding")
     def test_onboarding_then_retry_succeeds(self, mock_onboard, mock_first_run, mock_run_async):
         from ingot.cli import _fetch_ticket_with_onboarding
         from ingot.integrations.backends.errors import BackendNotConfiguredError
@@ -501,9 +501,9 @@ class TestFetchTicketWithOnboarding:
         assert result == (mock_ticket, mock_backend)
         mock_onboard.assert_called_once()
 
-    @patch("ingot.cli.run_async")
-    @patch("ingot.cli.is_first_run")
-    @patch("ingot.cli.run_onboarding")
+    @patch("ingot.cli.ticket.run_async")
+    @patch("ingot.cli.ticket.is_first_run")
+    @patch("ingot.cli.ticket.run_onboarding")
     def test_onboarding_cancelled_exits(self, mock_onboard, mock_first_run, mock_run_async):
         import typer
 
@@ -518,9 +518,9 @@ class TestFetchTicketWithOnboarding:
         with pytest.raises(typer.Exit):
             _fetch_ticket_with_onboarding("TICKET-1", config, None, None)
 
-    @patch("ingot.cli.run_async")
-    @patch("ingot.cli.is_first_run")
-    @patch("ingot.cli.run_onboarding")
+    @patch("ingot.cli.ticket.run_async")
+    @patch("ingot.cli.ticket.is_first_run")
+    @patch("ingot.cli.ticket.run_onboarding")
     def test_retry_after_onboarding_fails_exits(self, mock_onboard, mock_first_run, mock_run_async):
         import typer
 
@@ -538,9 +538,9 @@ class TestFetchTicketWithOnboarding:
         with pytest.raises(typer.Exit):
             _fetch_ticket_with_onboarding("TICKET-1", config, None, None)
 
-    @patch("ingot.cli.run_async")
-    @patch("ingot.cli.run_onboarding")
-    @patch("ingot.cli.is_first_run")
+    @patch("ingot.cli.ticket.run_async")
+    @patch("ingot.cli.ticket.run_onboarding")
+    @patch("ingot.cli.ticket.is_first_run")
     def test_no_double_onboarding_after_config_reload(
         self, mock_first_run, mock_onboard, mock_run_async
     ):
@@ -562,10 +562,10 @@ class TestFetchTicketWithOnboarding:
         # Config should have been reloaded
         config.load.assert_called_once()
 
-    @patch("ingot.cli.print_error")
-    @patch("ingot.cli.run_async")
-    @patch("ingot.cli.is_first_run")
-    @patch("ingot.cli.run_onboarding")
+    @patch("ingot.cli.ticket.print_error")
+    @patch("ingot.cli.ticket.run_async")
+    @patch("ingot.cli.ticket.is_first_run")
+    @patch("ingot.cli.ticket.run_onboarding")
     def test_specific_error_after_onboarding_uses_same_message(
         self, mock_onboard, mock_first_run, mock_run_async, mock_print_error
     ):
@@ -592,8 +592,8 @@ class TestFetchTicketWithOnboarding:
         assert "Ticket not found" in error_msg
         assert "TICKET-999" in error_msg
 
-    @patch("ingot.cli.print_error")
-    @patch("ingot.cli.run_async")
+    @patch("ingot.cli.ticket.print_error")
+    @patch("ingot.cli.ticket.run_async")
     def test_ticket_not_found_before_onboarding_message(self, mock_run_async, mock_print_error):
         import typer
 
