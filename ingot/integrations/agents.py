@@ -275,6 +275,13 @@ Given a ticket description and optional user constraints, search the codebase to
 - **Discover environment variants.** Search for environment-specific configuration,
   profile selectors, feature flags, or conditional logic. Document any environment
   branching relevant to the ticket's scope.
+- **Respect local discovery.** If the prompt includes a `[SOURCE: LOCAL DISCOVERY]` section,
+  those facts are deterministically verified. Do NOT contradict them. Your role shifts from
+  raw search to interpretation, prioritization, and gap-filling. Use local discovery as a
+  starting point and focus on discovering semantic patterns, architectural intent, and
+  relationships the local tools could not detect.
+- **State the primary API.** For each pattern you report, state the primary API, class, or
+  method being used (e.g., "Uses `Gauge.builder()` from Micrometer" not just "metrics pattern").
 
 ## Output Budget Rules
 
@@ -345,12 +352,14 @@ The plan will be used to generate an executable task list for AI agents.
 ## Analysis Process
 
 1. **Understand Requirements**: Parse the ticket description, acceptance criteria, and any linked context
-2. **Consume Codebase Discovery**: The prompt includes a `[SOURCE: CODEBASE DISCOVERY]` section
-   with verified file paths, code patterns, call sites, and test files discovered by a research agent.
-   Use this as your primary source of truth. Do NOT re-search for files already listed there.
-   If no `[SOURCE: CODEBASE DISCOVERY]` section is present in the prompt, the research
-   phase did not produce results. You MUST independently explore the codebase using your
-   available tools to discover file paths, patterns, and call sites before planning.
+2. **Consume Codebase Discovery**: The prompt may include:
+   - `[SOURCE: LOCAL DISCOVERY]` — deterministically verified facts (file paths, grep matches,
+     module structure, test mappings). Treat these as ground truth.
+   - `[SOURCE: CODEBASE DISCOVERY]` — AI-discovered context (patterns, call sites, hierarchies).
+     Use this as your primary source of truth for semantics and architecture.
+   If a pattern source has `<!-- CITATION_MISMATCH -->`, do NOT use that pattern — search for
+   the correct one instead. If neither section is present, you MUST independently explore the
+   codebase using your available tools to discover file paths, patterns, and call sites.
 3. **Verify File Ownership**: Before proposing to modify a file, confirm it appears in the Codebase
    Discovery section or the Unresolved section. If a file is in neither, flag it with
    `<!-- UNVERIFIED: reason -->`. For files that the plan proposes to **create** (they don't exist
@@ -447,6 +456,19 @@ What this implementation explicitly does NOT include.
    event type, or registration identifier must be spelled out exactly. No
    placeholders like "appropriate tag" or "relevant metric". If the exact value
    depends on an unmade decision, list options and recommend one.
+7. **Registration idempotency**: Do NOT propose both annotation-based registration
+   (e.g., `@Component`, `@Injectable`) AND explicit registration (e.g., `@Bean` method,
+   `provide()`) for the same class. Choose one mechanism per component.
+8. **Snippet completeness**: Every code snippet that declares fields/properties
+   MUST also show the constructor or initialization logic that sets those fields.
+   Incomplete snippets without constructors are NOT acceptable.
+9. **Naming consistency**: When the same identifier appears in multiple formats
+   (e.g., YAML `snake_case`, Java `camelCase`, Prometheus `dot.separated`),
+   document the mapping explicitly. Do NOT use inconsistent separators for the
+   same concept across formats.
+10. **Operational completeness**: If the plan involves metrics, alerts, or monitoring,
+    include: example query/expression for observability tools, threshold values with
+    rationale, and escalation or runbook references.
 
 ## Guidelines
 
@@ -466,6 +488,8 @@ The prompt you receive tags each data section with a SOURCE label. Follow these 
 - `[SOURCE: VERIFIED PLATFORM DATA]` — This data was fetched from the ticketing platform. You may reference "the ticket" as a source.
 - `[SOURCE: USER-PROVIDED CONSTRAINTS & PREFERENCES]` — This was typed by the user. Attribute to "the user" (e.g., "the user mentioned…"), never to "the ticket."
 - `[SOURCE: NO VERIFIED PLATFORM DATA]` — The platform returned no content. You MUST NOT say "the ticket requires," "the ticket says," "the ticket describes," or similar. Base the plan only on user-provided constraints and codebase exploration.
+- `[SOURCE: LOCAL DISCOVERY]` — Deterministically verified facts from local Python tools (file paths, grep matches, module structure, test mappings). Treat as ground truth. Do NOT contradict these facts.
+- `[SOURCE: CODEBASE DISCOVERY]` — AI-discovered context from the researcher agent (patterns, call sites, hierarchies). Use as primary source for semantics and architecture. If a pattern has `<!-- CITATION_MISMATCH -->`, do NOT use it — search for the correct one instead.
 - When any field says "Not available," never fabricate requirements from it. State what is unknown and plan around what you can verify.
 """,
     INGOT_AGENT_TASKLIST: """

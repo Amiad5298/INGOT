@@ -11,12 +11,17 @@ from ingot.validation.base import (
     ValidatorRegistry,
 )
 from ingot.validation.plan_validators import (
+    CitationContentValidator,
     DiscoveryCoverageValidator,
     FileExistsValidator,
     ImplementationDetailValidator,
+    NamingConsistencyValidator,
+    OperationalCompletenessValidator,
     PatternSourceValidator,
+    RegistrationIdempotencyValidator,
     RequiredSectionsValidator,
     RiskCategoriesValidator,
+    SnippetCompletenessValidator,
     TestCoverageValidator,
     UnresolvedMarkersValidator,
     create_plan_validator_registry,
@@ -440,7 +445,7 @@ class TestValidatorRegistry:
 
     def test_factory_returns_all_validators(self):
         registry = create_plan_validator_registry()
-        assert len(registry.validators) == 8
+        assert len(registry.validators) == 13
 
     def test_factory_passes_researcher_output(self):
         researcher = "### Interface & Class Hierarchy\n#### `Foo`\n"
@@ -1740,3 +1745,810 @@ class TestTestCoverageValidatorMultilineReject:
         match = pattern.search(text)
         assert match is not None
         assert match.group(1) == "src/models/user.py"
+
+
+# =============================================================================
+# TestCitationContentValidator
+# =============================================================================
+
+
+class TestCitationContentValidator:
+    """Tests for CitationContentValidator."""
+
+    def test_valid_citation_no_findings(self, tmp_path):
+        """Citation matching actual file content produces no findings."""
+        # Create source file
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "helper.py").write_text(
+            "import os\n"
+            "\n"
+            "class MetricsHelper:\n"
+            "    def record(self, name, value):\n"
+            "        DistributionSummary.builder(name).register(self.registry)\n"
+        )
+
+        plan = """\
+## Implementation Steps
+1. Add metrics
+Pattern source: `src/helper.py:3-5`
+```python
+class MetricsHelper:
+    def record(self, name, value):
+        DistributionSummary.builder(name).register(self.registry)
+```
+"""
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        # Should be empty or have no WARNING for this citation
+        warnings = [f for f in findings if f.severity == ValidationSeverity.WARNING]
+        mismatch_warnings = [f for f in warnings if "mismatch" in f.message.lower()]
+        assert mismatch_warnings == []
+
+    def test_mismatched_citation_produces_warning(self, tmp_path):
+        """Citation pointing to wrong content should produce warning."""
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "helper.py").write_text(
+            "import os\n"
+            "\n"
+            "class CompleteDifferentClass:\n"
+            "    def unrelated_method(self):\n"
+            "        pass\n"
+        )
+
+        plan = """\
+## Implementation Steps
+1. Add metrics
+Pattern source: `src/helper.py:3-5`
+```python
+class MetricsHelper:
+    def record(self, name, value):
+        DistributionSummary.builder(name).register(self.registry)
+```
+"""
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        warnings = [f for f in findings if f.severity == ValidationSeverity.WARNING]
+        # Should warn about mismatch
+        assert any("mismatch" in f.message.lower() for f in warnings)
+
+    def test_file_not_found_produces_warning(self, tmp_path):
+        """Citation to non-existent file produces warning."""
+        plan = """\
+## Implementation Steps
+Pattern source: `src/missing.py:1-5`
+```python
+class Something:
+    pass
+```
+"""
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        warnings = [f for f in findings if f.severity == ValidationSeverity.WARNING]
+        assert any("not found" in f.message.lower() for f in warnings)
+
+    def test_no_repo_root_returns_empty(self):
+        """No repo_root → skip validation entirely."""
+        plan = "Pattern source: `src/foo.py:1-5`\n```\ncode\n```"
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=None)
+        findings = validator.validate(plan, ctx)
+        assert findings == []
+
+    def test_line_range_out_of_bounds(self, tmp_path):
+        """Citation with line range beyond file end produces warning."""
+        (tmp_path / "small.py").write_text("one line\n")
+
+        plan = """\
+Pattern source: `small.py:500-510`
+```python
+class FarAway:
+    pass
+```
+"""
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        warnings = [f for f in findings if f.severity == ValidationSeverity.WARNING]
+        assert any("out of bounds" in f.message.lower() for f in warnings)
+
+    def test_no_code_block_near_citation_skips(self, tmp_path):
+        """Citation without adjacent code block should be skipped."""
+        (tmp_path / "foo.py").write_text("class Foo: pass\n")
+        plan = "Pattern source: `foo.py:1`\nJust text, no code block."
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        assert findings == []
+
+    def test_long_code_block_verifies_correctly(self, tmp_path):
+        """A citation next to a code block longer than 5 lines should still verify."""
+        # Create a source file with >20 lines of matching content
+        source_lines = ["class MetricsHelper:"] + [
+            f"    line_{i} = DistributionSummary()" for i in range(20)
+        ]
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "helper.py").write_text("\n".join(source_lines) + "\n")
+
+        # Build plan with a 20-line code block (opening fence far from closing)
+        code_lines = "\n".join(source_lines)
+        plan = f"""\
+## Implementation Steps
+1. Add metrics
+Pattern source: `src/helper.py:1-21`
+```python
+{code_lines}
+```
+"""
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        mismatch_warnings = [
+            f
+            for f in findings
+            if f.severity == ValidationSeverity.WARNING and "mismatch" in f.message.lower()
+        ]
+        assert mismatch_warnings == []
+
+    def test_long_code_block_mismatch_detected(self, tmp_path):
+        """A citation next to a long code block with non-matching file should warn."""
+        # File has completely different content
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "other.py").write_text("class CompletelyDifferent:\n    pass\n")
+
+        # 20-line code block references identifiers not in the file
+        code_lines = "\n".join(
+            [f"    DistributionSummary.builder('{i}').register(registry)" for i in range(20)]
+        )
+        plan = f"""\
+## Implementation Steps
+Pattern source: `src/other.py:1-2`
+```java
+{code_lines}
+```
+"""
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        mismatch_warnings = [
+            f
+            for f in findings
+            if f.severity == ValidationSeverity.WARNING and "mismatch" in f.message.lower()
+        ]
+        assert len(mismatch_warnings) >= 1
+
+    def test_path_traversal_blocked(self, tmp_path):
+        """Citation with ../../ path traversal should produce a WARNING."""
+        plan = """\
+## Implementation Steps
+Pattern source: `../../etc/config.txt:1-5`
+```python
+class Something:
+    pass
+```
+"""
+        validator = CitationContentValidator()
+        ctx = ValidationContext(repo_root=tmp_path)
+        findings = validator.validate(plan, ctx)
+        warnings = [f for f in findings if f.severity == ValidationSeverity.WARNING]
+        assert any("traversal" in f.message.lower() for f in warnings)
+
+
+# =============================================================================
+# TestRegistrationIdempotencyValidator
+# =============================================================================
+
+
+class TestRegistrationIdempotencyValidator:
+    """Tests for RegistrationIdempotencyValidator."""
+
+    def test_dual_spring_registration_warns(self):
+        """@Component + @Bean in same code block should warn."""
+        plan = """\
+## Implementation Steps
+1. Register the service
+```java
+@Component
+public class MyService {
+    // ...
+}
+
+@Bean
+public MyService myService() {
+    return new MyService();
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "dual registration" in findings[0].message.lower()
+
+    def test_single_annotation_no_warning(self):
+        """Only @Component, no @Bean → no warning."""
+        plan = """\
+```java
+@Component
+public class MyService {
+    private final SomeDep dep;
+    public MyService(SomeDep dep) { this.dep = dep; }
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert findings == []
+
+    def test_single_bean_no_warning(self):
+        """Only @Bean, no @Component → no warning."""
+        plan = """\
+```java
+@Bean
+public MyService myService() {
+    return new MyService();
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert findings == []
+
+    def test_different_code_blocks_no_warning(self):
+        """@Component and @Bean in separate code blocks → no warning."""
+        plan = """\
+## Step 1
+```java
+@Component
+public class MyService {}
+```
+
+## Step 2
+```java
+@Bean
+public OtherService otherService() { return new OtherService(); }
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert findings == []
+
+    def test_angular_dual_registration(self):
+        """@Injectable + provide() should warn."""
+        plan = """\
+```typescript
+@Injectable()
+export class MyService {}
+
+providers: [
+    provide(MyService, { useClass: MyService })
+]
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert len(findings) == 1
+
+    def test_short_code_block_skipped(self):
+        """Very short code blocks are skipped."""
+        plan = """\
+```
+x
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert findings == []
+
+    def test_service_annotation_with_bean(self):
+        """@Service (Spring family) + @Bean should also warn."""
+        plan = """\
+```java
+@Service
+public class MyService {
+    // service implementation
+}
+
+@Configuration
+public class Config {
+    @Bean
+    public MyService myService() { return new MyService(); }
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert len(findings) >= 1
+
+    def test_cross_block_dual_registration_warns(self):
+        """@Component class MyService in block 1, @Bean MyService in block 2 → WARNING."""
+        plan = """\
+## Step 1
+```java
+@Component
+public class MyService {
+    private final SomeDep dep;
+    public MyService(SomeDep dep) { this.dep = dep; }
+}
+```
+
+## Step 2
+```java
+@Configuration
+public class Config {
+    @Bean
+    public MyService myService() { return new MyService(); }
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        cross_block = [f for f in findings if "cross-block" in f.message.lower()]
+        assert len(cross_block) == 1
+        assert "MyService" in cross_block[0].message
+
+    def test_cross_block_different_classes_no_warning(self):
+        """@Component class Foo in block 1, @Bean Bar in block 2 → no cross-block warning."""
+        plan = """\
+## Step 1
+```java
+@Component
+public class Foo {
+    // ...
+}
+```
+
+## Step 2
+```java
+@Configuration
+public class Config {
+    @Bean
+    public Bar bar() { return new Bar(); }
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        cross_block = [f for f in findings if "cross-block" in f.message.lower()]
+        assert cross_block == []
+
+    def test_cross_block_interface_vs_impl_warns(self):
+        """@Component class MyServiceImpl + @Bean MyService across blocks → warning."""
+        plan = """\
+## Step 1
+```java
+@Component
+public class MyServiceImpl implements MyService {
+    // impl
+}
+```
+
+## Step 2
+```java
+@Configuration
+public class Config {
+    @Bean
+    public MyService myService() { return new MyServiceImpl(); }
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        cross_block = [f for f in findings if "cross-block" in f.message.lower()]
+        assert len(cross_block) == 1
+
+    def test_three_block_cross_registration(self):
+        """Annotation in block 1, unrelated block 2, bean in block 3 → warning."""
+        plan = """\
+## Step 1
+```java
+@Component
+public class MyService {
+    // component
+}
+```
+
+## Step 2
+```java
+public class SomethingUnrelated {
+    // no registration here
+}
+```
+
+## Step 3
+```java
+@Configuration
+public class Config {
+    @Bean
+    public MyService myService() { return new MyService(); }
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        cross_block = [f for f in findings if "cross-block" in f.message.lower()]
+        assert len(cross_block) == 1
+        assert "MyService" in cross_block[0].message
+
+    def test_bean_with_intermediate_annotations(self):
+        """@Bean followed by @Scope and other annotations should still extract type."""
+        plan = """\
+```java
+@Component
+public class MyService {
+}
+
+@Bean
+@Scope("prototype")
+@Primary
+public MyService myService() {
+    return new MyService();
+}
+```
+"""
+        validator = RegistrationIdempotencyValidator()
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        # Should detect dual registration within the same block
+        assert len(findings) >= 1
+
+    def test_normalize_strips_impl_suffix(self):
+        """_normalize_class_name should strip 'Impl' suffix."""
+        assert (
+            RegistrationIdempotencyValidator._normalize_class_name("MyServiceImpl") == "MyService"
+        )
+        assert RegistrationIdempotencyValidator._normalize_class_name("FooAdapter") == "Foo"
+        assert RegistrationIdempotencyValidator._normalize_class_name("BarDecorator") == "Bar"
+
+    def test_normalize_preserves_short_name(self):
+        """_normalize_class_name should not strip suffix if name would be empty."""
+        assert RegistrationIdempotencyValidator._normalize_class_name("Impl") == "Impl"
+        assert RegistrationIdempotencyValidator._normalize_class_name("Default") == "Default"
+
+    def test_normalize_strips_default_prefix(self):
+        """_normalize_class_name should strip 'Default' prefix."""
+        assert (
+            RegistrationIdempotencyValidator._normalize_class_name("DefaultMyService")
+            == "MyService"
+        )
+
+    def test_normalize_default_adapter_strips_prefix(self):
+        """DefaultAdapter → prefix stripped → 'Adapter' (suffix guard prevents empty)."""
+        assert RegistrationIdempotencyValidator._normalize_class_name("DefaultAdapter") == "Adapter"
+        # DefaultFooAdapter → 'Default' stripped → 'FooAdapter' → 'Adapter' stripped → 'Foo'
+        assert RegistrationIdempotencyValidator._normalize_class_name("DefaultFooAdapter") == "Foo"
+
+
+# =============================================================================
+# TestRegistryIncludesNewValidators
+# =============================================================================
+
+
+class TestRegistryIncludesNewValidators:
+    """Test that new validators are registered in the factory."""
+
+    def test_registry_includes_citation_content_validator(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Citation Content" in names
+
+    def test_registry_includes_registration_idempotency_validator(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Registration Idempotency" in names
+
+    def test_registry_includes_snippet_completeness_validator(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Snippet Completeness" in names
+
+    def test_registry_includes_operational_completeness_validator(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Operational Completeness" in names
+
+    def test_registry_includes_naming_consistency_validator(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Naming Consistency" in names
+
+    def test_registry_has_thirteen_validators(self):
+        registry = create_plan_validator_registry()
+        assert len(registry.validators) == 13
+
+
+# =============================================================================
+# SnippetCompletenessValidator Tests
+# =============================================================================
+
+
+class TestSnippetCompletenessValidator:
+    """Tests for SnippetCompletenessValidator."""
+
+    def _validate(self, content: str) -> list[ValidationFinding]:
+        v = SnippetCompletenessValidator()
+        return v.validate(content, ValidationContext())
+
+    def test_clean_snippet_with_constructor(self):
+        plan = """## Implementation
+```java
+public class FooService {
+    private final MetricsHelper helper;
+
+    public FooService(MetricsHelper helper) {
+        this.helper = helper;
+    }
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_fields_without_constructor_warns(self):
+        plan = """## Implementation
+```java
+public class FooService {
+    private final MetricsHelper helper;
+    private final AlertManager alertManager;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "constructor" in findings[0].message.lower() or "init" in findings[0].message.lower()
+
+    def test_python_self_without_init_warns(self):
+        plan = """## Implementation
+```python
+class FooService:
+    self.helper = MetricsHelper()
+    self.alert_manager = AlertManager()
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+
+    def test_python_with_init_clean(self):
+        plan = """## Implementation
+```python
+class FooService:
+    def __init__(self, helper):
+        self.helper = helper
+        self.count = 0
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_autowired_annotation_counts_as_init(self):
+        plan = """## Implementation
+```java
+public class FooService {
+    @Autowired
+    private MetricsHelper helper;
+    private final String name;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_short_code_block_skipped(self):
+        plan = """## Config
+```java
+int x = 5;
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_kotlin_val_without_init_warns(self):
+        plan = """## Implementation
+```kotlin
+class FooService {
+    val helper: MetricsHelper
+    val alertManager: AlertManager
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+
+    def test_kotlin_with_init_block_clean(self):
+        plan = """## Implementation
+```kotlin
+class FooService {
+    val helper: MetricsHelper
+    init {
+        helper = createHelper()
+    }
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+
+# =============================================================================
+# OperationalCompletenessValidator Tests
+# =============================================================================
+
+
+class TestOperationalCompletenessValidator:
+    """Tests for OperationalCompletenessValidator."""
+
+    def _validate(self, content: str) -> list[ValidationFinding]:
+        v = OperationalCompletenessValidator()
+        return v.validate(content, ValidationContext())
+
+    def test_no_metrics_keywords_skips(self):
+        plan = """## Summary
+This plan adds a REST endpoint for user profile.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_metrics_without_operational_elements_warns(self):
+        plan = """## Summary
+This plan adds a Prometheus metric for monitoring queue depth.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.INFO
+        assert "query example" in findings[0].message
+        assert "threshold value" in findings[0].message
+        assert "escalation reference" in findings[0].message
+
+    def test_complete_operational_plan_clean(self):
+        plan = """## Summary
+Add alert for high queue depth metric.
+
+## Monitoring
+Query: `sum(rate(queue_depth{service="foo"}[5m])) > 100`
+Threshold: > 100 messages triggers alert
+Escalation: page on-call via PagerDuty #sre-alerts
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_partial_operational_plan(self):
+        plan = """## Summary
+Add gauge metric for pending messages count.
+
+## Monitoring
+Threshold: > 500 messages triggers warning
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        # Should mention missing elements but not all three
+        msg = findings[0].message
+        assert "query example" in msg
+        assert "escalation reference" in msg
+        assert "threshold value" not in msg  # threshold IS present
+
+    def test_alert_keyword_activates(self):
+        plan = """## Summary
+Create an alert rule for SQS queue overflow.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+
+    def test_dashboard_keyword_activates(self):
+        plan = """## Summary
+Build a Grafana dashboard for service health.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+
+    def test_slo_keyword_activates(self):
+        plan = """## Summary
+Define SLO targets for API latency.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+
+    def test_severity_elevated_to_warning_with_metric_signal(self):
+        """With ticket_signals containing 'metric', severity should be WARNING."""
+        plan = """## Summary
+This plan adds a Prometheus metric for monitoring queue depth.
+"""
+        v = OperationalCompletenessValidator()
+        ctx = ValidationContext(ticket_signals=["metric"])
+        findings = v.validate(plan, ctx)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+
+
+# =============================================================================
+# NamingConsistencyValidator Tests
+# =============================================================================
+
+
+class TestNamingConsistencyValidator:
+    """Tests for NamingConsistencyValidator."""
+
+    def _validate(self, content: str) -> list[ValidationFinding]:
+        v = NamingConsistencyValidator()
+        return v.validate(content, ValidationContext())
+
+    def test_consistent_naming_clean(self):
+        plan = """## Config
+Set `queue.depth.threshold` and `queue.depth.alert` in the config.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_inconsistent_separators_warns(self):
+        plan = """## Config
+Set the metric name to `queue.depth.threshold` in Java
+and `queue_depth_threshold` in the YAML config.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "dot" in findings[0].message
+        assert "underscore" in findings[0].message
+
+    def test_file_paths_skipped(self):
+        plan = """## Files
+Edit `src/main/java/Config.java` and `src/test/java/ConfigTest.java`.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_code_blocks_excluded(self):
+        plan = """## Config
+Use `metric.name` in configuration.
+
+```java
+String METRIC_NAME = "metric.name";
+String metric_name = config.get("metric.name");
+```
+"""
+        findings = self._validate(plan)
+        # Only the backtick-quoted identifiers outside code blocks are checked
+        assert len(findings) == 0
+
+    def test_short_identifiers_ignored(self):
+        plan = """## Config
+Use `a.b` for the key.
+"""
+        findings = self._validate(plan)
+        # Too short (< 4 chars) to match _IDENTIFIER_RE
+        assert len(findings) == 0
+
+    def test_hyphen_vs_underscore_warns(self):
+        plan = """## Config
+Set `service-name-config` in YAML and `service_name_config` in env vars.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert "hyphen" in findings[0].message
+        assert "underscore" in findings[0].message
+
+    def test_three_way_inconsistency(self):
+        plan = """## Config
+Use `queue.depth.max` in Java properties,
+`queue_depth_max` in environment variables,
+and `queue-depth-max` in YAML config.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        msg = findings[0].message
+        assert "dot" in msg
+        assert "underscore" in msg
+        assert "hyphen" in msg

@@ -91,6 +91,9 @@ class WorkflowState:
     # User-provided constraints & preferences
     user_constraints: str = ""
 
+    # Ticket signals extracted from ticket text (e.g., "metric", "alert", "migration")
+    ticket_signals: list[str] = field(default_factory=list)
+
     # Conflict detection (Fail-Fast Semantic Check)
     # Detects semantic conflicts between ticket description and user constraints
     conflict_detected: bool = False

@@ -10,7 +10,6 @@ from ingot.ui.menus import ReviewChoice
 from ingot.validation.base import ValidationFinding, ValidationReport, ValidationSeverity
 from ingot.workflow.state import WorkflowState
 from ingot.workflow.step1_plan import (
-    _build_fix_prompt,
     _build_minimal_prompt,
     _build_replan_prompt,
     _create_plan_log_dir,
@@ -18,7 +17,6 @@ from ingot.workflow.step1_plan import (
     _display_validation_report,
     _edit_plan,
     _extract_plan_markdown,
-    _fix_plan_with_ai,
     _format_validation_feedback,
     _generate_plan_with_tui,
     _get_log_base_dir,
@@ -26,6 +24,8 @@ from ingot.workflow.step1_plan import (
     _save_plan_from_output,
     _truncate_researcher_context,
     _validate_plan,
+    build_fix_prompt,
+    fix_plan_with_ai,
     step_1_create_plan,
 )
 
@@ -1459,7 +1459,7 @@ class TestStep1RetryOnValidationError:
     @patch("ingot.workflow.step1_plan._display_validation_report")
     @patch("ingot.workflow.step1_plan._validate_plan")
     @patch("ingot.workflow.step1_plan._run_researcher")
-    @patch("ingot.workflow.step1_plan._fix_plan_with_ai")
+    @patch("ingot.workflow.step1_plan.fix_plan_with_ai")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_auto_retry_on_errors_reruns_pipeline(
         self,
@@ -1664,7 +1664,7 @@ class TestResearcherNotRerunOnRetry:
     @patch("ingot.workflow.step1_plan._display_validation_report")
     @patch("ingot.workflow.step1_plan._validate_plan")
     @patch("ingot.workflow.step1_plan._run_researcher")
-    @patch("ingot.workflow.step1_plan._fix_plan_with_ai")
+    @patch("ingot.workflow.step1_plan.fix_plan_with_ai")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_researcher_called_once_on_retry(
         self,
@@ -1816,7 +1816,7 @@ class TestStrictValidationGate:
     @patch("ingot.workflow.step1_plan._display_validation_report")
     @patch("ingot.workflow.step1_plan._validate_plan")
     @patch("ingot.workflow.step1_plan._run_researcher")
-    @patch("ingot.workflow.step1_plan._fix_plan_with_ai")
+    @patch("ingot.workflow.step1_plan.fix_plan_with_ai")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_strict_mode_blocks_on_exhausted_retries(
         self,
@@ -1870,7 +1870,7 @@ class TestStrictValidationGate:
     @patch("ingot.workflow.step1_plan._display_validation_report")
     @patch("ingot.workflow.step1_plan._validate_plan")
     @patch("ingot.workflow.step1_plan._run_researcher")
-    @patch("ingot.workflow.step1_plan._fix_plan_with_ai")
+    @patch("ingot.workflow.step1_plan.fix_plan_with_ai")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_non_strict_mode_proceeds_on_exhausted_retries(
         self,
@@ -1999,7 +1999,7 @@ class TestStep1AutoFixIntegration:
     @patch("ingot.workflow.step1_plan.PlanFixer")
     @patch("ingot.workflow.step1_plan._validate_plan")
     @patch("ingot.workflow.step1_plan._run_researcher")
-    @patch("ingot.workflow.step1_plan._fix_plan_with_ai")
+    @patch("ingot.workflow.step1_plan.fix_plan_with_ai")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_auto_fix_partial_then_auto_retry(
         self,
@@ -2083,7 +2083,7 @@ class TestStep1AutoFixIntegration:
     @patch("ingot.workflow.step1_plan.PlanFixer")
     @patch("ingot.workflow.step1_plan._validate_plan")
     @patch("ingot.workflow.step1_plan._run_researcher")
-    @patch("ingot.workflow.step1_plan._fix_plan_with_ai")
+    @patch("ingot.workflow.step1_plan.fix_plan_with_ai")
     @patch("ingot.workflow.step1_plan._generate_plan_with_tui")
     def test_auto_retry_respects_max_retries_strict(
         self,
@@ -2148,14 +2148,14 @@ class TestStep1AutoFixIntegration:
 
 
 class TestBuildFixPrompt:
-    """Tests for _build_fix_prompt."""
+    """Tests for build_fix_prompt."""
 
     def test_includes_plan_content_and_errors(self, workflow_state, tmp_path):
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
         existing_plan = "# My Plan\n## Summary\nSome content."
         feedback = "- [ERROR] Missing required section: 'Testing Strategy'"
 
-        result = _build_fix_prompt(workflow_state, plan_path, existing_plan, feedback)
+        result = build_fix_prompt(workflow_state, plan_path, existing_plan, feedback)
 
         assert "# My Plan" in result
         assert "Missing required section" in result
@@ -2169,7 +2169,7 @@ class TestBuildFixPrompt:
         long_plan = head + tail
         feedback = "- [ERROR] Some error"
 
-        result = _build_fix_prompt(workflow_state, plan_path, long_plan, feedback)
+        result = build_fix_prompt(workflow_state, plan_path, long_plan, feedback)
 
         assert "... [middle truncated] ..." in result
         assert "HEAD_MARKER" in result
@@ -2177,14 +2177,14 @@ class TestBuildFixPrompt:
 
     def test_includes_ticket_info(self, workflow_state, tmp_path):
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
-        result = _build_fix_prompt(workflow_state, plan_path, "# Plan", "- [ERROR] Bad")
+        result = build_fix_prompt(workflow_state, plan_path, "# Plan", "- [ERROR] Bad")
 
         assert "TEST-123" in result
         assert "Title:" in result
 
     def test_plan_mode_stdout_instruction(self, workflow_state, tmp_path):
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
-        result = _build_fix_prompt(
+        result = build_fix_prompt(
             workflow_state,
             plan_path,
             "# Plan",
@@ -2197,7 +2197,7 @@ class TestBuildFixPrompt:
 
     def test_file_mode_save_instruction(self, workflow_state, tmp_path):
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
-        result = _build_fix_prompt(
+        result = build_fix_prompt(
             workflow_state,
             plan_path,
             "# Plan",
@@ -2210,7 +2210,7 @@ class TestBuildFixPrompt:
     def test_includes_user_constraints(self, workflow_state, tmp_path):
         workflow_state.user_constraints = "Use Python 3.12 features"
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
-        result = _build_fix_prompt(workflow_state, plan_path, "# Plan", "- [ERROR] Bad")
+        result = build_fix_prompt(workflow_state, plan_path, "# Plan", "- [ERROR] Bad")
 
         assert "Python 3.12" in result
         assert "USER-PROVIDED CONSTRAINTS" in result
@@ -2220,7 +2220,7 @@ class TestBuildFixPrompt:
         workflow_state.ticket.title = ""
         workflow_state.ticket.description = ""
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
-        result = _build_fix_prompt(workflow_state, plan_path, "# Plan", "- [ERROR] Bad")
+        result = build_fix_prompt(workflow_state, plan_path, "# Plan", "- [ERROR] Bad")
 
         assert "NO VERIFIED PLATFORM DATA" in result
 
@@ -2231,7 +2231,7 @@ class TestBuildFixPrompt:
 
 
 class TestFixPlanWithAi:
-    """Tests for _fix_plan_with_ai."""
+    """Tests for fix_plan_with_ai."""
 
     def test_calls_backend_with_fix_prompt(self, workflow_state, tmp_path):
         plan_path = tmp_path / "specs" / "TEST-123-plan.md"
@@ -2241,7 +2241,7 @@ class TestFixPlanWithAi:
         backend.supports_plan_mode = False
         backend.run_with_callback.return_value = (True, "# Fixed Plan")
 
-        success, output = _fix_plan_with_ai(
+        success, output = fix_plan_with_ai(
             workflow_state,
             plan_path,
             backend,
@@ -2261,7 +2261,7 @@ class TestFixPlanWithAi:
         backend.supports_plan_mode = False
         backend.run_with_callback.side_effect = RuntimeError("API error")
 
-        success, output = _fix_plan_with_ai(
+        success, output = fix_plan_with_ai(
             workflow_state,
             plan_path,
             backend,
@@ -2278,7 +2278,7 @@ class TestFixPlanWithAi:
         backend.supports_plan_mode = False
         backend.run_with_callback.return_value = (False, "")
 
-        success, output = _fix_plan_with_ai(
+        success, output = fix_plan_with_ai(
             workflow_state,
             plan_path,
             backend,

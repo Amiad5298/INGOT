@@ -31,6 +31,7 @@ dependencies = [
     "httpx>=0.27.0",
     "pyyaml>=6.0.0",
     "textual>=0.89.0",
+    "defusedxml>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +44,7 @@ dev = [
     "pytest-asyncio>=1.0.0",    # Async test support
     "mypy>=1.0.0",
     "types-PyYAML>=6.0.0",      # Type stubs for PyYAML
+    "types-defusedxml>=0.7.0",   # Type stubs for defusedxml
     "ruff>=0.1.0",
     "pre-commit>=3.6.0",        # Git hook management
     "ipython>=8.0.0",           # Enhanced REPL for debugging
