@@ -84,8 +84,8 @@ _UNVERIFIED_NOTE = (
 _DEFAULT_RESEARCHER_CONTEXT_BUDGET = 12000
 
 # Section priority order for truncation: first entry = highest priority, last = first dropped.
-# Order matches RESEARCHER_SECTION_HEADINGS definition order.
-_SECTION_PRIORITY = RESEARCHER_SECTION_HEADINGS
+# Uses RESEARCHER_SECTION_HEADINGS directly — the truncation priority matches
+# the canonical heading order defined in constants.py.
 
 
 # Ticket signal categories for conditional logic.
@@ -702,7 +702,7 @@ def _truncate_researcher_context(
     total_len = 0
     truncated = False
 
-    for priority_heading in _SECTION_PRIORITY:
+    for priority_heading in RESEARCHER_SECTION_HEADINGS:
         if priority_heading not in section_map:
             continue
         heading, content = section_map[priority_heading]
@@ -1094,6 +1094,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
                         plan_content,
                         state,
                         researcher_output=researcher_output,
+                        repo_root=repo_root,
                     )
 
             if report.findings:
@@ -1155,6 +1156,17 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
                 local_discovery_context=local_discovery_markdown,
             ):
                 _display_plan_summary(plan_path)
+                # Re-run validation so user-triggered changes are checked
+                if state.enable_plan_validation:
+                    replan_content = plan_path.read_text()
+                    replan_report = _validate_plan(
+                        replan_content,
+                        state,
+                        researcher_output=researcher_output,
+                        repo_root=repo_root,
+                    )
+                    if replan_report.findings:
+                        _display_validation_report(replan_report)
                 continue
             else:
                 print_error("Failed to regenerate plan. You can retry or edit manually.")

@@ -116,8 +116,10 @@ def _build_line_index(content: str) -> list[int]:
     """Build a sorted list of newline character offsets for O(log N) lookups.
 
     Returns a list of positions where '\\n' occurs in *content*.
+    Uses ``re.finditer`` for better performance on large inputs compared
+    to character-by-character enumeration.
     """
-    return [i for i, ch in enumerate(content) if ch == "\n"]
+    return [m.start() for m in re.finditer(r"\n", content)]
 
 
 def _line_number_at(line_index: list[int], offset: int) -> int:
