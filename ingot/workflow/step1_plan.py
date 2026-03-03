@@ -30,7 +30,7 @@ from ingot.validation.base import ValidationContext, ValidationReport, Validatio
 from ingot.validation.plan_fixer import PlanFixer
 from ingot.validation.plan_validators import FileExistsValidator, create_plan_validator_registry
 from ingot.workflow.constants import (
-    MAX_GENERATION_RETRIES,
+    MAX_GENERATION_ATTEMPTS,
     MAX_REVIEW_ITERATIONS,
     RESEARCHER_SECTION_HEADINGS,
     noop_output_callback,
@@ -79,10 +79,12 @@ _UNVERIFIED_NOTE = (
     'Do NOT reference "the ticket" as a source of requirements.'
 )
 
-# Researcher context truncation settings
-_RESEARCHER_CONTEXT_BUDGET = 12000  # chars (~3000 tokens)
+# Default researcher context truncation budget (chars, ~3000 tokens).
+# Can be overridden via Settings.researcher_context_budget.
+_DEFAULT_RESEARCHER_CONTEXT_BUDGET = 12000
 
-# Section priority order for truncation (highest priority first)
+# Section priority order for truncation: first entry = highest priority, last = first dropped.
+# Order matches RESEARCHER_SECTION_HEADINGS definition order.
 _SECTION_PRIORITY = RESEARCHER_SECTION_HEADINGS
 
 
@@ -334,7 +336,9 @@ correct one instead.
 
     # Inject researcher context if provided
     if researcher_context:
-        trimmed = _truncate_researcher_context(researcher_context)
+        trimmed = _truncate_researcher_context(
+            researcher_context, budget=state.researcher_context_budget
+        )
         prompt += f"""
 
 [SOURCE: CODEBASE DISCOVERY (from automated research)]
@@ -459,7 +463,9 @@ Use these verified facts when fixing file path errors or missing references:
 {local_discovery_context}"""
 
     if researcher_context:
-        trimmed = _truncate_researcher_context(researcher_context)
+        trimmed = _truncate_researcher_context(
+            researcher_context, budget=state.researcher_context_budget
+        )
         prompt += f"""
 
 [SOURCE: CODEBASE DISCOVERY (from automated research)]
@@ -646,7 +652,9 @@ cover (e.g., semantic understanding of code, architectural intent).
     return success, output
 
 
-def _truncate_researcher_context(context: str, budget: int = _RESEARCHER_CONTEXT_BUDGET) -> str:
+def _truncate_researcher_context(
+    context: str, budget: int = _DEFAULT_RESEARCHER_CONTEXT_BUDGET
+) -> str:
     """Truncate researcher context to fit within character budget.
 
     Preserves sections in priority order. When budget is exceeded, drops
@@ -802,11 +810,17 @@ def _validate_plan(
     plan_content: str,
     state: WorkflowState,
     researcher_output: str = "",
+    repo_root: Path | None = None,
 ) -> ValidationReport:
-    """Run all registered plan validators."""
+    """Run all registered plan validators.
+
+    Args:
+        repo_root: Pre-computed repository root. Avoids redundant
+            ``find_repo_root()`` calls when invoked inside a retry loop.
+    """
     registry = create_plan_validator_registry(researcher_output=researcher_output)
     context = ValidationContext(
-        repo_root=find_repo_root(),
+        repo_root=repo_root,
         ticket_id=state.ticket.id,
         ticket_signals=state.ticket_signals,
     )
@@ -919,7 +933,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     2. Synthesis: Planner agent creates a plan from verified researcher output
     3. Inspection: Python validators check the plan for structural issues
 
-    If validation finds errors, offers a retry (up to MAX_GENERATION_RETRIES).
+    If validation finds errors, offers a retry (up to MAX_GENERATION_ATTEMPTS).
     Then proceeds to the standard user review loop.
 
     Note: Ticket information is already fetched in the workflow runner
@@ -979,8 +993,12 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
             # Persist researcher output AFTER annotation so the saved file
             # includes path warnings and citation verification markers.
             research_path = plan_path.with_suffix(".research.md")
-            research_path.write_text(researcher_output)
-            log_message(f"Persisted annotated researcher output to {research_path}")
+            try:
+                research_path.write_text(researcher_output)
+                log_message(f"Persisted annotated researcher output to {research_path}")
+            except OSError as exc:
+                log_message(f"Failed to persist researcher output to {research_path}: {exc}")
+                print_warning(f"Could not save researcher output: {exc}")
         else:
             print_warning("Researcher failed, planner will search independently")
             researcher_output = ""
@@ -992,7 +1010,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     # Attempts 2+: targeted fix via fix_plan_with_ai (sends existing plan + errors)
     plan_content = ""
     validation_feedback = ""
-    for attempt in range(1, MAX_GENERATION_RETRIES + 1):
+    for attempt in range(1, MAX_GENERATION_ATTEMPTS + 1):
         if attempt == 1 or not plan_content:
             # Phase 2: Full synthesis
             print_step("Generating implementation plan...")
@@ -1020,7 +1038,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
             # Phase 2b: Targeted AI fix of existing plan
             print_step(
                 f"Asking AI to fix validation error(s) "
-                f"(attempt {attempt}/{MAX_GENERATION_RETRIES})..."
+                f"(attempt {attempt}/{MAX_GENERATION_ATTEMPTS})..."
             )
             fix_success, fix_output = fix_plan_with_ai(
                 state,
@@ -1059,6 +1077,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
                 plan_content,
                 state,
                 researcher_output=researcher_output,
+                repo_root=repo_root,
             )
 
             # Stage A: Deterministic auto-fix (with optional FileIndex for fuzzy path correction)
@@ -1082,16 +1101,16 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
 
             # Stage B: Auto-retry with AI fix (no human prompt)
             if report.has_errors:
-                if attempt < MAX_GENERATION_RETRIES:
+                if attempt < MAX_GENERATION_ATTEMPTS:
                     print_info(
                         f"Validation has {report.error_count} remaining error(s), "
-                        f"requesting AI fix ({attempt}/{MAX_GENERATION_RETRIES - 1})..."
+                        f"requesting AI fix ({attempt}/{MAX_GENERATION_ATTEMPTS - 1})..."
                     )
                     state.plan_revision_count += 1
                     validation_feedback = _format_validation_feedback(report)
                     continue  # Re-run with targeted AI fix
                 else:
-                    fix_attempts_made = MAX_GENERATION_RETRIES - 1
+                    fix_attempts_made = MAX_GENERATION_ATTEMPTS - 1
                     if state.validation_strict:
                         print_error(
                             f"Plan has {report.error_count} validation error(s) "
@@ -1317,7 +1336,9 @@ Codebase context will be retrieved automatically."""
 
     # Inject researcher context if available
     if researcher_context:
-        trimmed = _truncate_researcher_context(researcher_context)
+        trimmed = _truncate_researcher_context(
+            researcher_context, budget=state.researcher_context_budget
+        )
         prompt += f"""
 
 [SOURCE: CODEBASE DISCOVERY (from automated research)]

@@ -128,6 +128,7 @@ class WorkflowState:
     # Plan validation
     enable_plan_validation: bool = True
     validation_strict: bool = True  # Block workflow on validation errors (vs. warn-and-proceed)
+    researcher_context_budget: int = 12000  # Max chars of researcher output injected into planner
 
     # Re-planning state
     replan_count: int = 0  # Number of execution replans (Step 3 post-review)

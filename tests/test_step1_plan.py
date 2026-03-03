@@ -2098,7 +2098,7 @@ class TestStep1AutoFixIntegration:
         tmp_path,
         monkeypatch,
     ):
-        """After MAX_GENERATION_RETRIES, strict mode returns False with clear error."""
+        """After MAX_GENERATION_ATTEMPTS, strict mode returns False with clear error."""
         monkeypatch.chdir(tmp_path)
         mock_researcher.return_value = (True, "")
 
@@ -2135,7 +2135,7 @@ class TestStep1AutoFixIntegration:
         result = step_1_create_plan(workflow_state, MagicMock())
 
         assert result is False
-        # Generate called once, AI fix called twice (MAX_GENERATION_RETRIES - 1 = 2)
+        # Generate called once, AI fix called twice (MAX_GENERATION_ATTEMPTS - 1 = 2)
         assert mock_generate.call_count == 1
         assert mock_fix_ai.call_count == 2
         error_calls = [str(c) for c in mock_print_error.call_args_list]

@@ -635,10 +635,14 @@ class DiscoveryCoverageValidator(Validator):
             # Match section-level headings: exactly "### " (not "#### ")
             is_section_heading = stripped.startswith("### ") and not stripped.startswith("#### ")
 
-            # Check if we're entering the target section
-            if is_section_heading and section_header.lower() in stripped.lower():
-                in_section = True
-                continue
+            # Check if we're entering the target section.
+            # Match the heading text (after "### ") using startswith to avoid
+            # false matches like "### Not Interface & Class Hierarchy At All".
+            if is_section_heading:
+                heading_text = stripped.lstrip("#").strip()
+                if heading_text.lower().startswith(section_header.lower()):
+                    in_section = True
+                    continue
 
             # Check if we've left the section (hit next ### section)
             if in_section and is_section_heading:

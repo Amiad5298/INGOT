@@ -11,6 +11,35 @@ from ingot.utils.errors import ExitCode
 runner = CliRunner()
 
 
+def _make_workflow_mock_config(**overrides: object) -> MagicMock:
+    """Create a mock config with standard settings for _run_workflow tests.
+
+    All settings have sensible defaults. Pass keyword arguments to override
+    specific values, e.g. ``_make_workflow_mock_config(fail_fast=True)``.
+    """
+    defaults = {
+        "max_parallel_tasks": 3,
+        "parallel_execution_enabled": True,
+        "fail_fast": False,
+        "default_model": "test-model",
+        "planning_model": "",
+        "implementation_model": "",
+        "skip_clarification": False,
+        "squash_at_end": True,
+        "auto_update_docs": True,
+        "max_self_corrections": 3,
+        "max_review_fix_attempts": 3,
+        "auto_commit": True,
+        "enable_plan_validation": True,
+        "plan_validation_strict": True,
+    }
+    defaults.update(overrides)
+    mock_config = MagicMock()
+    for key, value in defaults.items():
+        setattr(mock_config.settings, key, value)
+    return mock_config
+
+
 class TestCLIVersion:
     def test_version_flag(self):
         result = runner.invoke(app, ["--version"])
@@ -494,18 +523,7 @@ class TestDirtyTreePolicy:
         from ingot.workflow.state import DirtyTreePolicy
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config()
 
         _run_workflow(
             ticket="TEST-123",
@@ -524,18 +542,7 @@ class TestDirtyTreePolicy:
         from ingot.workflow.state import DirtyTreePolicy
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config()
 
         _run_workflow(
             ticket="TEST-123",
@@ -554,18 +561,7 @@ class TestDirtyTreePolicy:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config()
 
         with pytest.raises(click.exceptions.Exit) as exc_info:
             _run_workflow(
@@ -607,18 +603,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 5
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(max_parallel_tasks=5)
 
         _run_workflow(
             ticket="TEST-123",
@@ -638,18 +623,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 5
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(max_parallel_tasks=5)
 
         _run_workflow(
             ticket="TEST-123",
@@ -669,18 +643,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = True  # Config says fail_fast
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(fail_fast=True)
 
         _run_workflow(
             ticket="TEST-123",
@@ -698,18 +661,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = True  # Config has fail_fast=True
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(fail_fast=True)
 
         _run_workflow(
             ticket="TEST-123",
@@ -729,18 +681,7 @@ class TestEffectiveValueOverrides:
         from ingot.utils.errors import ExitCode
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 10  # Invalid config value
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(max_parallel_tasks=10)
 
         with pytest.raises(click.exceptions.Exit) as exc_info:
             _run_workflow(
@@ -759,18 +700,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True  # Config says True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(auto_update_docs=True)
 
         _run_workflow(
             ticket="TEST-123",
@@ -790,18 +720,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = False  # Config says False
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(auto_update_docs=False)
 
         _run_workflow(
             ticket="TEST-123",
@@ -821,21 +740,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
-        mock_config.settings.auto_commit = True
-        mock_config.settings.enable_plan_validation = True
-        mock_config.settings.plan_validation_strict = True  # Config says strict
+        mock_config = _make_workflow_mock_config(plan_validation_strict=True)
 
         _run_workflow(
             ticket="TEST-123",
@@ -855,21 +760,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
-        mock_config.settings.auto_commit = True
-        mock_config.settings.enable_plan_validation = True
-        mock_config.settings.plan_validation_strict = False  # Config says lenient
+        mock_config = _make_workflow_mock_config(plan_validation_strict=False)
 
         _run_workflow(
             ticket="TEST-123",
@@ -889,21 +780,7 @@ class TestEffectiveValueOverrides:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
-        mock_config.settings.auto_commit = True
-        mock_config.settings.enable_plan_validation = True  # Config says enabled
-        mock_config.settings.plan_validation_strict = True
+        mock_config = _make_workflow_mock_config(enable_plan_validation=True)
 
         _run_workflow(
             ticket="TEST-123",
