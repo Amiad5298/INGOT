@@ -615,6 +615,10 @@ class DiscoveryCoverageValidator(Validator):
     Lightweight: uses string/path matching (not semantic analysis).
     """
 
+    # Names shorter than this are skipped to avoid noisy false positives
+    # (e.g., "get", "set", "run" match too broadly in plan text).
+    _MIN_NAME_LENGTH = 3
+
     def __init__(self, researcher_output: str = "") -> None:
         self._researcher_output = researcher_output
 
@@ -695,7 +699,7 @@ class DiscoveryCoverageValidator(Validator):
 
         all_names = interface_names + method_names
 
-        for name in all_names:
+        for name in [n for n in all_names if len(n) >= self._MIN_NAME_LENGTH]:
             pattern = re.compile(r"\b" + re.escape(name) + r"\b")
             if not pattern.search(search_text):
                 findings.append(

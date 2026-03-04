@@ -1561,18 +1561,7 @@ class TestMaxReviewFixAttemptsFlags:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3  # Config default
+        mock_config = _make_workflow_mock_config(max_review_fix_attempts=3)
 
         _run_workflow(
             ticket="TEST-123",
@@ -1591,18 +1580,7 @@ class TestMaxReviewFixAttemptsFlags:
         from ingot.cli import _run_workflow
 
         mock_run_async.return_value = (MagicMock(), MagicMock())
-        mock_config = MagicMock()
-        mock_config.settings.max_parallel_tasks = 3
-        mock_config.settings.parallel_execution_enabled = True
-        mock_config.settings.fail_fast = False
-        mock_config.settings.default_model = "test-model"
-        mock_config.settings.planning_model = ""
-        mock_config.settings.implementation_model = ""
-        mock_config.settings.skip_clarification = False
-        mock_config.settings.squash_at_end = True
-        mock_config.settings.auto_update_docs = True
-        mock_config.settings.max_self_corrections = 3
-        mock_config.settings.max_review_fix_attempts = 3
+        mock_config = _make_workflow_mock_config(max_review_fix_attempts=3)
 
         with pytest.raises(click.exceptions.Exit) as exc_info:
             _run_workflow(

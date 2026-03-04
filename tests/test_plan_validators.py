@@ -613,6 +613,35 @@ class TestDiscoveryCoverageValidatorEdgeCases:
         missing_names = {f.message.split("'")[1] for f in findings}
         assert missing_names == {"Alpha", "Beta", "gamma"}
 
+    def test_very_short_names_filtered_out(self):
+        """Names shorter than _MIN_NAME_LENGTH should be silently skipped."""
+        researcher = """\
+### Call Sites
+#### `do()`
+- Called from: `A.run()` (`src/a.py:1`)
+#### `processOrder()`
+- Called from: `B.handle()` (`src/b.py:1`)
+"""
+        plan = "## Implementation Steps\nOnly update processOrder logic."
+        validator = DiscoveryCoverageValidator(researcher_output=researcher)
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        # "do" (2 chars) should be filtered out, only processOrder is relevant and found
+        assert findings == []
+
+    def test_short_name_below_threshold_not_reported(self):
+        """A 2-char name like 'do' should not produce a warning even if absent."""
+        researcher = """\
+### Call Sites
+#### `do()`
+- Called from: `X.run()` (`src/x.py:1`)
+"""
+        plan = "## Implementation Steps\nSomething completely unrelated."
+        validator = DiscoveryCoverageValidator(researcher_output=researcher)
+        ctx = ValidationContext()
+        findings = validator.validate(plan, ctx)
+        assert findings == []
+
 
 # =============================================================================
 # TestValidationReport

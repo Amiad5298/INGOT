@@ -641,6 +641,8 @@ cover (e.g., semantic understanding of code, architectural intent).
 
     try:
         success, output = ui.run_with_work(_work)
+    except KeyboardInterrupt:
+        raise
     except Exception as e:
         log_message(f"Researcher agent failed: {e}")
         return False, ""
