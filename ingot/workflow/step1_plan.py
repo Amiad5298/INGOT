@@ -83,11 +83,6 @@ _UNVERIFIED_NOTE = (
 # Can be overridden via Settings.researcher_context_budget.
 _DEFAULT_RESEARCHER_CONTEXT_BUDGET = 12000
 
-# Section priority order for truncation: first entry = highest priority, last = first dropped.
-# Uses RESEARCHER_SECTION_HEADINGS directly — the truncation priority matches
-# the canonical heading order defined in constants.py.
-
-
 # Ticket signal categories for conditional logic.
 _TICKET_SIGNAL_KEYWORDS: dict[str, tuple[str, ...]] = {
     "metric": (
@@ -659,9 +654,10 @@ def _truncate_researcher_context(
 ) -> str:
     """Truncate researcher context to fit within character budget.
 
-    Preserves sections in priority order. When budget is exceeded, drops
-    lowest-priority sections entirely, then truncates within the last
-    kept section.
+    Preserves sections in priority order (first entry in
+    ``RESEARCHER_SECTION_HEADINGS`` = highest priority, last = first
+    dropped).  When budget is exceeded, drops lowest-priority sections
+    entirely, then truncates within the last kept section.
 
     Returns truncated context. Prepends a note header if truncation occurred.
     """

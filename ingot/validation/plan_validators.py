@@ -330,7 +330,11 @@ class FileExistsValidator(Validator):
             if self._NEW_FILE_MARKER_RE.search(line):
                 new_file_lines.add(i)
 
-        # Collect all matches from all regexes, deduplicating by offset
+        # Collect matches from all three regexes (_PATH_RE, _ROOT_FILE_RE,
+        # _EXTENSIONLESS_RE).  Because the regexes can match overlapping text
+        # (e.g., `setup.py` matches both _PATH_RE and _ROOT_FILE_RE), we
+        # deduplicate by character offset so each backtick-quoted span is
+        # only processed once.
         seen_offsets: set[int] = set()
         raw_matches: list[tuple[str, int, int]] = []  # (raw_text, offset, line_num)
 
@@ -627,47 +631,29 @@ class DiscoveryCoverageValidator(Validator):
         return "Discovery Coverage"
 
     def _extract_names_from_section(self, section_header: str) -> list[str]:
-        """Extract interface/class/method names from a researcher output section."""
+        """Extract interface/class/method names from a researcher output section.
+
+        Reuses :func:`_extract_plan_sections` to locate the target ``###``
+        section, then scans for ``####`` sub-headings within it.
+        """
         if not self._researcher_output:
             return []
 
+        # Delegate section extraction to the shared utility.
+        section_text = _extract_plan_sections(self._researcher_output, [section_header])
+        if not section_text:
+            return []
+
         names: list[str] = []
-        lines = self._researcher_output.splitlines()
-        in_section = False
-
-        for line in lines:
+        for line in section_text.splitlines():
             stripped = line.strip()
-
-            # Match section-level headings: exactly "### " (not "#### ")
-            is_section_heading = stripped.startswith("### ") and not stripped.startswith("#### ")
-
-            # Check if we're entering the target section.
-            # Match the heading text (after "### ") using startswith to avoid
-            # false matches like "### Not Interface & Class Hierarchy At All".
-            if is_section_heading:
-                heading_text = stripped.lstrip("#").strip()
-                if heading_text.lower().startswith(section_header.lower()):
-                    in_section = True
-                    continue
-
-            # Check if we've left the section (hit next ### section)
-            if in_section and is_section_heading:
-                break
-
-            if not in_section:
-                continue
-
             # Extract names from #### headers (e.g., "#### `InterfaceName`")
             if stripped.startswith("#### "):
-                # Extract name from backticks or plain text after ####
                 name_match = re.search(r"`([^`]+)`", stripped)
                 if name_match:
-                    name = name_match.group(1)
-                    # Strip parentheses for method names
-                    name = name.removesuffix("()")
+                    name = name_match.group(1).removesuffix("()")
                     names.append(name)
                 else:
-                    # Plain text name
                     name = stripped.lstrip("#").strip()
                     if name:
                         names.append(name)
