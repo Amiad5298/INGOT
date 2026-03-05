@@ -14,6 +14,7 @@ from ingot.discovery.citation_utils import (
     find_nearest_code_block,
     safe_resolve_path,
 )
+from ingot.utils.logging import log_message
 from ingot.validation.base import (
     ValidationContext,
     ValidationFinding,
@@ -34,6 +35,10 @@ _COMMON_SKIP_PATTERNS = [
     re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://"),  # URLs (http, s3, ssh, file, git, gs, etc.)
     re.compile(r"^(?:data|mailto):"),  # Schemes without //
 ]
+
+# Matches a valid line-number suffix: "42" or "42-58".
+# Used to strip `:line` or `:line-line` from file path references.
+_LINE_SUFFIX_RE = re.compile(r"^\d+(-\d+)?$")
 
 # Two complementary code-block parsers coexist in this module:
 #
@@ -383,7 +388,7 @@ class FileExistsValidator(Validator):
             if ":" in raw_path:
                 parts = raw_path.rsplit(":", 1)
                 # Only split if the part after : looks like a line number
-                if parts[1].replace("-", "").isdigit():
+                if _LINE_SUFFIX_RE.match(parts[1]):
                     raw_path = parts[0]
 
             # Skip templated/glob/placeholder paths
@@ -676,6 +681,10 @@ class DiscoveryCoverageValidator(Validator):
             search_text = _strip_fenced_code_blocks(restricted_text)
         else:
             # Fallback: if no target sections found (malformed plan), search full content
+            log_message(
+                "DiscoveryCoverageValidator: no target sections found in plan, "
+                "falling back to full-content search (may be more lenient)"
+            )
             search_text = _strip_fenced_code_blocks(content)
 
         # Extract names from Interface & Class Hierarchy
@@ -749,7 +758,7 @@ class TestCoverageValidator(Validator):
             # Split off :line_number suffix
             if ":" in raw:
                 parts = raw.rsplit(":", 1)
-                if parts[1].replace("-", "").isdigit():
+                if _LINE_SUFFIX_RE.match(parts[1]):
                     raw = parts[0]
             # Skip non-file references (URLs, placeholders, globs)
             if any(p.search(raw) for p in self._SKIP_PATTERNS):
