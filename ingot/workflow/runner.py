@@ -117,6 +117,7 @@ def run_ingot_workflow(
         dirty_tree_policy=dirty_tree_policy,
         enable_plan_validation=enable_plan_validation,
         validation_strict=plan_validation_strict,
+        researcher_context_budget=config.settings.researcher_context_budget,
         backend_platform=backend.platform,
         backend_model=backend.model or "",
         backend_name=backend.name,

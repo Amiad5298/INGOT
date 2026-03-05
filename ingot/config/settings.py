@@ -101,6 +101,9 @@ class Settings:
     plan_validation_strict: bool = (
         True  # Block workflow on validation errors (vs. warn-and-proceed)
     )
+    researcher_context_budget: int = (
+        12000  # Max chars of researcher output injected into planner prompt
+    )
 
     # Documentation update settings
     auto_update_docs: bool = True  # Enable automatic documentation updates
@@ -151,6 +154,7 @@ class Settings:
             "SUBAGENT_RESEARCHER": "subagent_researcher",
             "ENABLE_PLAN_VALIDATION": "enable_plan_validation",
             "PLAN_VALIDATION_STRICT": "plan_validation_strict",
+            "RESEARCHER_CONTEXT_BUDGET": "researcher_context_budget",
             "AUTO_UPDATE_DOCS": "auto_update_docs",
             "AUTO_COMMIT": "auto_commit",
             # Platform settings

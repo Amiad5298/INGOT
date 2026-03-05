@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from ingot.utils.logging import log_message
 
@@ -30,6 +31,7 @@ class ValidationFinding:
     message: str
     line_number: int | None = None  # Optional: line in the plan where issue was found
     suggestion: str | None = None  # Optional: how to fix
+    metadata: dict[str, Any] = field(default_factory=dict)  # Structured data for fixers
 
 
 @dataclass
@@ -38,6 +40,9 @@ class ValidationContext:
 
     repo_root: Path | None = None  # For filesystem checks (must be injected, not auto-discovered)
     ticket_id: str = ""  # Reserved for future validator use
+    ticket_signals: list[str] = field(
+        default_factory=list
+    )  # Category signals (e.g., "metric", "alert")
 
 
 @dataclass

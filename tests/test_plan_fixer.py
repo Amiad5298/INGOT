@@ -1,5 +1,8 @@
 """Tests for ingot.validation.plan_fixer module."""
 
+from pathlib import PurePosixPath
+from unittest.mock import MagicMock
+
 from ingot.validation.base import (
     ValidationContext,
     ValidationFinding,
@@ -261,3 +264,96 @@ class TestPlanFixerEdgeCases:
 
         assert fixes == []
         assert fixed == content
+
+
+class TestPlanFixerWithFileIndex:
+    """Test PlanFixer with FileIndex integration."""
+
+    def _make_mock_file_index(self, fuzzy_result=None):
+        """Create a mock FileIndex with configurable fuzzy_find return."""
+        mock = MagicMock()
+        mock.fuzzy_find.return_value = fuzzy_result
+        return mock
+
+    def test_fuzzy_find_corrects_path(self):
+        """FileIndex fuzzy match → path corrected inline."""
+        content = "Modify `src/wrong/FooService.java` to add feature."
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="File Exists",
+                    severity=ValidationSeverity.ERROR,
+                    message="File not found: `src/wrong/FooService.java`",
+                    line_number=1,
+                ),
+            ]
+        )
+        mock_idx = self._make_mock_file_index(
+            fuzzy_result=PurePosixPath("src/main/java/FooService.java")
+        )
+        fixer = PlanFixer(file_index=mock_idx)
+        fixed, fixes = fixer.fix(content, report)
+
+        assert len(fixes) == 1
+        assert "Corrected" in fixes[0]
+        assert "src/main/java/FooService.java" in fixed
+        assert "src/wrong/FooService.java" not in fixed
+
+    def test_fuzzy_find_no_match_falls_back_to_unverified(self):
+        """No fuzzy match → fallback to UNVERIFIED stamping."""
+        content = "Modify `src/missing.py` to add feature."
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="File Exists",
+                    severity=ValidationSeverity.ERROR,
+                    message="File not found: `src/missing.py`",
+                    line_number=1,
+                ),
+            ]
+        )
+        mock_idx = self._make_mock_file_index(fuzzy_result=None)
+        fixer = PlanFixer(file_index=mock_idx)
+        fixed, fixes = fixer.fix(content, report)
+
+        assert len(fixes) == 1
+        assert "UNVERIFIED" in fixes[0]
+        assert "<!-- UNVERIFIED" in fixed
+
+    def test_no_file_index_behaves_like_before(self):
+        """No FileIndex → same behavior as before (UNVERIFIED stamping)."""
+        content = "Modify `src/missing.py` to add feature."
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="File Exists",
+                    severity=ValidationSeverity.ERROR,
+                    message="File not found: `src/missing.py`",
+                    line_number=1,
+                ),
+            ]
+        )
+        fixer = PlanFixer()  # No file_index
+        fixed, fixes = fixer.fix(content, report)
+
+        assert len(fixes) == 1
+        assert "UNVERIFIED" in fixes[0]
+
+    def test_fuzzy_find_called_with_filename_part(self):
+        """FileIndex.fuzzy_find receives the filename, not the full path."""
+        content = "Modify `src/deep/nested/MyFile.java` to add feature."
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="File Exists",
+                    severity=ValidationSeverity.ERROR,
+                    message="File not found: `src/deep/nested/MyFile.java`",
+                    line_number=1,
+                ),
+            ]
+        )
+        mock_idx = self._make_mock_file_index(fuzzy_result=None)
+        fixer = PlanFixer(file_index=mock_idx)
+        fixer.fix(content, report)
+
+        mock_idx.fuzzy_find.assert_called_once_with("MyFile.java")
