@@ -153,6 +153,16 @@ _TICKET_SIGNAL_KEYWORDS: dict[str, tuple[str, ...]] = {
         "permission",
     ),
     "test": ("test", "testing", "coverage", "e2e", "integration test", "unit test", "test suite"),
+    "workflow": (
+        "workflow",
+        "temporal",
+        "cadence",
+        "step function",
+        "state machine",
+        "orchestration",
+        "saga",
+        "task queue",
+    ),
 }
 
 # Pre-compiled word-boundary patterns for each signal category (avoids
@@ -181,6 +191,61 @@ def _extract_ticket_signals(text: str) -> list[str]:
         if any(pat.search(text_lower) for pat in patterns):
             signals.append(category)
     return signals
+
+
+# Structured section extraction from ticket descriptions.
+# Matches common Jira/markdown heading patterns for "Files to Modify",
+# "Acceptance Criteria", "Feature Flags", and "Dependencies".
+_STRUCTURED_SECTION_RE = re.compile(
+    r"(?:^|\n)\s*(?:#{1,4}\s+|[*_]{1,2})"
+    r"(Files?\s+to\s+Modify|Acceptance\s+Criteria|Feature\s+Flags?|Dependencies)"
+    r"[*_]{0,2}\s*:?\s*\n([\s\S]*?)(?=\n\s*(?:#{1,4}\s|[*_]{2,}\S)|\Z)",
+    re.IGNORECASE,
+)
+_BULLET_ITEM_RE = re.compile(r"^\s*[-*\d.]+\s+(.+)", re.MULTILINE)
+
+# Mapping from matched heading text to canonical field key.
+_SECTION_KEY_MAP: dict[str, str] = {
+    "files to modify": "files_to_modify",
+    "file to modify": "files_to_modify",
+    "acceptance criteria": "acceptance_criteria",
+    "feature flags": "feature_flags",
+    "feature flag": "feature_flags",
+    "dependencies": "dependencies",
+}
+
+
+def _extract_ticket_structured_fields(text: str) -> dict[str, list[str]]:
+    """Extract structured sections from ticket description text.
+
+    Scans for common markdown headings (``## Files to Modify``,
+    ``**Acceptance Criteria**``, etc.) and collects their bullet items.
+
+    Returns:
+        Dict with keys ``files_to_modify``, ``acceptance_criteria``,
+        ``feature_flags``, ``dependencies`` — each a list of bullet-item
+        strings (empty list if section not found).
+    """
+    fields: dict[str, list[str]] = {
+        "files_to_modify": [],
+        "acceptance_criteria": [],
+        "feature_flags": [],
+        "dependencies": [],
+    }
+    if not text:
+        return fields
+
+    for m in _STRUCTURED_SECTION_RE.finditer(text):
+        heading = m.group(1).strip().lower()
+        body = m.group(2)
+        key = _SECTION_KEY_MAP.get(heading)
+        if key is None:
+            continue
+        for bullet in _BULLET_ITEM_RE.finditer(body):
+            item = bullet.group(1).strip()
+            if item:
+                fields[key].append(item)
+    return fields
 
 
 # =============================================================================
@@ -309,6 +374,25 @@ Description: {state.ticket.description or "Not available"}"""
 
     if not state.spec_verified:
         prompt += f"\n{_UNVERIFIED_NOTE}"
+
+    # Inject extracted ticket directives for reconciliation
+    sf = state.ticket_structured_fields
+    if sf and any(sf.get(k) for k in ("files_to_modify", "acceptance_criteria", "feature_flags")):
+        prompt += "\n\n[SOURCE: EXTRACTED TICKET DIRECTIVES]"
+        prompt += (
+            "\nThe following structured fields were extracted from the ticket description."
+            "\nYou MUST address each item or explicitly document deviations."
+        )
+        for label, key in (
+            ("Files to Modify", "files_to_modify"),
+            ("Acceptance Criteria", "acceptance_criteria"),
+            ("Feature Flags", "feature_flags"),
+        ):
+            items = sf.get(key, [])
+            if items:
+                prompt += f"\n\n{label}:"
+                for item in items:
+                    prompt += f"\n- {item}"
 
     # Add user constraints if provided
     if state.user_constraints:
@@ -809,18 +893,26 @@ def _validate_plan(
     state: WorkflowState,
     researcher_output: str = "",
     repo_root: Path | None = None,
+    file_index: "FileIndex | None" = None,
 ) -> ValidationReport:
     """Run all registered plan validators.
 
     Args:
         repo_root: Pre-computed repository root. Avoids redundant
             ``find_repo_root()`` calls when invoked inside a retry loop.
+        file_index: Pre-built FileIndex for repo-aware validators.
     """
-    registry = create_plan_validator_registry(researcher_output=researcher_output)
+    registry = create_plan_validator_registry(
+        researcher_output=researcher_output,
+        file_index=file_index,
+    )
+    sf = state.ticket_structured_fields
     context = ValidationContext(
         repo_root=repo_root,
         ticket_id=state.ticket.id,
         ticket_signals=state.ticket_signals,
+        ticket_files_to_modify=sf.get("files_to_modify", []) if sf else [],
+        ticket_acceptance_criteria=sf.get("acceptance_criteria", []) if sf else [],
     )
     return registry.validate_all(plan_content, context)
 
@@ -958,6 +1050,16 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
     if state.ticket_signals:
         log_message(f"Ticket signals: {state.ticket_signals}")
 
+    # Extract structured fields from ticket description for reconciliation
+    state.ticket_structured_fields = _extract_ticket_structured_fields(
+        state.ticket.description or ""
+    )
+    if any(state.ticket_structured_fields.values()):
+        log_message(
+            f"Ticket structured fields: "
+            f"{', '.join(k for k, v in state.ticket_structured_fields.items() if v)}"
+        )
+
     # Build FileIndex for local discovery (used by PlanFixer, CitationVerifier, ContextBuilder)
     repo_root = find_repo_root()
     file_index = _build_file_index(repo_root)
@@ -1076,6 +1178,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
                 state,
                 researcher_output=researcher_output,
                 repo_root=repo_root,
+                file_index=file_index,
             )
 
             # Stage A: Deterministic auto-fix (with optional FileIndex for fuzzy path correction)
@@ -1093,16 +1196,19 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
                         state,
                         researcher_output=researcher_output,
                         repo_root=repo_root,
+                        file_index=file_index,
                     )
 
             if report.findings:
                 _display_validation_report(report)
 
             # Stage B: Auto-retry with AI fix (no human prompt)
-            if report.has_errors:
+            # Trigger on errors OR repair-worthy warnings
+            if report.has_repair_worthy:
                 if attempt < MAX_GENERATION_ATTEMPTS:
                     print_info(
-                        f"Validation has {report.error_count} remaining error(s), "
+                        f"Validation has {report.error_count} error(s) and "
+                        f"repair-worthy warning(s), "
                         f"requesting AI fix ({attempt}/{MAX_GENERATION_ATTEMPTS - 1})..."
                     )
                     state.plan_revision_count += 1
@@ -1110,7 +1216,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
                     continue  # Re-run with targeted AI fix
                 else:
                     fix_attempts_made = MAX_GENERATION_ATTEMPTS - 1
-                    if state.validation_strict:
+                    if state.validation_strict and report.has_errors:
                         print_error(
                             f"Plan has {report.error_count} validation error(s) "
                             f"after {fix_attempts_made} AI fix attempt(s). "
@@ -1162,6 +1268,7 @@ def step_1_create_plan(state: WorkflowState, backend: AIBackend) -> bool:
                         state,
                         researcher_output=researcher_output,
                         repo_root=repo_root,
+                        file_index=file_index,
                     )
                     if replan_report.findings:
                         _display_validation_report(replan_report)

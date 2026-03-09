@@ -18,6 +18,11 @@ The plan will be used to generate an executable task list for AI agents.
 ## Analysis Process
 
 1. **Understand Requirements**: Parse the ticket description, acceptance criteria, and any linked context
+1a. **Reconcile Ticket Directives**: If the ticket (or the prompt's `[SOURCE: EXTRACTED TICKET DIRECTIVES]` section) includes a "Files to Modify" list, acceptance criteria, or feature flag specifications:
+    - Address every listed file. If you choose a DIFFERENT file, add an explicit
+      "**Deviation from ticket**: [reason]" callout.
+    - Map every acceptance criterion to at least one implementation step.
+    - Reference every named feature flag.
 2. **Consume Codebase Discovery**: The prompt may include:
    - `[SOURCE: LOCAL DISCOVERY]` — deterministically verified facts (file paths, grep matches,
      module structure, test mappings). Treat these as ground truth.
@@ -32,11 +37,18 @@ The plan will be used to generate an executable task list for AI agents.
    yet), use "Create `path/to/new-file.ext`" or add `<!-- NEW_FILE -->` on the same line.
 4. **Verify Cross-Module Dependency Availability**: When proposing to use a dependency from
    module A in module B, verify accessibility using the discovery data.
+4a. **Check Injection Ambiguity**: When proposing `@Autowired` injection, check Codebase
+    Discovery for all `@Bean` methods returning that type. If count > 1, add
+    `@Qualifier("beanName")`.
 5. **Check Type Compatibility**: Verify data types match using the discovered code snippets.
 6. **Plan Implementation**: Design the solution using the discovered patterns as reference.
    Code snippets MUST cite a `Pattern source:` from the discovery section.
 7. **Trace Change Propagation**: Use the discovered Call Sites and Interface Hierarchy to list
    ALL callers, implementations, and test mocks that must be updated.
+7a. **Constructor/Factory Change Propagation**: When adding parameters to a constructor or
+    factory method, list EVERY call site that constructs the class. Include production code,
+    test `@BeforeEach`/`setUp()` methods, and Spring test contexts that may need `@MockBean`
+    additions.
 8. **Plan Testing**: Use the discovered Test Files to identify specific test files and methods
    to extend. Search for additional test files only if the discovery section has gaps.
 9. **Map Component Lifecycle**: For every new component, specify when it is created,
@@ -45,6 +57,9 @@ The plan will be used to generate an executable task list for AI agents.
 10. **Enumerate Environment Variants**: If the codebase uses multiple environments,
     profiles, or feature flags, check whether the changes need environment-specific
     handling. List any conditional behavior. If none relevant, state so explicitly.
+    For every `@Profile`, `@ConditionalOnProperty`, or conditional annotation,
+    explicitly state behavior in ALL profiles including "test" profiles used by the
+    test suite.
 
 ## Output Format
 
@@ -68,7 +83,9 @@ Each step MUST include one of:
 - An **explicit method call chain** showing exactly which methods are called with
   their parameters and return types, OR
 - `<!-- TRIVIAL_STEP: description -->` marker for genuinely trivial changes
-  (single-line config changes, import additions)
+  (single-line config changes, import additions). Do NOT use TRIVIAL_STEP for
+  steps that make factual claims about the codebase (e.g., "dependency already
+  exists"). Such claims require a `Pattern source:` citation for verification.
 
 Steps that say "retrieve X" or "call Y" without specifying the exact method,
 parameters, and return handling are NOT acceptable.
@@ -84,6 +101,14 @@ parameters, and return handling are NOT acceptable.
   `<!-- NO_TEST_NEEDED: component - reason -->`
 - Reference the specific test patterns already in use (assertion style, mocking approach, test config/fixture setup)
 - List test infrastructure files that need updates (test configs, fixtures, mock setups)
+
+**Test Infrastructure Updates** (required when modifying constructors or adding beans):
+For each test infrastructure change, provide the exact code change:
+- File path and line number
+- The specific annotation, mock, or configuration to add
+
+For components with >3 test scenarios, provide at least ONE representative test method
+skeleton showing mock setup, method invocation, and key assertion.
 
 ### Potential Risks or Considerations
 
@@ -122,12 +147,18 @@ What this implementation explicitly does NOT include.
    event type, or registration identifier must be spelled out exactly. No
    placeholders like "appropriate tag" or "relevant metric". If the exact value
    depends on an unmade decision, list options and recommend one.
+   Code blocks that are entirely or substantially commented out (// TODO, # TODO,
+   or >50% comment lines) do NOT satisfy this gate. If a prerequisite dependency
+   is unavailable, declare it in "Prerequisite work" and provide compilable STUB
+   code, not commented-out placeholders.
 7. **Registration idempotency**: Do NOT propose both annotation-based registration
    (e.g., `@Component`, `@Injectable`) AND explicit registration (e.g., `@Bean` method,
    `provide()`) for the same class. Choose one mechanism per component.
 8. **Snippet completeness**: Every code snippet that declares fields/properties
    MUST also show the constructor or initialization logic that sets those fields.
-   Incomplete snippets without constructors are NOT acceptable.
+   Incomplete snippets without constructors are NOT acceptable. When using types
+   requiring explicit imports (`Optional`, `Duration`, `List` in Java), include
+   the import or note that imports are assumed.
 9. **Naming consistency**: When the same identifier appears in multiple formats
    (e.g., YAML `snake_case`, Java `camelCase`, Prometheus `dot.separated`),
    document the mapping explicitly. Do NOT use inconsistent separators for the
@@ -135,6 +166,25 @@ What this implementation explicitly does NOT include.
 10. **Operational completeness**: If the plan involves metrics, alerts, or monitoring,
     include: example query/expression for observability tools, threshold values with
     rationale, and escalation or runbook references.
+11. **Ticket reconciliation**: Every file named in the ticket's "Files to Modify"
+    must appear in Implementation Steps (or have an explicit "**Deviation from ticket**"
+    callout). Every acceptance criterion must map to at least one implementation step.
+12. **Configuration completeness**: Every configurable value used in any code snippet
+    (e.g., `setTaskQueue()`, `setTimeout()`) MUST have a corresponding property in
+    the configuration/properties class. Do not hardcode values that should be
+    configurable.
+13. **Dependency injection disambiguation**: When injecting a type via `@Autowired`
+    constructor injection and the Codebase Discovery shows multiple `@Bean` methods
+    returning the same type, add `@Qualifier("beanName")` to the injection parameter.
+    The bean name should match the `@Bean` method name.
+14. **Integration risk checklist**: When introducing a new integration with an external
+    system (workflow engine, message broker, external API), the Potential Risks section
+    MUST address: resource existence/permissions, timeout configuration, retry/error
+    handling, connection security, and observability (metrics/logging).
+15. **Claim accuracy**: Do not state that a file, field, dependency, or test "already
+    exists" or "is present" unless the Codebase Discovery section confirms it. If
+    uncertain, verify with your search tools. False existence claims will be flagged
+    by validators.
 
 ## Guidelines
 
@@ -146,6 +196,7 @@ What this implementation explicitly does NOT include.
 - Include estimated complexity/effort hints where helpful
 - When adding new parameters, classes, or registrations, explicitly trace all call sites and registration points that must be updated as a consequence
 - When proposing to use a dependency across module boundaries, verify it is accessible at runtime — do not assume a service or component from one module is available in another without evidence
+- When implementing behavior guarantees from acceptance criteria (idempotency, error handling, retry policies), use explicit API configuration — do not rely on undocumented default behavior of external systems
 
 ## Data Provenance Rules
 

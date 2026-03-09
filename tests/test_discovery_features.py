@@ -10,7 +10,7 @@ from ingot.validation.plan_validators import (
     OperationalCompletenessValidator,
     SnippetCompletenessValidator,
 )
-from ingot.workflow.step1_plan import _extract_ticket_signals
+from ingot.workflow.step1_plan import _extract_ticket_signals, _extract_ticket_structured_fields
 
 # =============================================================================
 # Ticket Signal Extraction
@@ -75,6 +75,100 @@ class TestTicketSignalExtraction:
     def test_case_insensitive(self):
         signals = _extract_ticket_signals("PROMETHEUS METRICS for monitoring")
         assert "metric" in signals
+
+    def test_workflow_signal(self):
+        signals = _extract_ticket_signals("Integrate Temporal workflow for grace period")
+        assert "workflow" in signals
+
+    def test_workflow_signal_state_machine(self):
+        signals = _extract_ticket_signals("Implement state machine action for order processing")
+        assert "workflow" in signals
+
+    def test_workflow_signal_saga(self):
+        signals = _extract_ticket_signals("Implement saga pattern for distributed transactions")
+        assert "workflow" in signals
+
+
+# =============================================================================
+# Ticket Structured Field Extraction
+# =============================================================================
+
+
+class TestExtractTicketStructuredFields:
+    """Tests for _extract_ticket_structured_fields()."""
+
+    def test_empty_text(self):
+        fields = _extract_ticket_structured_fields("")
+        assert fields == {
+            "files_to_modify": [],
+            "acceptance_criteria": [],
+            "feature_flags": [],
+            "dependencies": [],
+        }
+
+    def test_files_to_modify_h3(self):
+        text = """### Files to Modify
+- GracePeriodStartAction.java — Enhance to start Temporal workflow
+- MarketplaceConfig.java — Add WorkflowClient bean
+- TemporalConfig.java — NEW
+"""
+        fields = _extract_ticket_structured_fields(text)
+        assert len(fields["files_to_modify"]) == 3
+        assert "GracePeriodStartAction.java" in fields["files_to_modify"][0]
+        assert "TemporalConfig.java" in fields["files_to_modify"][2]
+
+    def test_acceptance_criteria_bold(self):
+        text = """**Acceptance Criteria**
+- GracePeriodStartAction starts Temporal workflow after sending notification
+- Temporal client is configured with proper connection settings
+- Unit tests verify Temporal client is called correctly
+"""
+        fields = _extract_ticket_structured_fields(text)
+        assert len(fields["acceptance_criteria"]) == 3
+        assert "Temporal workflow" in fields["acceptance_criteria"][0]
+
+    def test_feature_flags(self):
+        text = """## Feature Flags
+- enable.grace.period.temporal — Controls Temporal workflow activation
+"""
+        fields = _extract_ticket_structured_fields(text)
+        assert len(fields["feature_flags"]) == 1
+
+    def test_mixed_sections(self):
+        text = """## Files to Modify
+- Action.java — modify
+- Config.java — add bean
+
+## Acceptance Criteria
+- Feature works correctly
+- Tests pass
+
+## Feature Flag
+- my.feature.flag — toggle
+"""
+        fields = _extract_ticket_structured_fields(text)
+        assert len(fields["files_to_modify"]) == 2
+        assert len(fields["acceptance_criteria"]) == 2
+        assert len(fields["feature_flags"]) == 1
+
+    def test_no_matching_sections(self):
+        text = """## Summary
+This ticket implements a new feature.
+
+## Description
+Detailed description of the feature.
+"""
+        fields = _extract_ticket_structured_fields(text)
+        assert all(v == [] for v in fields.values())
+
+    def test_numbered_bullets(self):
+        text = """### Acceptance Criteria
+1. First criterion
+2. Second criterion
+3. Third criterion
+"""
+        fields = _extract_ticket_structured_fields(text)
+        assert len(fields["acceptance_criteria"]) == 3
 
 
 # =============================================================================
@@ -506,7 +600,7 @@ class TestThresholdRegexPrecision:
     def test_bare_comparison_no_match(self):
         v = OperationalCompletenessValidator()
         # Plan with metric keyword but only bare "> 3" — should NOT count as threshold
-        plan = "## Summary\nAdd Prometheus metric.\n" "If version > 3, use new API.\n"
+        plan = "## Summary\nAdd Prometheus metric.\nIf version > 3, use new API.\n"
         ctx = ValidationContext(ticket_signals=[])
         findings = v.validate(plan, ctx)
         # Should report missing threshold value

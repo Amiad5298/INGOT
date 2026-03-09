@@ -11,18 +11,24 @@ from ingot.validation.base import (
     ValidatorRegistry,
 )
 from ingot.validation.plan_validators import (
+    BeanQualifierValidator,
     CitationContentValidator,
+    ClaimConsistencyValidator,
+    ConfigurationCompletenessValidator,
     DiscoveryCoverageValidator,
     FileExistsValidator,
     ImplementationDetailValidator,
     NamingConsistencyValidator,
     OperationalCompletenessValidator,
     PatternSourceValidator,
+    PrerequisiteConsistencyValidator,
     RegistrationIdempotencyValidator,
     RequiredSectionsValidator,
     RiskCategoriesValidator,
     SnippetCompletenessValidator,
     TestCoverageValidator,
+    TestScenarioValidator,
+    TicketReconciliationValidator,
     UnresolvedMarkersValidator,
     create_plan_validator_registry,
 )
@@ -445,7 +451,7 @@ class TestValidatorRegistry:
 
     def test_factory_returns_all_validators(self):
         registry = create_plan_validator_registry()
-        assert len(registry.validators) == 13
+        assert len(registry.validators) == 19
 
     def test_factory_passes_researcher_output(self):
         researcher = "### Interface & Class Hierarchy\n#### `Foo`\n"
@@ -2327,9 +2333,39 @@ class TestRegistryIncludesNewValidators:
         names = [v.name for v in registry.validators]
         assert "Naming Consistency" in names
 
-    def test_registry_has_thirteen_validators(self):
+    def test_registry_has_nineteen_validators(self):
         registry = create_plan_validator_registry()
-        assert len(registry.validators) == 13
+        assert len(registry.validators) == 19
+
+    def test_registry_includes_ticket_reconciliation(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Ticket Reconciliation" in names
+
+    def test_registry_includes_prerequisite_consistency(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Prerequisite Consistency" in names
+
+    def test_registry_includes_bean_qualifier(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Bean Qualifier" in names
+
+    def test_registry_includes_configuration_completeness(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Configuration Completeness" in names
+
+    def test_registry_includes_test_scenario(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Test Scenario" in names
+
+    def test_registry_includes_claim_consistency(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Claim Consistency" in names
 
 
 # =============================================================================
@@ -2614,3 +2650,1238 @@ and `queue-depth-max` in YAML config.
         assert "dot" in msg
         assert "underscore" in msg
         assert "hyphen" in msg
+
+
+# =============================================================================
+# TestTicketReconciliationValidator
+# =============================================================================
+
+
+class TestTicketReconciliationValidator:
+    def _validate(self, plan, files=None, acs=None):
+        v = TicketReconciliationValidator()
+        ctx = ValidationContext(
+            ticket_files_to_modify=files or [],
+            ticket_acceptance_criteria=acs or [],
+        )
+        return v.validate(plan, ctx)
+
+    def test_no_ticket_fields_no_findings(self):
+        plan = COMPLETE_PLAN
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_matching_file_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Modify `src/main/java/GracePeriodStartAction.java`
+   Add Temporal workflow start logic.
+"""
+        findings = self._validate(
+            plan,
+            files=["GracePeriodStartAction.java — Enhance to start workflow"],
+        )
+        assert findings == []
+
+    def test_missing_file_warns(self):
+        plan = """\
+## Implementation Steps
+1. Modify `src/main/java/SomeOtherClass.java`
+   Refactor logic.
+"""
+        findings = self._validate(
+            plan,
+            files=["GracePeriodStartAction.java — Enhance to start workflow"],
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "GracePeriodStartAction" in findings[0].message
+
+    def test_deviation_callout_suppresses_warning(self):
+        plan = """\
+## Implementation Steps
+1. Modify `src/main/java/SomeOtherClass.java`
+
+**Deviation from ticket**: Using SomeOtherClass instead of GracePeriodStartAction
+because the action was renamed.
+"""
+        findings = self._validate(
+            plan,
+            files=["GracePeriodStartAction.java — Enhance to start workflow"],
+        )
+        assert findings == []
+
+    def test_ac_traceable_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Configure Temporal client with proper connection settings.
+   Set up WorkflowClient bean with host and port properties.
+"""
+        findings = self._validate(
+            plan,
+            acs=["Temporal client is configured with proper connection settings"],
+        )
+        assert findings == []
+
+    def test_ac_not_traceable_warns(self):
+        plan = """\
+## Implementation Steps
+1. Add logging to the service layer.
+"""
+        findings = self._validate(
+            plan,
+            acs=["Temporal client is configured with proper connection settings"],
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "AC" in findings[0].message
+
+    def test_multiple_files_mixed(self):
+        plan = """\
+## Implementation Steps
+1. Modify `MarketplaceConfig.java` to add WorkflowClient bean.
+2. Add logging to service.
+"""
+        findings = self._validate(
+            plan,
+            files=[
+                "MarketplaceConfig.java — Add WorkflowClient bean",
+                "TemporalConfig.java — NEW",
+            ],
+        )
+        # MarketplaceConfig found, TemporalConfig missing
+        assert len(findings) == 1
+        assert "TemporalConfig" in findings[0].message
+
+
+# =============================================================================
+# TestPrerequisiteConsistencyValidator
+# =============================================================================
+
+
+class TestPrerequisiteConsistencyValidator:
+    def _validate(self, plan):
+        v = PrerequisiteConsistencyValidator()
+        ctx = ValidationContext()
+        return v.validate(plan, ctx)
+
+    def test_no_todos_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Step one
+```java
+public void doStuff() {
+    service.run();
+}
+```
+
+## Potential Risks or Considerations
+**Prerequisite work**: None identified
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_todos_with_none_identified_warns(self):
+        plan = """\
+## Implementation Steps
+1. Start workflow
+```java
+// TODO: Replace with actual workflow interface
+// TODO: Add proper error handling
+public void startWorkflow() {
+    // TODO: Implement
+}
+```
+
+## Potential Risks or Considerations
+**Prerequisite work**: None identified
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "TODO" in findings[0].message
+        assert "None identified" in findings[0].message or "Prerequisite" in findings[0].message
+
+    def test_todos_with_declared_prereqs_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Start workflow
+```java
+// TODO: Replace with actual workflow interface
+public void startWorkflow() {
+    client.start();
+}
+```
+
+## Potential Risks or Considerations
+**Prerequisite work**: Workflow interface definition must be completed first
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_multiple_todos_counted(self):
+        plan = """\
+## Implementation Steps
+1. Implement handler
+```java
+// TODO: Replace with actual implementation
+// TODO: Add error handling
+public void handle() {
+    // TODO: finish this
+    return;
+}
+```
+
+## Potential Risks or Considerations
+**Prerequisite work**: None identified
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert "3" in findings[0].message  # 3 TODOs
+
+
+# =============================================================================
+# TestSnippetCompletenessCommentDetection
+# =============================================================================
+
+
+class TestSnippetCompletenessCommentDetection:
+    def _validate(self, plan):
+        v = SnippetCompletenessValidator()
+        ctx = ValidationContext()
+        return v.validate(plan, ctx)
+
+    def test_mostly_commented_code_warns(self):
+        plan = """\
+## Code
+```java
+// TODO: Replace with actual workflow interface
+// WorkflowOptions options = WorkflowOptions.newBuilder()
+//     .setTaskQueue("gcp-grace-period")
+//     .setWorkflowId(subscriptionId)
+//     .build();
+// workflow.start(options);
+```
+"""
+        findings = self._validate(plan)
+        assert any("commented out" in f.message for f in findings)
+
+    def test_normal_code_no_comment_warning(self):
+        plan = """\
+## Code
+```java
+WorkflowOptions options = WorkflowOptions.newBuilder()
+    .setTaskQueue(config.getTaskQueue())
+    .setWorkflowId(subscriptionId)
+    .build();
+workflow.start(options);
+```
+"""
+        findings = self._validate(plan)
+        assert not any("commented out" in f.message for f in findings)
+
+    def test_few_comments_in_normal_code_ok(self):
+        plan = """\
+## Code
+```java
+// Configure workflow options
+WorkflowOptions options = WorkflowOptions.newBuilder()
+    .setTaskQueue(config.getTaskQueue())
+    .setWorkflowId(subscriptionId)
+    .build();
+workflow.start(options);
+// Log the result
+logger.info("Workflow started");
+```
+"""
+        findings = self._validate(plan)
+        assert not any("commented out" in f.message for f in findings)
+
+    def test_short_commented_block_not_flagged(self):
+        plan = """\
+## Code
+```java
+// TODO
+// fix
+```
+"""
+        findings = self._validate(plan)
+        # Only 2 non-blank lines — below the 4-line threshold
+        assert not any("commented out" in f.message for f in findings)
+
+
+# =============================================================================
+# TestRiskCategoriesRollbackCheck
+# =============================================================================
+
+
+class TestRiskCategoriesRollbackCheck:
+    def _validate(self, plan, signals=None):
+        v = RiskCategoriesValidator()
+        ctx = ValidationContext(ticket_signals=signals or [])
+        return v.validate(plan, ctx)
+
+    def test_no_workflow_signal_no_rollback_check(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: None identified
+**Prerequisite work**: None identified
+**Data integrity / state management**: None identified
+**Startup / cold-start behavior**: None identified
+**Environment / configuration drift**: None identified
+**Performance / scalability**: None identified
+**Backward compatibility**: None identified
+"""
+        findings = self._validate(plan, signals=["refactor"])
+        # No rollback warning for non-config/non-workflow signals
+        assert not any("rollback" in f.message for f in findings)
+
+    def test_workflow_signal_without_rollback_warns(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: Temporal SDK
+**Prerequisite work**: None identified
+**Data integrity / state management**: None identified
+**Startup / cold-start behavior**: None identified
+**Environment / configuration drift**: None identified
+**Performance / scalability**: None identified
+**Backward compatibility**: None identified
+"""
+        findings = self._validate(plan, signals=["workflow"])
+        assert any("rollback" in f.message for f in findings)
+
+    def test_config_signal_without_rollback_warns(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: None
+**Prerequisite work**: None
+"""
+        findings = self._validate(plan, signals=["config"])
+        assert any("rollback" in f.message for f in findings)
+
+    def test_rollback_mentioned_no_warning(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: Temporal SDK
+**Prerequisite work**: None identified
+Rollback strategy: Disable feature flag to revert to previous behavior.
+"""
+        findings = self._validate(plan, signals=["workflow", "config"])
+        assert not any("rollback" in f.message for f in findings)
+
+    def test_disable_flag_mentioned_no_warning(self):
+        plan = """\
+## Potential Risks or Considerations
+To revert, disable flag `enable.temporal.workflow` in configuration.
+"""
+        findings = self._validate(plan, signals=["config"])
+        assert not any("rollback" in f.message for f in findings)
+
+
+# =============================================================================
+# TestOperationalCompletenessWorkflowSignal
+# =============================================================================
+
+
+class TestOperationalCompletenessWorkflowSignal:
+    def test_workflow_signal_elevates_severity(self):
+        v = OperationalCompletenessValidator()
+        plan = "## Summary\nStart Temporal workflow for grace period processing.\n"
+        ctx = ValidationContext(ticket_signals=["workflow"])
+        findings = v.validate(plan, ctx)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+
+
+# =============================================================================
+# TestBeanQualifierValidator
+# =============================================================================
+
+
+class TestBeanQualifierValidator:
+    """Tests for BeanQualifierValidator."""
+
+    def _validate(self, content: str, **ctx_kwargs) -> list[ValidationFinding]:
+        v = BeanQualifierValidator()
+        return v.validate(content, ValidationContext(**ctx_kwargs))
+
+    def test_single_bean_no_finding(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient workflowClient() {
+    return WorkflowClient.newInstance(stub);
+}
+
+@Autowired
+public MyService(WorkflowClient client) {
+    this.client = client;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_two_beans_same_type_no_qualifier_error(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient productionClient() {
+    return WorkflowClient.newInstance(prodStub);
+}
+
+@Bean
+public WorkflowClient testClient() {
+    return WorkflowClient.newInstance(testStub);
+}
+
+@Autowired
+public MyService(WorkflowClient client) {
+    this.client = client;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.ERROR
+        assert "WorkflowClient" in findings[0].message
+        assert "@Qualifier" in findings[0].suggestion
+
+    def test_two_beans_with_qualifier_clean(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient productionClient() {
+    return WorkflowClient.newInstance(prodStub);
+}
+
+@Bean
+public WorkflowClient testClient() {
+    return WorkflowClient.newInstance(testStub);
+}
+
+@Autowired
+public MyService(@Qualifier("productionClient") WorkflowClient client) {
+    this.client = client;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_primary_annotation_suppresses(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+@Primary
+public WorkflowClient productionClient() {
+    return WorkflowClient.newInstance(prodStub);
+}
+
+@Bean
+public WorkflowClient testClient() {
+    return WorkflowClient.newInstance(testStub);
+}
+
+@Autowired
+public MyService(WorkflowClient client) {
+    this.client = client;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_primary_only_suppresses_its_type(self):
+        """@Primary on DataSource should NOT suppress WorkflowClient warning."""
+        plan = """\
+## Implementation
+```java
+@Bean
+@Primary
+public DataSource mainDataSource() {
+    return new HikariDataSource();
+}
+
+@Bean
+public DataSource replicaDataSource() {
+    return new HikariDataSource();
+}
+
+@Bean
+public WorkflowClient productionClient() {
+    return WorkflowClient.newInstance(prodStub);
+}
+
+@Bean
+public WorkflowClient testClient() {
+    return WorkflowClient.newInstance(testStub);
+}
+
+@Autowired
+public MyService(DataSource ds, WorkflowClient client) {
+    this.ds = ds;
+    this.client = client;
+}
+```
+"""
+        findings = self._validate(plan)
+        # DataSource has @Primary → no finding for DataSource
+        assert not any("DataSource" in f.message for f in findings)
+        # WorkflowClient has NO @Primary → should still be flagged
+        assert any("WorkflowClient" in f.message for f in findings)
+
+    def test_no_injection_no_finding(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient productionClient() {
+    return WorkflowClient.newInstance(prodStub);
+}
+
+@Bean
+public WorkflowClient testClient() {
+    return WorkflowClient.newInstance(testStub);
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_different_return_types_clean(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient workflowClient() {
+    return WorkflowClient.newInstance(stub);
+}
+
+@Bean
+public DataSource dataSource() {
+    return new HikariDataSource();
+}
+
+@Autowired
+public MyService(WorkflowClient client, DataSource ds) {
+    this.client = client;
+    this.ds = ds;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_repo_scan_finds_additional_bean(self, tmp_path):
+        import subprocess
+
+        # Initialize git repo so FileIndex (git ls-files) works
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+
+        # Create a fake repo with a @Bean method
+        java_dir = tmp_path / "src" / "main" / "java"
+        java_dir.mkdir(parents=True)
+        config_file = java_dir / "TemporalConfig.java"
+        config_file.write_text(
+            """\
+package com.example;
+
+import io.temporal.client.WorkflowClient;
+import org.springframework.context.annotation.Bean;
+
+public class TemporalConfig {
+    @Bean
+    public WorkflowClient existingWorkflowClient() {
+        return WorkflowClient.newInstance(stubs);
+    }
+}
+"""
+        )
+        # Stage file so git ls-files picks it up
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient newWorkflowClient() {
+    return WorkflowClient.newInstance(newStubs);
+}
+
+@Autowired
+public MyService(WorkflowClient client) {
+    this.client = client;
+}
+```
+"""
+        from ingot.discovery.file_index import FileIndex
+
+        fi = FileIndex(tmp_path)
+        v = BeanQualifierValidator(file_index=fi)
+        findings = v.validate(plan, ValidationContext(repo_root=tmp_path))
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.ERROR
+        assert "repo + plan" in findings[0].message
+
+    def test_repo_scan_no_repo_root_warns(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public DataSource primary() {
+    return new HikariDataSource();
+}
+
+@Bean
+public DataSource secondary() {
+    return new HikariDataSource();
+}
+
+@Autowired
+public MyService(DataSource ds) {
+    this.ds = ds;
+}
+```
+"""
+        # No repo_root — plan-only analysis for high-risk type
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.ERROR
+        assert "plan" in findings[0].message
+
+    def test_split_params_handles_annotations(self):
+        from ingot.validation.plan_validators import _split_params
+
+        result = _split_params('@Value("${foo}") int bar, WorkflowClient client')
+        assert len(result) == 2
+        assert "bar" in result[0]
+        assert "WorkflowClient" in result[1]
+
+    def test_primitive_types_excluded(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public String fooString() { return "foo"; }
+
+@Bean
+public String barString() { return "bar"; }
+
+@Autowired
+public MyService(String name) {
+    this.name = name;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_multiline_bean_with_context(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient
+    productionClient() {
+    return WorkflowClient.newInstance(prodStub);
+}
+
+@Bean
+public WorkflowClient testClient() {
+    return WorkflowClient.newInstance(testStub);
+}
+
+@Autowired
+public MyService(WorkflowClient client) {
+    this.client = client;
+}
+```
+"""
+        findings = self._validate(plan)
+        # Should detect at least the second @Bean via regex
+        assert any("WorkflowClient" in f.message for f in findings)
+
+    def test_repair_worthy_set(self):
+        plan = """\
+## Implementation
+```java
+@Bean
+public WorkflowClient prod() { return null; }
+
+@Bean
+public WorkflowClient test() { return null; }
+
+@Autowired
+public MyService(WorkflowClient client) {
+    this.client = client;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].repair_worthy is True
+
+
+# =============================================================================
+# TestConfigurationCompletenessValidator
+# =============================================================================
+
+
+class TestConfigurationCompletenessValidator:
+    """Tests for ConfigurationCompletenessValidator."""
+
+    def _validate(self, content: str, **ctx_kwargs) -> list[ValidationFinding]:
+        v = ConfigurationCompletenessValidator()
+        return v.validate(content, ValidationContext(**ctx_kwargs))
+
+    def test_all_setters_have_properties_clean(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    private String taskQueue;
+
+    public String getTaskQueue() { return taskQueue; }
+    public void setTaskQueue(String taskQueue) { this.taskQueue = taskQueue; }
+}
+
+// Usage:
+properties.setTaskQueue("my-queue");
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_setter_without_property_warns(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    private boolean enabled;
+}
+
+// Usage:
+properties.setTaskQueue("gcp-grace-period");
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert "taskQueue" in findings[0].message
+
+    def test_no_properties_class_skips(self):
+        plan = """\
+## Implementation
+```java
+public class MyService {
+    public void doWork() {
+        options.setTaskQueue("my-queue");
+    }
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_infrastructure_setters_excluded(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "app")
+public class AppProperties {
+    private String name;
+}
+
+builder.build();
+factory.newBuilder();
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_builder_type_excluded(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    private boolean enabled;
+}
+
+WorkflowServiceStubsOptions options = WorkflowServiceStubsOptions.newBuilder()
+    .setTarget("localhost:7233")
+    .build();
+```
+"""
+        findings = self._validate(plan)
+        # Should NOT flag Options.newBuilder().setTarget()
+        assert not any("setTarget" in f.message for f in findings)
+
+    def test_getter_implies_property(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    public String getTaskQueue() { return "default"; }
+}
+
+properties.setTaskQueue("my-queue");
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_case_insensitive_matching(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    private Duration rpcTimeout;
+}
+
+properties.setRpcTimeout(Duration.ofSeconds(30));
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_prerequisite_work_suppresses(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    private boolean enabled;
+}
+
+// TODO: properties.setTaskQueue(...)
+```
+
+## Prerequisite work
+- Add taskQueue property to TemporalProperties
+"""
+        findings = self._validate(plan)
+        assert not any("taskQueue" in f.message for f in findings)
+
+    def test_repair_worthy_on_properties_bound(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    private boolean enabled;
+}
+
+properties.setTaskQueue("gcp-grace-period");
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].repair_worthy is True
+
+    def test_commented_setter_without_property_warns(self):
+        plan = """\
+## Implementation
+```java
+@ConfigurationProperties(prefix = "temporal")
+public class TemporalProperties {
+    private boolean enabled;
+}
+
+// properties.setTaskQueue("gcp-grace-period");
+```
+"""
+        # Commented-out setter still inside code block, regex still picks it up
+        # because it matches "properties.setTaskQueue" in the string
+        findings = self._validate(plan)
+        assert any("taskQueue" in f.message for f in findings)
+
+
+# =============================================================================
+# TestTestScenarioValidator
+# =============================================================================
+
+
+class TestTestScenarioValidator:
+    """Tests for TestScenarioValidator."""
+
+    def _validate(self, content: str, **ctx_kwargs) -> list[ValidationFinding]:
+        v = TestScenarioValidator()
+        return v.validate(content, ValidationContext(**ctx_kwargs))
+
+    def test_workflow_signal_missing_idempotency(self):
+        plan = """\
+## Testing Strategy
+- Unit tests for service creation
+- Integration test for workflow start
+"""
+        findings = self._validate(plan, ticket_signals=["workflow"])
+        labels = [f.message for f in findings]
+        assert any("Idempotency test" in msg for msg in labels)
+
+    def test_workflow_signal_all_scenarios_covered(self):
+        plan = """\
+## Testing Strategy
+- Test idempotency: verify duplicate workflow start returns existing run
+- Test timeout: verify connection timeout throws expected error
+- Test error handling: verify exception propagation from workflow failure
+"""
+        findings = self._validate(plan, ticket_signals=["workflow"])
+        assert len(findings) == 0
+
+    def test_no_signal_no_check(self):
+        plan = """\
+## Testing Strategy
+- Unit tests only
+"""
+        findings = self._validate(plan, ticket_signals=[])
+        assert len(findings) == 0
+
+    def test_content_triggered_optional_dependency(self):
+        plan = """\
+## Summary
+Handle optional Temporal dependency gracefully.
+
+## Testing Strategy
+- Test basic functionality
+"""
+        findings = self._validate(plan)
+        labels = [f.message for f in findings]
+        assert any("Optional dependency absent test" in msg for msg in labels)
+
+    def test_feature_flag_content_trigger(self):
+        plan = """\
+## Summary
+Add feature flag for new workflow.
+
+## Testing Strategy
+- Test workflow start
+"""
+        findings = self._validate(plan)
+        labels = [f.message for f in findings]
+        assert any("Feature flag toggle test" in msg for msg in labels)
+
+    def test_no_testing_section_skips(self):
+        plan = """\
+## Summary
+Some summary without testing section.
+"""
+        findings = self._validate(plan, ticket_signals=["workflow"])
+        assert len(findings) == 0
+
+    def test_autowired_required_false_triggers(self):
+        plan = """\
+## Summary
+Use @Autowired(required = false) for optional injection.
+
+## Testing Strategy
+- Test service works correctly
+"""
+        findings = self._validate(plan)
+        labels = [f.message for f in findings]
+        assert any("Optional injection absent test" in msg for msg in labels)
+
+
+# =============================================================================
+# TestClaimConsistencyValidator
+# =============================================================================
+
+
+class TestClaimConsistencyValidator:
+    """Tests for ClaimConsistencyValidator."""
+
+    def _validate(self, content: str, **ctx_kwargs) -> list[ValidationFinding]:
+        v = ClaimConsistencyValidator()
+        return v.validate(content, ValidationContext(**ctx_kwargs))
+
+    def test_no_claims_clean(self):
+        plan = """\
+## Summary
+Add new Temporal workflow integration.
+
+## Implementation Steps
+1. Create TemporalConfig.java
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_correct_existence_claim_with_repo(self, tmp_path):
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+
+        # Create a fake pom.xml with the dependency
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            """\
+<project>
+  <dependencies>
+    <dependency>
+      <groupId>io.temporal</groupId>
+      <artifactId>temporal-sdk</artifactId>
+    </dependency>
+  </dependencies>
+</project>
+"""
+        )
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+
+        plan = """\
+## Summary
+The `temporal-sdk` already exists in `pom.xml`.
+"""
+        from ingot.discovery.file_index import FileIndex
+
+        fi = FileIndex(tmp_path)
+        v = ClaimConsistencyValidator(file_index=fi)
+        findings = v.validate(plan, ValidationContext(repo_root=tmp_path))
+        assert not any("not found" in f.message for f in findings)
+
+    def test_false_existence_claim_warns(self, tmp_path):
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+
+        pom = tmp_path / "pom.xml"
+        pom.write_text("<project><dependencies></dependencies></project>")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+
+        plan = """\
+## Summary
+The `temporal-sdk` already exists in `pom.xml`.
+"""
+        from ingot.discovery.file_index import FileIndex
+
+        fi = FileIndex(tmp_path)
+        v = ClaimConsistencyValidator(file_index=fi)
+        findings = v.validate(plan, ValidationContext(repo_root=tmp_path))
+        assert len(findings) == 1
+        assert "not found" in findings[0].message
+
+    def test_plan_internal_field_contradiction(self):
+        plan = """\
+## Summary
+The field `taskQueue` in `TemporalProperties` enables queue configuration.
+
+## Implementation
+```java
+public class TemporalProperties {
+    private boolean enabled;
+    private String namespace;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert "taskQueue" in findings[0].message
+        assert "TemporalProperties" in findings[0].message
+
+    def test_plan_internal_consistency_clean(self):
+        plan = """\
+## Summary
+The field `enabled` in `TemporalProperties` controls activation.
+
+## Implementation
+```java
+public class TemporalProperties {
+    private boolean enabled;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 0
+
+    def test_unverified_marker_with_claim_warns(self):
+        plan = """\
+## Summary
+The dependency `temporal-sdk` already exists in pom.xml <!-- UNVERIFIED: not checked -->
+"""
+        findings = self._validate(plan)
+        assert len(findings) >= 1
+        assert any("UNVERIFIED" in f.message for f in findings)
+
+    def test_no_repo_root_skips_repo_checks(self):
+        plan = """\
+## Summary
+The `temporal-sdk` already exists in `pom.xml`.
+"""
+        # No repo_root — only plan-internal checks, no repo verification
+        findings = self._validate(plan)
+        # Should not crash, and should not emit repo-based findings
+        assert not any("not found in the repo" in f.message for f in findings)
+
+    def test_repair_worthy_on_contradiction(self):
+        plan = """\
+## Summary
+The field `taskQueue` in `TemporalProperties` is pre-configured.
+
+## Implementation
+```java
+public class TemporalProperties {
+    private boolean enabled;
+}
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].repair_worthy is True
+
+
+# =============================================================================
+# TestRiskCategoriesSignalChecklists
+# =============================================================================
+
+
+class TestRiskCategoriesSignalChecklists:
+    """Tests for signal-driven integration risk checklists in RiskCategoriesValidator."""
+
+    def _validate(self, content: str, signals: list[str]) -> list[ValidationFinding]:
+        v = RiskCategoriesValidator()
+        ctx = ValidationContext(ticket_signals=signals)
+        return v.validate(content, ctx)
+
+    def test_workflow_signal_missing_risks_warns(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: Temporal SDK
+"""
+        findings = self._validate(plan, signals=["workflow"])
+        signal_findings = [f for f in findings if "integration detected" in f.message]
+        assert len(signal_findings) == 1
+        assert (
+            "Namespace" in signal_findings[0].message
+            or "timeout" in signal_findings[0].message.lower()
+        )
+
+    def test_workflow_signal_all_covered_clean(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: Temporal SDK
+Namespace permissions must be pre-configured.
+Workflow execution timeout set to 30 minutes.
+Retry policy with exponential backoff.
+Worker deployment required on task queue.
+Idempotency key prevents duplicate workflows.
+Rollback: disable feature flag.
+"""
+        findings = self._validate(plan, signals=["workflow", "config"])
+        signal_findings = [f for f in findings if "integration detected" in f.message]
+        assert len(signal_findings) == 0
+
+    def test_no_signal_no_domain_check(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: None
+"""
+        findings = self._validate(plan, signals=[])
+        signal_findings = [f for f in findings if "integration detected" in f.message]
+        assert len(signal_findings) == 0
+
+    def test_risk_in_out_of_scope_counts(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: Temporal SDK
+Workflow execution timeout set to 30 minutes.
+Retry policy handles errors.
+Worker is already deployed.
+Idempotency handled by workflow ID.
+
+## Out of Scope
+Namespace creation is handled by DevOps.
+"""
+        findings = self._validate(plan, signals=["workflow", "config"])
+        # "namespace" appears in Out of Scope — full content is searched
+        signal_findings = [f for f in findings if "integration detected" in f.message]
+        # Should not flag namespace since it's mentioned in the plan
+        for sf in signal_findings:
+            assert "Namespace" not in sf.message
+
+    def test_migration_signal_checks(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: Database migration tool
+"""
+        findings = self._validate(plan, signals=["migration"])
+        signal_findings = [f for f in findings if "integration detected" in f.message]
+        assert len(signal_findings) == 1
+        assert "migration" in signal_findings[0].message.lower()
+
+    def test_multiple_signals_combined(self):
+        plan = """\
+## Potential Risks or Considerations
+**External dependencies**: Temporal + DB migration
+"""
+        findings = self._validate(plan, signals=["workflow", "migration"])
+        signal_findings = [f for f in findings if "integration detected" in f.message]
+        # Both workflow and migration checklists should fire
+        assert len(signal_findings) == 2
+
+
+# =============================================================================
+# TestRepairLoop
+# =============================================================================
+
+
+class TestRepairLoop:
+    """Tests for repair_worthy behavior in ValidationReport."""
+
+    def test_repair_worthy_warning_triggers_has_repair_worthy(self):
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="Test",
+                    severity=ValidationSeverity.WARNING,
+                    message="Missing qualifier",
+                    repair_worthy=True,
+                ),
+            ]
+        )
+        assert report.has_repair_worthy is True
+        assert report.has_errors is False
+
+    def test_non_repair_worthy_warning_no_trigger(self):
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="Test",
+                    severity=ValidationSeverity.WARNING,
+                    message="Advisory warning",
+                    repair_worthy=False,
+                ),
+            ]
+        )
+        assert report.has_repair_worthy is False
+
+    def test_error_always_triggers(self):
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="Test",
+                    severity=ValidationSeverity.ERROR,
+                    message="Validation error",
+                ),
+            ]
+        )
+        assert report.has_repair_worthy is True
+
+    def test_repair_worthy_info_does_not_trigger(self):
+        report = ValidationReport(
+            findings=[
+                ValidationFinding(
+                    validator_name="Test",
+                    severity=ValidationSeverity.INFO,
+                    message="Advisory info",
+                    repair_worthy=True,
+                ),
+            ]
+        )
+        # INFO findings never trigger repair, even with repair_worthy=True
+        assert report.has_repair_worthy is False

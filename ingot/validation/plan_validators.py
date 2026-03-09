@@ -5,8 +5,12 @@ a generated plan. The factory function at the bottom creates the
 default registry with all standard validators.
 """
 
+from __future__ import annotations
+
 import bisect
 import re
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ingot.discovery.citation_utils import (
     IDENTIFIER_RE,
@@ -15,6 +19,10 @@ from ingot.discovery.citation_utils import (
     safe_resolve_path,
 )
 from ingot.utils.logging import log_message
+
+if TYPE_CHECKING:
+    from ingot.discovery.file_index import FileIndex
+
 from ingot.validation.base import (
     ValidationContext,
     ValidationFinding,
@@ -881,6 +889,46 @@ class ImplementationDetailValidator(Validator):
 class RiskCategoriesValidator(Validator):
     """Check that the Potential Risks section covers required categories."""
 
+    # Rollback-related keywords
+    _ROLLBACK_RE = re.compile(
+        r"\b(?:rollback|revert|disable.flag|feature.flag.off|kill.switch|undo)\b",
+        re.IGNORECASE,
+    )
+
+    # Signals that should trigger rollback check
+    _ROLLBACK_SIGNALS = {"config", "workflow"}
+
+    # Signal-driven integration risk checklists.
+    # Each signal maps to a list of (keywords, label) pairs.
+    # If any keyword is found (case-insensitive) in the full plan, the risk is covered.
+    _SIGNAL_RISK_CHECKLISTS: dict[str, list[tuple[list[str], str]]] = {
+        "workflow": [
+            (
+                ["namespace", "namespace permission", "namespace exist"],
+                "Namespace existence / permissions",
+            ),
+            (["timeout", "execution timeout", "workflow timeout"], "Workflow execution timeout"),
+            (["retry", "retry policy", "error handling"], "Retry / error handling strategy"),
+            (
+                ["worker", "task queue worker", "worker deploy"],
+                "Worker deployment / task queue availability",
+            ),
+            (
+                ["idempoten", "duplicate", "already started", "dedup"],
+                "Idempotency / duplicate handling",
+            ),
+        ],
+        "migration": [
+            (["rollback", "revert", "undo"], "Migration rollback strategy"),
+            (["data loss", "data integrity", "data validation"], "Data integrity during migration"),
+            (["downtime", "zero-downtime", "blue-green"], "Downtime / availability impact"),
+        ],
+        "endpoint": [
+            (["rate limit", "throttl"], "Rate limiting / throttling"),
+            (["auth", "permission", "rbac", "authorization"], "Authentication / authorization"),
+        ],
+    }
+
     @property
     def name(self) -> str:
         return "Risk Categories"
@@ -924,6 +972,50 @@ class RiskCategoriesValidator(Validator):
                     ),
                 )
             )
+
+        # Conditional rollback check: when ticket signals include "config" or "workflow",
+        # the plan should mention rollback/revert/disable-flag somewhere.
+        if self._ROLLBACK_SIGNALS & set(context.ticket_signals):
+            if not self._ROLLBACK_RE.search(content):
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            "Ticket involves config/workflow changes but the plan has "
+                            "no rollback strategy."
+                        ),
+                        suggestion=(
+                            "Describe how to revert the change (e.g., disable feature flag, "
+                            "revert config, stop workflow) in the Potential Risks section."
+                        ),
+                    )
+                )
+
+        # Signal-driven integration risk checklists
+        content_lower = content.lower()
+        for signal, checklist in self._SIGNAL_RISK_CHECKLISTS.items():
+            if signal not in context.ticket_signals:
+                continue
+            signal_missing: list[str] = []
+            for keywords, label in checklist:
+                if not any(kw in content_lower for kw in keywords):
+                    signal_missing.append(label)
+            if signal_missing:
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            f"'{signal}' integration detected but plan does not address: "
+                            f"{', '.join(signal_missing)}"
+                        ),
+                        suggestion=(
+                            "Address these risks in the Potential Risks section, "
+                            "Technical Approach, or Out of Scope."
+                        ),
+                    )
+                )
 
         return findings
 
@@ -1297,6 +1389,9 @@ class SnippetCompletenessValidator(Validator):
     Checks code blocks for field declarations that lack constructor or
     initialization method. Helps catch snippets that show member
     variables but omit how they are set up.
+
+    Also detects predominantly commented-out code blocks (>50% comment
+    lines), which do not constitute concrete implementation.
     """
 
     # Detect field declarations (Java/Kotlin/C#/TypeScript)
@@ -1325,6 +1420,12 @@ class SnippetCompletenessValidator(Validator):
         ),  # Pydantic/typing (no explicit __init__ needed)
     ]
 
+    # Comment-only line patterns (language-agnostic)
+    _COMMENT_LINE_RE = re.compile(r"^\s*(?://|#|/\*|\*|<!--)")
+
+    # Comment threshold: code blocks with >50% comment lines are flagged
+    _COMMENT_THRESHOLD = 0.5
+
     @property
     def name(self) -> str:
         return "Snippet Completeness"
@@ -1339,6 +1440,32 @@ class SnippetCompletenessValidator(Validator):
             block_text = "\n".join(lines[block_open + 1 : block_close])
             if len(block_text.strip()) < 20:
                 continue
+
+            # Check for predominantly commented-out code
+            block_lines = [ln for ln in lines[block_open + 1 : block_close] if ln.strip()]
+            if block_lines:
+                comment_count = sum(1 for ln in block_lines if self._COMMENT_LINE_RE.match(ln))
+                if (
+                    len(block_lines) >= 4
+                    and comment_count / len(block_lines) > self._COMMENT_THRESHOLD
+                ):
+                    findings.append(
+                        ValidationFinding(
+                            validator_name=self.name,
+                            severity=ValidationSeverity.WARNING,
+                            message=(
+                                f"Code block at line {block_open + 1} is predominantly "
+                                f"commented out ({comment_count}/{len(block_lines)} lines "
+                                f"are comments)."
+                            ),
+                            line_number=block_open + 1,
+                            suggestion=(
+                                "Provide compilable implementation code, not commented-out "
+                                "placeholders. If a prerequisite is unavailable, declare it "
+                                "in 'Prerequisite work' and provide a compilable stub."
+                            ),
+                        )
+                    )
 
             has_fields = any(p.search(block_text) for p in self._FIELD_PATTERNS)
             has_init = any(p.search(block_text) for p in self._INIT_PATTERNS)
@@ -1371,10 +1498,11 @@ class OperationalCompletenessValidator(Validator):
     operational elements: query examples, thresholds, escalation paths.
     """
 
-    # Detect metrics/alert related content
+    # Detect metrics/alert/workflow related content
     _METRIC_KEYWORDS = re.compile(
         r"\b(?:metric|alert|monitor|gauge|counter|histogram|prometheus|grafana|"
-        r"datadog|threshold|SLO|SLI|SLA|dashboard|runbook|pagerduty|opsgenie)\b",
+        r"datadog|threshold|SLO|SLI|SLA|dashboard|runbook|pagerduty|opsgenie|"
+        r"temporal|workflow)\b",
         re.IGNORECASE,
     )
 
@@ -1410,7 +1538,7 @@ class OperationalCompletenessValidator(Validator):
         return "Operational Completeness"
 
     # Signal categories that elevate severity from INFO to WARNING
-    _ELEVATED_SIGNALS = {"metric", "alert", "monitor"}
+    _ELEVATED_SIGNALS = {"metric", "alert", "monitor", "workflow"}
 
     def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
         # Only activate if plan mentions metrics/alerts
@@ -1521,8 +1649,888 @@ class NamingConsistencyValidator(Validator):
         return findings
 
 
+class TicketReconciliationValidator(Validator):
+    """Cross-validate plan files against ticket's structured directives.
+
+    Checks that every file listed in the ticket's "Files to Modify" section
+    appears in the plan's Implementation Steps, and that every acceptance
+    criterion is traceable to at least one implementation step.
+    """
+
+    # Match file path references in Implementation Steps (backtick-quoted)
+    _IMPL_FILE_RE = re.compile(r"`([^`]+\.\w{1,8})`")
+
+    # Deviation callout pattern — plan explicitly documents why it differs
+    _DEVIATION_RE = re.compile(r"\*\*Deviation\s+from\s+ticket\*\*", re.IGNORECASE)
+
+    @property
+    def name(self) -> str:
+        return "Ticket Reconciliation"
+
+    @staticmethod
+    def _normalize_file_name(name: str) -> str:
+        """Extract short class/file name from ticket reference.
+
+        Handles entries like "TemporalConfig.java — NEW" or
+        "MarketplaceConfig.java — Add WorkflowClient bean".
+        """
+        # Take text before any em-dash or double-dash annotation
+        base = re.split(r"\s*[—–-]{1,2}\s+", name)[0].strip()
+        # Strip extension for fuzzy matching
+        base = re.sub(r"\.\w{1,8}$", "", base)
+        return base.lower()
+
+    @staticmethod
+    def _extract_key_phrases(text: str) -> list[str]:
+        """Extract meaningful noun phrases from an acceptance criterion."""
+        # Remove common filler words; keep substantive terms
+        cleaned = re.sub(r"\b(?:is|are|the|a|an|and|or|that|this|should|must|will)\b", " ", text)
+        words = [w.strip() for w in cleaned.split() if len(w.strip()) > 2]
+        return words
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        impl_text = _extract_plan_sections(content, ["Implementation Steps"])
+        if not impl_text:
+            return findings
+
+        impl_lower = impl_text.lower()
+
+        # Check files to modify
+        for file_entry in context.ticket_files_to_modify:
+            short_name = self._normalize_file_name(file_entry)
+            if not short_name:
+                continue
+            # Check if the name appears in implementation steps
+            if short_name in impl_lower:
+                continue
+            # Check for deviation callout in the entire plan
+            if self._DEVIATION_RE.search(content):
+                continue
+            findings.append(
+                ValidationFinding(
+                    validator_name=self.name,
+                    severity=ValidationSeverity.WARNING,
+                    message=(
+                        f"Ticket specifies '{file_entry}' in Files to Modify "
+                        f"but plan does not address it in Implementation Steps."
+                    ),
+                    suggestion=(
+                        f"Add an implementation step for '{file_entry}', or add an "
+                        f"explicit '**Deviation from ticket**: [reason]' callout."
+                    ),
+                )
+            )
+
+        # Check acceptance criteria traceability
+        for ac in context.ticket_acceptance_criteria:
+            phrases = self._extract_key_phrases(ac)
+            if not phrases:
+                continue
+            # Require at least 40% of key phrases to appear in implementation
+            matches = sum(1 for p in phrases if p.lower() in impl_lower)
+            if phrases and matches / len(phrases) >= 0.4:
+                continue
+            findings.append(
+                ValidationFinding(
+                    validator_name=self.name,
+                    severity=ValidationSeverity.WARNING,
+                    message=(
+                        f"Ticket AC '{ac[:100]}' is not clearly traceable "
+                        f"to any implementation step."
+                    ),
+                    suggestion=(
+                        "Map this acceptance criterion to at least one implementation "
+                        "step, or document why it is out of scope."
+                    ),
+                )
+            )
+
+        return findings
+
+
+class PrerequisiteConsistencyValidator(Validator):
+    """Cross-reference TODO markers in code blocks against Prerequisites.
+
+    Detects contradictions where code contains TODO placeholders but the
+    plan's Prerequisite section claims "None identified".
+    """
+
+    _TODO_RE = re.compile(r"(?://|#)\s*TODO\b", re.IGNORECASE)
+    _NONE_RE = re.compile(r"\bnone\s+identified\b|\bn/?a\b", re.IGNORECASE)
+
+    @property
+    def name(self) -> str:
+        return "Prerequisite Consistency"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        # Count TODOs in code blocks within Implementation Steps
+        impl_text = _extract_plan_sections(content, ["Implementation Steps"])
+        if not impl_text:
+            return findings
+
+        impl_lines = impl_text.splitlines()
+        code_blocks, _ = _extract_code_blocks(impl_lines)
+        todo_count = 0
+        for block_open, block_close in code_blocks:
+            block_text = "\n".join(impl_lines[block_open + 1 : block_close])
+            todo_count += len(self._TODO_RE.findall(block_text))
+
+        if todo_count == 0:
+            return findings
+
+        # Extract Prerequisite subsection from Potential Risks
+        risks_text = _extract_plan_sections(content, ["Potential Risks"])
+        if not risks_text:
+            return findings
+
+        # Find the "Prerequisite work" subsection
+        prereq_match = re.search(
+            r"\*\*Prerequisite\s+work\*\*\s*:?\s*(.+?)(?=\n\s*\*\*|\Z)",
+            risks_text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if prereq_match and self._NONE_RE.search(prereq_match.group(1)):
+            findings.append(
+                ValidationFinding(
+                    validator_name=self.name,
+                    severity=ValidationSeverity.WARNING,
+                    message=(
+                        f"Plan has {todo_count} TODO marker(s) in code blocks but "
+                        f"Prerequisite work says 'None identified'."
+                    ),
+                    suggestion=(
+                        "If code has TODO placeholders waiting on prerequisite work, "
+                        "declare the prerequisites explicitly in the Potential Risks "
+                        "section."
+                    ),
+                )
+            )
+
+        return findings
+
+
+# =============================================================================
+# Phase 4 — Code Review Discovery Validators
+# =============================================================================
+
+# --- BeanQualifierValidator helpers ---
+
+# Matches @Bean method with return type: captures (return_type, method_name).
+# Handles optional annotations between @Bean and the method signature.
+_BEAN_RETURN_TYPE_RE = re.compile(
+    r"@Bean\b(?:\s*\([^)]*\))?(?:\s*@\w+(?:\([^)]*\))?)*\s*"
+    r"(?:(?:public|protected|private|static|final)\s+)*(\w+)\s+(\w+)\s*\(",
+    re.MULTILINE,
+)
+
+# Matches @Autowired constructor injection — captures the parameter list.
+_CONSTRUCTOR_INJECTION_RE = re.compile(
+    r"@Autowired(?:\([^)]*\))?\s*(?:public|protected|private)?\s*\w+\s*\(([^)]*)\)",
+    re.DOTALL,
+)
+
+# Also match constructors without @Autowired in Spring (single-constructor auto-injection).
+_PLAIN_CONSTRUCTOR_RE = re.compile(
+    r"(?:public|protected|private)\s+(\w+)\s*\(([^)]*)\)\s*\{",
+    re.DOTALL,
+)
+
+_QUALIFIER_RE = re.compile(r"@Qualifier\s*\(")
+_PRIMARY_RE = re.compile(r"@Primary\b")
+
+# Primitive / built-in types that should never be flagged.
+_PRIMITIVE_TYPES = frozenset(
+    {
+        "int",
+        "long",
+        "float",
+        "double",
+        "boolean",
+        "byte",
+        "char",
+        "short",
+        "void",
+        "String",
+        "Integer",
+        "Long",
+        "Float",
+        "Double",
+        "Boolean",
+        "Byte",
+        "Character",
+        "Short",
+        "Object",
+    }
+)
+
+
+def _split_params(param_str: str) -> list[str]:
+    """Depth-aware comma split respecting nested parentheses.
+
+    Handles patterns like ``@Value("${foo}") int bar, WorkflowClient client``.
+    """
+    params: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in param_str:
+        if ch in ("(", "<"):
+            depth += 1
+            current.append(ch)
+        elif ch in (")", ">"):
+            depth -= 1
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            params.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    last = "".join(current).strip()
+    if last:
+        params.append(last)
+    return params
+
+
+def _extract_param_type(param: str) -> str | None:
+    """Extract the type name from a Java parameter like ``WorkflowClient client``.
+
+    Strips annotations (``@Value(...)``, ``@Qualifier(...)``).
+    Returns None for primitives or unparsable params.
+    """
+    # Remove annotations
+    cleaned = re.sub(r"@\w+(?:\s*\([^)]*\))?", "", param).strip()
+    # Remove final keyword
+    cleaned = re.sub(r"\bfinal\s+", "", cleaned).strip()
+    tokens = cleaned.split()
+    if len(tokens) >= 2:
+        type_name = tokens[0]
+        # Strip generic wrapper (e.g., Optional<Foo> → Foo not tracked, keep outer)
+        base = re.sub(r"<.*>", "", type_name)
+        if base in _PRIMITIVE_TYPES:
+            return None
+        return base
+    return None
+
+
+class BeanQualifierValidator(Validator):
+    """Detect missing @Qualifier when multiple @Bean methods return the same type.
+
+    Uses GrepEngine for repo scanning (not rglob). Tiered severity:
+    ERROR when repo-confirmed or high-risk type, WARNING otherwise.
+
+    Explicit limitations:
+    - Multiline @Bean signatures split across 3+ lines may be missed
+    - Kotlin fun return-type-after-colon syntax not fully supported
+    - Generic return types like Optional<WorkflowClient> captured as Optional only
+    - Component scanning (@ComponentScan auto-registration) not detected
+    """
+
+    # High-risk types where missing @Qualifier almost always causes Spring startup failure
+    _HIGH_RISK_TYPES = frozenset(
+        {
+            "WorkflowClient",
+            "WorkflowServiceStubs",
+            "DataSource",
+            "RestTemplate",
+            "WebClient",
+            "JdbcTemplate",
+            "MongoTemplate",
+            "RedisTemplate",
+            "ConnectionFactory",
+            "EntityManagerFactory",
+            "TransactionManager",
+            "ObjectMapper",
+            "TaskExecutor",
+            "Scheduler",
+        }
+    )
+
+    def __init__(self, file_index: FileIndex | None = None) -> None:
+        self._file_index = file_index
+        self._bean_cache: dict[str, int] = {}
+
+    @property
+    def name(self) -> str:
+        return "Bean Qualifier"
+
+    def _count_repo_beans(self, repo_root: Path, type_name: str) -> int:
+        """Count @Bean methods returning type_name using GrepEngine.
+
+        Uses FileIndex.find_by_extension() for file list (respects .gitignore),
+        then GrepEngine.search() with context_lines=3 to capture the return
+        type near @Bean annotations. Caches results per type_name per run.
+        """
+        if type_name in self._bean_cache:
+            return self._bean_cache[type_name]
+
+        from ingot.discovery.file_index import FileIndex
+        from ingot.discovery.grep_engine import GrepEngine
+
+        if self._file_index is None:
+            self._file_index = FileIndex(repo_root)
+
+        java_files = self._file_index.find_by_extension("java")
+        kt_files = self._file_index.find_by_extension("kt")
+        all_files = list(java_files) + list(kt_files)
+
+        if not all_files:
+            self._bean_cache[type_name] = 0
+            return 0
+
+        engine = GrepEngine(
+            repo_root,
+            all_files,
+            context_lines=3,
+            max_matches_per_file=10,
+            max_matches_total=200,
+            search_timeout=15.0,
+        )
+
+        matches = engine.search(r"@Bean\b")
+
+        bean_re = re.compile(
+            r"(?:public|protected|private|static|final|\s)*" + re.escape(type_name) + r"\s+\w+\s*\("
+        )
+        count = 0
+        for m in matches:
+            combined = m.line_content
+            if m.context_after:
+                combined += "\n" + "\n".join(m.context_after)
+            if bean_re.search(combined):
+                count += 1
+
+        self._bean_cache[type_name] = count
+        return count
+
+    def _determine_severity(
+        self, type_name: str, repo_count: int, plan_count: int
+    ) -> ValidationSeverity:
+        """ERROR when repo-confirmed (high confidence) or high-risk type with plan evidence."""
+        repo_confirmed = repo_count >= 2 or (repo_count >= 1 and plan_count >= 1)
+        is_high_risk = type_name in self._HIGH_RISK_TYPES
+
+        if repo_confirmed:
+            return ValidationSeverity.ERROR
+        if plan_count >= 2 and is_high_risk:
+            return ValidationSeverity.ERROR
+        return ValidationSeverity.WARNING
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        # Extract code blocks from plan
+        code_blocks = _FENCED_CODE_BLOCK_RE.findall(content)
+        if not code_blocks:
+            return findings
+
+        all_code = "\n".join(code_blocks)
+
+        # Find @Bean return types in plan snippets and track which have @Primary
+        plan_beans: dict[str, int] = {}
+        primary_types: set[str] = set()
+        for match in _BEAN_RETURN_TYPE_RE.finditer(all_code):
+            rtype = match.group(1)
+            if rtype not in _PRIMITIVE_TYPES:
+                plan_beans[rtype] = plan_beans.get(rtype, 0) + 1
+                # @Primary is captured inside the match (between @Bean and the signature)
+                if _PRIMARY_RE.search(match.group(0)):
+                    primary_types.add(rtype)
+
+        if not plan_beans:
+            return findings
+
+        # Find constructor injection parameters
+        injected_types: set[str] = set()
+        has_qualifier_for: set[str] = set()
+
+        for ctor_match in _CONSTRUCTOR_INJECTION_RE.finditer(all_code):
+            param_str = ctor_match.group(1)
+            # Check each param for @Qualifier
+            params = _split_params(param_str)
+            for param in params:
+                ptype = _extract_param_type(param)
+                if ptype:
+                    injected_types.add(ptype)
+                    if _QUALIFIER_RE.search(param):
+                        has_qualifier_for.add(ptype)
+
+        for ctor_match in _PLAIN_CONSTRUCTOR_RE.finditer(all_code):
+            param_str = ctor_match.group(2)
+            params = _split_params(param_str)
+            for param in params:
+                ptype = _extract_param_type(param)
+                if ptype:
+                    injected_types.add(ptype)
+                    if _QUALIFIER_RE.search(param):
+                        has_qualifier_for.add(ptype)
+
+        if not injected_types:
+            return findings
+
+        # Check each injected type: is there ambiguity?
+        for type_name in injected_types:
+            if type_name in has_qualifier_for:
+                continue
+            if type_name in primary_types:
+                continue
+
+            plan_count = plan_beans.get(type_name, 0)
+            repo_count = 0
+
+            if context.repo_root is not None:
+                try:
+                    repo_count = self._count_repo_beans(context.repo_root, type_name)
+                except Exception:
+                    log_message(f"BeanQualifierValidator: repo scan failed for {type_name}")
+
+            total = plan_count + repo_count
+            if total < 2:
+                continue
+
+            severity = self._determine_severity(type_name, repo_count, plan_count)
+            source = "repo + plan" if repo_count > 0 else "plan"
+
+            findings.append(
+                ValidationFinding(
+                    validator_name=self.name,
+                    severity=severity,
+                    message=(
+                        f"Multiple @Bean methods return '{type_name}' ({source}: "
+                        f"{total} beans) but constructor injection has no @Qualifier."
+                    ),
+                    suggestion=(
+                        f"Add @Qualifier(\"beanName\") to the '{type_name}' constructor "
+                        f"parameter to disambiguate injection."
+                    ),
+                    repair_worthy=True,
+                )
+            )
+
+        return findings
+
+
+class ConfigurationCompletenessValidator(Validator):
+    """Ensure .setX() calls on properties-bound objects have corresponding fields.
+
+    Activates only when ALL conditions are met:
+    1. Plan contains a @ConfigurationProperties class snippet
+    2. Setter call is on a properties-bound object
+    """
+
+    _CONFIG_PROPS_RE = re.compile(r"@ConfigurationProperties\b")
+
+    # Match "object.setFoo(" — captures object name and property name
+    _QUALIFIED_SETTER_RE = re.compile(r"(\w+)\.set([A-Z]\w*)\s*\(")
+
+    _INFRASTRUCTURE_SETTERS = frozenset(
+        {
+            "build",
+            "builder",
+            "newBuilder",
+            "newInstance",
+            "create",
+            "toString",
+            "hashCode",
+            "equals",
+            "clone",
+        }
+    )
+
+    # Known builder/options types whose .setX() calls are NOT config properties.
+    _BUILDER_TYPE_PATTERNS = [
+        re.compile(r"Options\.newBuilder|StubsOptions|ClientOptions"),
+        re.compile(r"Builder\s*\.\s*set"),
+        re.compile(r"newBuilder\(\)\s*\.\s*set"),
+    ]
+
+    @property
+    def name(self) -> str:
+        return "Configuration Completeness"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        code_blocks = _FENCED_CODE_BLOCK_RE.findall(content)
+        if not code_blocks:
+            return findings
+
+        all_code = "\n".join(code_blocks)
+
+        # Gate 1: Must have @ConfigurationProperties class
+        if not self._CONFIG_PROPS_RE.search(all_code):
+            return findings
+
+        # Extract defined fields/getters from the properties class block
+        defined_props: set[str] = set()
+        for block in code_blocks:
+            if "@ConfigurationProperties" in block:
+                # Fields: "private Type fieldName"
+                for fm in re.finditer(r"private\s+\w+\s+(\w+)\s*[;=]", block):
+                    defined_props.add(fm.group(1).lower())
+                # Getters: "getFieldName()"
+                for gm in re.finditer(r"get([A-Z]\w*)\s*\(", block):
+                    defined_props.add(gm.group(1).lower())
+
+        # Find setter calls and check against defined properties
+        # Search the full plan content (including comments) for setter calls
+        for block in code_blocks:
+            for sm in self._QUALIFIED_SETTER_RE.finditer(block):
+                obj_name = sm.group(1)
+                prop_name = sm.group(2)
+
+                # Skip infrastructure setters
+                if prop_name.lower() in {s.lower() for s in self._INFRASTRUCTURE_SETTERS}:
+                    continue
+
+                # Skip builder type patterns
+                # Look at surrounding context for builder indicators
+                start = max(0, sm.start() - 200)
+                context_str = block[start : sm.end() + 50]
+                if any(bp.search(context_str) for bp in self._BUILDER_TYPE_PATTERNS):
+                    continue
+
+                # Only flag if object looks properties-bound
+                obj_lower = obj_name.lower()
+                is_properties_bound = (
+                    "property" in obj_lower
+                    or "properties" in obj_lower
+                    or "config" in obj_lower
+                    or "setting" in obj_lower
+                )
+
+                if not is_properties_bound:
+                    # Also check if signal context matches
+                    signal_match = bool(
+                        {"workflow", "config", "integration"} & set(context.ticket_signals)
+                    )
+                    if not signal_match:
+                        continue
+
+                # Check if property is defined
+                if prop_name.lower() not in defined_props:
+                    # Check if it's in a prerequisite work section
+                    prereq_text = _extract_plan_sections(content, ["Prerequisite"])
+                    if prereq_text and prop_name.lower() in prereq_text.lower():
+                        continue
+
+                    findings.append(
+                        ValidationFinding(
+                            validator_name=self.name,
+                            severity=ValidationSeverity.WARNING,
+                            message=(
+                                f"Setter '{obj_name}.set{prop_name}()' called but "
+                                f"no '{prop_name[0].lower() + prop_name[1:]}' field "
+                                f"found in @ConfigurationProperties class."
+                            ),
+                            suggestion=(
+                                f"Add 'private <Type> {prop_name[0].lower() + prop_name[1:]}' "
+                                f"to the @ConfigurationProperties class, or verify the "
+                                f"property is defined elsewhere."
+                            ),
+                            repair_worthy=is_properties_bound,
+                        )
+                    )
+
+        return findings
+
+
+class TestScenarioValidator(Validator):
+    """Signal-driven and content-triggered test scenario checklist.
+
+    Checks that the Testing Strategy section covers critical scenarios
+    based on ticket signals and plan content. Severity: INFO (advisory).
+    """
+
+    # Signal-triggered scenarios: (signal, keywords_to_search, label)
+    _SIGNAL_SCENARIOS: list[tuple[str, list[str], str]] = [
+        ("workflow", ["idempoten", "already started", "duplicate", "dedup"], "Idempotency test"),
+        ("workflow", ["timeout", "connection", "unavailable"], "Timeout/connection failure test"),
+        ("workflow", ["error", "exception", "failure", "fail"], "Error handling test"),
+    ]
+
+    # Content-triggered scenarios: (content_trigger, keywords_to_search, label)
+    _CONTENT_SCENARIOS: list[tuple[str, list[str], str]] = [
+        (
+            "optional",
+            ["null", "absent", "missing", "not configured"],
+            "Optional dependency absent test",
+        ),
+        ("feature flag", ["flag disabled", "flag off", "flag enabled"], "Feature flag toggle test"),
+        (
+            "@Autowired(required = false)",
+            ["null", "absent", "not available"],
+            "Optional injection absent test",
+        ),
+    ]
+
+    @property
+    def name(self) -> str:
+        return "Test Scenario"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        testing_text = _extract_plan_sections(content, ["Testing Strategy"])
+        if not testing_text:
+            return findings
+
+        testing_lower = testing_text.lower()
+        content_lower = content.lower()
+
+        # Signal-triggered checks
+        for signal, keywords, label in self._SIGNAL_SCENARIOS:
+            if signal not in context.ticket_signals:
+                continue
+            if not any(kw in testing_lower for kw in keywords):
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.INFO,
+                        message=(
+                            f"'{signal}' integration detected but Testing Strategy "
+                            f"does not cover: {label}"
+                        ),
+                        suggestion=(f"Consider adding a test scenario for {label.lower()}."),
+                    )
+                )
+
+        # Content-triggered checks
+        for trigger, keywords, label in self._CONTENT_SCENARIOS:
+            if trigger.lower() not in content_lower:
+                continue
+            if not any(kw in testing_lower for kw in keywords):
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.INFO,
+                        message=(
+                            f"Plan mentions '{trigger}' but Testing Strategy "
+                            f"does not cover: {label}"
+                        ),
+                        suggestion=(f"Consider adding a test scenario for {label.lower()}."),
+                    )
+                )
+
+        return findings
+
+
+class ClaimConsistencyValidator(Validator):
+    """Verify factual claims in plan text against repo reality and plan-internal consistency.
+
+    Extracts claims like "X already exists in Y" from plan prose (outside code blocks)
+    and verifies them against the repo (when available) and against the plan's own
+    code snippets.
+
+    Severity: WARNING for plan-internal contradictions; ERROR when repo check disproves a claim.
+    """
+
+    _CLAIM_PATTERNS = [
+        # "X already exists in Y"
+        (
+            re.compile(
+                r"`([^`]+)`\s+already\s+exists?\s+in\s+(?:the\s+)?`([^`]+)`",
+                re.IGNORECASE,
+            ),
+            "existence",
+            "entity",
+            "location",
+        ),
+        # "dependency already exists" / "already present"
+        (
+            re.compile(
+                r"(?:dependency|class|file|method)\s+(?:`([^`]+)`\s+)?already\s+(?:exists?|present)",
+                re.IGNORECASE,
+            ),
+            "existence",
+            "entity",
+            None,
+        ),
+        # "field X in class Y" / "property X in Y"
+        (
+            re.compile(
+                r"(?:field|property)\s+`(\w+)`\s+(?:in|of)\s+`([^`]+)`",
+                re.IGNORECASE,
+            ),
+            "field_in_class",
+            "field",
+            "class",
+        ),
+    ]
+
+    def __init__(self, file_index: FileIndex | None = None) -> None:
+        self._file_index = file_index
+
+    @property
+    def name(self) -> str:
+        return "Claim Consistency"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        # Strip code blocks to only analyze prose
+        prose = _strip_fenced_code_blocks(content)
+        code_blocks = _FENCED_CODE_BLOCK_RE.findall(content)
+        all_code = "\n".join(code_blocks) if code_blocks else ""
+
+        for pattern, claim_type, *_group_names in self._CLAIM_PATTERNS:
+            for match in pattern.finditer(prose):
+                if claim_type == "existence":
+                    entity = match.group(1) if match.group(1) else None
+                    location = (
+                        match.group(2) if len(match.groups()) >= 2 and match.group(2) else None
+                    )
+                    if entity:
+                        self._check_existence_claim(entity, location, context, all_code, findings)
+                elif claim_type == "field_in_class":
+                    field_name = match.group(1)
+                    class_name = match.group(2)
+                    self._check_field_claim(field_name, class_name, all_code, findings)
+
+        # Check for UNVERIFIED markers combined with existence claims
+        for match in UNVERIFIED_RE.finditer(content):
+            marker_line = content[: match.start()].count("\n") + 1
+            # Get the line containing this marker
+            line_start = content.rfind("\n", 0, match.start()) + 1
+            line_end = content.find("\n", match.end())
+            if line_end == -1:
+                line_end = len(content)
+            line_text = content[line_start:line_end]
+            if re.search(r"already\s+exists?|is\s+present", line_text, re.IGNORECASE):
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            f"Line {marker_line}: Existence claim combined with "
+                            f"UNVERIFIED marker — contradictory."
+                        ),
+                        suggestion="Verify the claim or remove the existence statement.",
+                        line_number=marker_line,
+                        repair_worthy=True,
+                    )
+                )
+
+        return findings
+
+    def _check_existence_claim(
+        self,
+        entity: str,
+        location: str | None,
+        context: ValidationContext,
+        all_code: str,
+        findings: list[ValidationFinding],
+    ) -> None:
+        """Check an 'X already exists' claim against repo and plan."""
+        if context.repo_root is not None and location:
+            try:
+                self._verify_against_repo(entity, location, context.repo_root, findings)
+            except Exception:
+                log_message(
+                    f"ClaimConsistencyValidator: repo check failed for '{entity}' in '{location}'"
+                )
+
+    def _verify_against_repo(
+        self,
+        entity: str,
+        location: str,
+        repo_root: Path,
+        findings: list[ValidationFinding],
+    ) -> None:
+        """Use GrepEngine to verify an existence claim against the repo."""
+        from ingot.discovery.file_index import FileIndex
+        from ingot.discovery.grep_engine import GrepEngine
+
+        if self._file_index is None:
+            self._file_index = FileIndex(repo_root)
+
+        # Determine file extension from location
+        ext = None
+        if "." in location:
+            ext = location.rsplit(".", 1)[-1]
+
+        # Try to find the target file
+        target_files = []
+        if ext:
+            all_ext_files = self._file_index.find_by_extension(ext)
+            for f in all_ext_files:
+                if location in str(f) or str(f).endswith(location):
+                    target_files.append(f)
+
+        if not target_files:
+            return  # Cannot verify — no matching file found
+
+        engine = GrepEngine(
+            repo_root,
+            target_files,
+            max_matches_per_file=5,
+            max_matches_total=10,
+            search_timeout=10.0,
+        )
+
+        matches = engine.search(re.escape(entity))
+        if not matches:
+            findings.append(
+                ValidationFinding(
+                    validator_name=self.name,
+                    severity=ValidationSeverity.WARNING,
+                    message=(
+                        f"Plan claims '{entity}' already exists in '{location}' "
+                        f"but it was not found in the repo."
+                    ),
+                    suggestion=(
+                        "Verify the claim is accurate. If the entity does not exist, "
+                        "remove the 'already exists' statement and add it to "
+                        "Implementation Steps."
+                    ),
+                    repair_worthy=True,
+                )
+            )
+
+    def _check_field_claim(
+        self,
+        field_name: str,
+        class_name: str,
+        all_code: str,
+        findings: list[ValidationFinding],
+    ) -> None:
+        """Check if a field claim is consistent with the plan's own code snippets."""
+        # Look for the class in code blocks
+        class_pattern = re.compile(
+            r"class\s+" + re.escape(class_name) + r"\b.*?\{(.*?)\}",
+            re.DOTALL,
+        )
+        for cm in class_pattern.finditer(all_code):
+            class_body = cm.group(1)
+            # Check if field is defined in the class body
+            if not re.search(
+                r"\b" + re.escape(field_name) + r"\b",
+                class_body,
+            ):
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            f"Plan claims field '{field_name}' exists in "
+                            f"'{class_name}' but the plan's own code snippet "
+                            f"does not include it."
+                        ),
+                        suggestion=(
+                            f"Add '{field_name}' to the '{class_name}' code snippet "
+                            f"or correct the claim."
+                        ),
+                        repair_worthy=True,
+                    )
+                )
+                break  # Only report once per field/class pair
+
+
 def create_plan_validator_registry(
     researcher_output: str = "",
+    file_index: FileIndex | None = None,
 ) -> ValidatorRegistry:
     """Create the default plan validator registry with all standard gates.
 
@@ -1545,6 +2553,14 @@ def create_plan_validator_registry(
     registry.register(SnippetCompletenessValidator())
     registry.register(OperationalCompletenessValidator())
     registry.register(NamingConsistencyValidator())
+    # New validators (Phase 3 — ticket reconciliation & consistency)
+    registry.register(TicketReconciliationValidator())
+    registry.register(PrerequisiteConsistencyValidator())
+    # Phase 4 — code review discoveries
+    registry.register(BeanQualifierValidator(file_index=file_index))
+    registry.register(ConfigurationCompletenessValidator())
+    registry.register(TestScenarioValidator())
+    registry.register(ClaimConsistencyValidator(file_index=file_index))
     return registry
 
 
@@ -1564,5 +2580,11 @@ __all__ = [
     "SnippetCompletenessValidator",
     "OperationalCompletenessValidator",
     "NamingConsistencyValidator",
+    "TicketReconciliationValidator",
+    "PrerequisiteConsistencyValidator",
+    "BeanQualifierValidator",
+    "ConfigurationCompletenessValidator",
+    "TestScenarioValidator",
+    "ClaimConsistencyValidator",
     "create_plan_validator_registry",
 ]

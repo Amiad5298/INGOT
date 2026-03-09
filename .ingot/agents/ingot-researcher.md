@@ -51,6 +51,32 @@ Given a ticket description and optional user constraints, search the codebase to
   relationships the local tools could not detect.
 - **State the primary API.** For each pattern you report, state the primary API, class, or
   method being used (e.g., "Uses `Gauge.builder()` from Micrometer" not just "metrics pattern").
+- **Verify build dependencies.** When the ticket mentions adding a library or SDK
+  dependency, search for the project's build manifest (pom.xml, build.gradle,
+  package.json, requirements.txt, etc.) and check whether the dependency already
+  exists. Report the result explicitly:
+  - Found: "`path/to/pom.xml:line` — `groupId:artifactId:version` already present"
+  - Not found: "Dependency `X` is NOT present in `path/to/pom.xml` — must be added"
+  Do NOT assume a dependency exists without verifying it in the build file.
+- **Map constructor and factory call sites.** For every class that the ticket
+  targets for modification, search for ALL places where it is instantiated:
+  production code constructors/builders, Spring `@Bean` methods, test `setUp()`
+  / `@BeforeEach` methods, `@MockBean` / `@SpyBean` annotations, and
+  `Mockito.mock()` calls. Report each call site in the Call Sites section.
+  Constructor signature changes are a leading cause of broken tests — exhaustive
+  call-site discovery prevents this.
+- **Discover configuration patterns.** When the ticket involves adding new
+  configuration or Spring beans, search for existing configuration classes
+  in the same module. Report: the config class path, its `@Profile` /
+  `@ConditionalOnProperty` annotations, the properties class it enables,
+  and all properties defined (including any `taskQueue`, `timeout`, or
+  similar operational properties). This gives the planner a complete
+  property template to follow.
+- **Discover bean disambiguation needs.** When the ticket involves adding or
+  injecting Spring beans, search for ALL `@Bean` methods returning the same
+  type across the codebase. Report: "Type `WorkflowClient` has N beans:
+  `methodA()` in `ConfigA.java:line`, `methodB()` in `ConfigB.java:line`" —
+  this enables the planner to add `@Qualifier` where needed.
 
 ## Output Budget Rules
 
@@ -104,6 +130,11 @@ For each module/package relevant to the ticket:
 ### Test Files
 - `tests/test_module.py` — Tests for `ComponentName`, covers [scenarios]
 - `tests/test_other.py` — Integration tests for [feature]
+
+### Build Dependencies
+For each build manifest relevant to the ticket:
+- `path/to/pom.xml:line-line` — Dependency `groupId:artifactId` present/absent
+- `path/to/build.gradle:line` — Dependency `group:name` present/absent
 
 ### Unresolved
 Items you searched for but could not find (important for the planner to know):

@@ -32,6 +32,7 @@ class ValidationFinding:
     line_number: int | None = None  # Optional: line in the plan where issue was found
     suggestion: str | None = None  # Optional: how to fix
     metadata: dict[str, Any] = field(default_factory=dict)  # Structured data for fixers
+    repair_worthy: bool = False  # If True, triggers AI fix even for WARNING findings
 
 
 @dataclass
@@ -43,6 +44,8 @@ class ValidationContext:
     ticket_signals: list[str] = field(
         default_factory=list
     )  # Category signals (e.g., "metric", "alert")
+    ticket_files_to_modify: list[str] = field(default_factory=list)
+    ticket_acceptance_criteria: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -70,6 +73,13 @@ class ValidationReport:
     @property
     def info_count(self) -> int:
         return sum(1 for f in self.findings if f.severity == ValidationSeverity.INFO)
+
+    @property
+    def has_repair_worthy(self) -> bool:
+        """True if any finding is ERROR or a repair-worthy WARNING."""
+        return self.has_errors or any(
+            f.repair_worthy and f.severity == ValidationSeverity.WARNING for f in self.findings
+        )
 
 
 class Validator(ABC):

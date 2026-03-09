@@ -94,6 +94,9 @@ class WorkflowState:
     # Ticket signals extracted from ticket text (e.g., "metric", "alert", "migration")
     ticket_signals: list[str] = field(default_factory=list)
 
+    # Structured fields extracted from ticket description (e.g., "Files to Modify", "Acceptance Criteria")
+    ticket_structured_fields: dict[str, list[str]] = field(default_factory=dict)
+
     # Conflict detection (Fail-Fast Semantic Check)
     # Detects semantic conflicts between ticket description and user constraints
     conflict_detected: bool = False
