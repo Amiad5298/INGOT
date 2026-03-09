@@ -2528,6 +2528,617 @@ class ClaimConsistencyValidator(Validator):
                 break  # Only report once per field/class pair
 
 
+# =============================================================================
+# Phase 5 — Diagnostic & Improvement Validators (F1-F6)
+# =============================================================================
+
+
+class EntityDuplicationValidator(Validator):
+    """Detect plan directives that create types already available via imports (F1).
+
+    For each ``NEW_FILE`` or "Create" directive, checks whether the proposed
+    type name already exists in the ``import_index`` (populated by ImportIndexer
+    from import/require/using statements in local source files).  A match means
+    the type is already available from an external dependency and creating it
+    would cause a namespace collision.
+
+    Severity: ERROR.  repair_worthy: True.
+    """
+
+    # Matches "Create <TypeName>" or "Create a new <TypeName>" in plan prose.
+    _CREATE_DIRECTIVE_RE = re.compile(
+        r"(?:Create|Add|Introduce)\s+(?:a\s+new\s+)?`?([A-Z][A-Za-z0-9_]+)`?",
+        re.IGNORECASE,
+    )
+
+    # Matches class/interface declarations inside code blocks.
+    _CLASS_DECL_RE = re.compile(
+        r"(?:class|interface|enum|record|struct)\s+([A-Z][A-Za-z0-9_]+)",
+    )
+
+    @property
+    def name(self) -> str:
+        return "Entity Duplication"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+        import_index = context.import_index
+        if not import_index:
+            return findings
+
+        proposed_types: set[str] = set()
+
+        # 1. Types from NEW_FILE markers + surrounding code blocks
+        for m in NEW_FILE_MARKER_RE.finditer(content):
+            # Search nearby lines for class declarations
+            start = max(0, m.start() - 200)
+            end = min(len(content), m.end() + 2000)
+            region = content[start:end]
+            for cm in self._CLASS_DECL_RE.finditer(region):
+                proposed_types.add(cm.group(1))
+
+        # 2. Types from "Create <TypeName>" directives in prose (outside code blocks)
+        cb_starts, cb_ends = _build_code_block_ranges(content)
+        for m in self._CREATE_DIRECTIVE_RE.finditer(content):
+            if _is_inside_code_block(cb_starts, cb_ends, m.start()):
+                continue
+            proposed_types.add(m.group(1))
+
+        # 3. Cross-reference against import index
+        for type_name in proposed_types:
+            if type_name in import_index:
+                import_paths = import_index[type_name]
+                paths_str = ", ".join(sorted(import_paths)[:3])
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.ERROR,
+                        message=(
+                            f"Plan proposes creating '{type_name}' but it is already "
+                            f"imported in local source files from: {paths_str}"
+                        ),
+                        suggestion=(
+                            f"Use the existing '{type_name}' from its current import "
+                            f"path instead of creating a duplicate."
+                        ),
+                        repair_worthy=True,
+                        metadata={"type_name": type_name, "import_paths": sorted(import_paths)},
+                    )
+                )
+
+        return findings
+
+
+class ConventionAdherenceValidator(Validator):
+    """Check that new components apply sibling wrapping/decorating patterns (F2).
+
+    When a plan proposes adding a new element to a collection (e.g., a new
+    action/handler/bean), checks whether existing siblings in the convention
+    report share wrapping patterns (e.g., metrics decorators) that the new
+    component should also apply.
+
+    Severity: WARNING.  repair_worthy: True.
+    """
+
+    # Patterns that indicate wrapping/decorating in code blocks.
+    _WRAPPER_PATTERNS = [
+        re.compile(r"(?:wrap|decorate|instrument|intercept|observe|meter)\s*\(", re.IGNORECASE),
+        re.compile(r"@(?:Timed|Counted|Metered|Traced|Observed|Monitored)\b"),
+        re.compile(r"\.(?:record|increment|observe|time|track)\s*\(", re.IGNORECASE),
+        re.compile(r"Metrics?\.\w+\s*\(", re.IGNORECASE),
+        re.compile(r"with(?:Metrics|Tracing|Logging|Retry|CircuitBreaker)\s*\(", re.IGNORECASE),
+    ]
+
+    @property
+    def name(self) -> str:
+        return "Convention Adherence"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+        convention_report = context.convention_report
+        if not convention_report:
+            return findings
+
+        # convention_report maps collection_id -> list of wrapping pattern descriptions.
+        # Check if proposed new components in the plan apply those patterns.
+        impl_text = _extract_plan_sections(content, ["Implementation Steps"])
+        if not impl_text:
+            return findings
+
+        for collection_id, patterns in convention_report.items():
+            if not patterns:
+                continue
+            # Check if collection is referenced in the plan
+            if collection_id.lower() not in impl_text.lower():
+                continue
+            # Check if wrapping patterns are applied to the NEW component.
+            # Extract the wrapper function/method name from the pattern description
+            # (e.g., "metricsDecorator.wrap()" → "metricsDecorator.wrap").
+            missing_patterns: list[str] = []
+            for pattern_desc in patterns:
+                # Build a regex that finds the wrapper being applied to *something new*
+                # (not just mentioned in a comment about existing usage).
+                wrapper_name = pattern_desc.rstrip("()")
+                # Look for the wrapper being called with a NEW argument (not in a comment)
+                # Strategy: find code lines containing the wrapper that don't start with //
+                wrapper_applied = False
+                for line in impl_text.split("\n"):
+                    stripped = line.strip()
+                    # Skip comment lines
+                    if stripped.startswith("//") or stripped.startswith("#"):
+                        continue
+                    if wrapper_name.lower() in stripped.lower():
+                        wrapper_applied = True
+                        break
+                if not wrapper_applied:
+                    missing_patterns.append(pattern_desc)
+            if missing_patterns:
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            f"New component added to '{collection_id}' but missing "
+                            f"sibling conventions: {', '.join(missing_patterns)}"
+                        ),
+                        suggestion=(
+                            f"Apply the same wrapping patterns used by other members of "
+                            f"'{collection_id}': {', '.join(missing_patterns)}"
+                        ),
+                        repair_worthy=True,
+                    )
+                )
+
+        return findings
+
+
+class TestScenarioDepthValidator(Validator):
+    """Enforce minimum test scenario depth per test entry (F3).
+
+    Scans the Testing Strategy section for test entries and counts distinct
+    behavioral scenarios.  Requires at minimum 3 per test entry: happy path,
+    error/failure path, and edge case.
+
+    Severity: WARNING.  repair_worthy: conditional (True when plan involves
+    side-effect changes like event emission, state changes, or external calls).
+    """
+
+    _MIN_SCENARIOS = 3
+
+    # Patterns indicating a behavioral scenario description.
+    _SCENARIO_RE = re.compile(
+        r"(?:"
+        r"(?:verify|assert|test|check|ensure|validate|confirm)\s+(?:that\s+)?\w+"
+        r"|happy\s*path"
+        r"|error\s*(?:path|case|handling|scenario)"
+        r"|failure\s*(?:path|case|scenario)"
+        r"|edge\s*case"
+        r"|invalid\s+\w+"
+        r"|not\s+found"
+        r"|timeout"
+        r"|null|empty"
+        r"|concurrent"
+        r"|duplicate"
+        r"|missing\s+\w+"
+        r"|unauthorized"
+        r"|forbidden"
+        r")",
+        re.IGNORECASE,
+    )
+
+    # Patterns indicating the plan involves side effects (triggers repair_worthy).
+    _SIDE_EFFECT_RE = re.compile(
+        r"\b(?:emit|publish|send|dispatch|fire|notify|trigger|produce)\s+"
+        r"(?:an?\s+)?(?:event|message|notification|signal|command)",
+        re.IGNORECASE,
+    )
+
+    @property
+    def name(self) -> str:
+        return "Test Scenario Depth"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        testing_text = _extract_plan_sections(content, ["Testing Strategy"])
+        if not testing_text:
+            return findings
+
+        has_side_effects = bool(self._SIDE_EFFECT_RE.search(content))
+
+        # Parse test entries: look for table rows or bullet items with test file references.
+        # Table pattern: | Component | TestFile | Scenarios |
+        test_entries = self._extract_test_entries(testing_text)
+
+        for entry_label, entry_text in test_entries:
+            scenarios = self._SCENARIO_RE.findall(entry_text)
+            unique_scenarios = len({s.lower().strip() for s in scenarios})
+            if unique_scenarios < self._MIN_SCENARIOS:
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            f"Test entry '{entry_label}' has {unique_scenarios} "
+                            f"scenario(s) but minimum {self._MIN_SCENARIOS} required "
+                            f"(happy path, error path, edge case)."
+                        ),
+                        suggestion=(
+                            f"Enumerate at least {self._MIN_SCENARIOS} distinct scenarios: "
+                            f"(a) happy-path, (b) error/failure, (c) edge case. "
+                            f"Use format: '- [ ] Scenario: <description>'."
+                        ),
+                        repair_worthy=has_side_effects,
+                    )
+                )
+
+        return findings
+
+    @staticmethod
+    def _extract_test_entries(testing_text: str) -> list[tuple[str, str]]:
+        """Extract (label, content) pairs for each test entry."""
+        entries: list[tuple[str, str]] = []
+
+        # Strategy 1: Markdown table rows (skip header + separator rows).
+        table_row_re = re.compile(r"^\|(.+)\|$", re.MULTILINE)
+        rows = table_row_re.findall(testing_text)
+        data_rows = [r for r in rows if not re.match(r"^[\s|:-]+$", r)]
+        # Skip the header row (first data row)
+        for row in data_rows[1:]:
+            cells = [c.strip() for c in row.split("|")]
+            label = cells[0] if cells else "unknown"
+            row_text = " ".join(cells)
+            entries.append((label, row_text))
+
+        # Strategy 2: Bullet list items with backtick-quoted file references.
+        if not entries:
+            bullet_re = re.compile(
+                r"^[-*]\s+.*?`([^`]+(?:test|spec)[^`]*)`.*$",
+                re.IGNORECASE | re.MULTILINE,
+            )
+            for m in bullet_re.finditer(testing_text):
+                # Gather all text until the next bullet or end of section
+                start = m.start()
+                next_bullet = testing_text.find("\n-", start + 1)
+                if next_bullet == -1:
+                    next_bullet = testing_text.find("\n*", start + 1)
+                if next_bullet == -1:
+                    next_bullet = len(testing_text)
+                label = m.group(1)
+                entry_text = testing_text[start:next_bullet]
+                entries.append((label, entry_text))
+
+        return entries
+
+
+class OrderingConcretenesValidator(Validator):
+    """Detect vague ordering instructions without concrete anchors (F5).
+
+    Flags ordering verbs ("reorder", "move before", "should precede") that
+    lack concrete anchors such as line numbers, named reference points, or
+    before/after code blocks showing the target order.
+
+    Severity: WARNING.  repair_worthy: True.
+    """
+
+    _ORDERING_VERBS_RE = re.compile(
+        r"\b(?:reorder|re-order|move\s+before|move\s+after|should\s+precede|"
+        r"should\s+follow|swap\s+(?:the\s+)?order|change\s+(?:the\s+)?order|"
+        r"rearrange|place\s+before|place\s+after|insert\s+before|insert\s+after|"
+        r"needs?\s+reordering|must\s+come\s+(?:before|after))\b",
+        re.IGNORECASE,
+    )
+
+    # Patterns that indicate concrete anchors (checked in +-300 char window).
+    _PROXIMITY_ANCHOR_PATTERNS = [
+        re.compile(r":\d+"),  # Line number reference
+        re.compile(r"line\s+\d+", re.IGNORECASE),
+        re.compile(r"(?:before|after)\s+`[^`]+`"),  # Named reference
+    ]
+
+    @property
+    def name(self) -> str:
+        return "Ordering Concreteness"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        impl_text = _extract_plan_sections(content, ["Implementation Steps"])
+        if not impl_text:
+            return findings
+
+        cb_starts, cb_ends = _build_code_block_ranges(impl_text)
+
+        for m in self._ORDERING_VERBS_RE.finditer(impl_text):
+            if _is_inside_code_block(cb_starts, cb_ends, m.start()):
+                continue
+
+            # Check a +-300 char window for proximity anchors (line refs, named refs)
+            window_start = max(0, m.start() - 300)
+            window_end = min(len(impl_text), m.end() + 300)
+            window = impl_text[window_start:window_end]
+
+            has_anchor = any(ap.search(window) for ap in self._PROXIMITY_ANCHOR_PATTERNS)
+
+            # A code block counts as anchor only if it appears AFTER the verb
+            # (showing the target order) and contains at least 2 non-comment lines.
+            if not has_anchor:
+                forward_text = impl_text[m.end() : min(len(impl_text), m.end() + 500)]
+                code_block_match = re.search(r"```\w*\n(.*?)```", forward_text, re.DOTALL)
+                if code_block_match:
+                    block_body = code_block_match.group(1)
+                    non_comment = [
+                        ln
+                        for ln in block_body.strip().split("\n")
+                        if ln.strip()
+                        and not ln.strip().startswith("//")
+                        and not ln.strip().startswith("#")
+                    ]
+                    if len(non_comment) >= 2:
+                        has_anchor = True
+
+            if not has_anchor:
+                verb = m.group(0)
+                line_no = impl_text[: m.start()].count("\n") + 1
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            f"Ordering instruction '{verb}' lacks concrete anchors "
+                            f"(line numbers, named references, or target-order code block)."
+                        ),
+                        line_number=line_no,
+                        suggestion=(
+                            "Specify the exact target order using line numbers, "
+                            "before/after named references, or a code block showing "
+                            "the desired ordering."
+                        ),
+                        repair_worthy=True,
+                    )
+                )
+
+        return findings
+
+
+class ContentDrivenRiskValidator(Validator):
+    """Content-triggered risk taxonomy checks beyond signal-driven checklists (F4).
+
+    Extends risk analysis by detecting plan content patterns (event emission,
+    state machine, external API, DB mutation, scheduled job, notifications)
+    and requiring corresponding risk categories regardless of ticket signals.
+
+    Severity: WARNING.  repair_worthy: False.
+    """
+
+    # Content triggers → required risk mentions.
+    _CONTENT_RISK_CHECKLISTS: list[tuple[re.Pattern[str], list[tuple[list[str], str]]]] = [
+        (
+            # Event emission
+            re.compile(
+                r"\b(?:emit|publish|send|dispatch|fire|produce)\s+"
+                r"(?:an?\s+)?(?:event|message|notification|signal|command)",
+                re.IGNORECASE,
+            ),
+            [
+                (
+                    ["idempoten", "duplicate", "dedup", "exactly.once"],
+                    "Idempotency / duplicate handling",
+                ),
+                (["ordering", "order guarantee", "sequence", "out.of.order"], "Event ordering"),
+                (
+                    ["downstream", "consumer", "subscriber", "handler", "listener"],
+                    "Downstream consumer impact",
+                ),
+            ],
+        ),
+        (
+            # State machine / transition
+            re.compile(
+                r"\b(?:state\s+machine|state\s+transition|transition\s+(?:from|to)|"
+                r"guard\s+(?:condition|clause)|finite\s+state)",
+                re.IGNORECASE,
+            ),
+            [
+                (["transition order", "ordering", "sequence"], "Transition ordering"),
+                (
+                    ["concurrent", "race condition", "thread.safe", "atomic"],
+                    "Concurrent state access",
+                ),
+                (["rollback", "revert", "undo"], "State rollback strategy"),
+            ],
+        ),
+        (
+            # External API call
+            re.compile(
+                r"\b(?:external\s+API|third.party\s+(?:API|service)|REST\s+call|HTTP\s+(?:call|request)|"
+                r"API\s+(?:call|request|invocation))\b",
+                re.IGNORECASE,
+            ),
+            [
+                (["timeout", "socket timeout", "connection timeout"], "Timeout handling"),
+                (["retry", "backoff", "retry policy"], "Retry strategy"),
+                (["circuit.breaker", "fallback", "degraded"], "Circuit breaker / fallback"),
+            ],
+        ),
+        (
+            # Database mutation — SQL keywords are case-sensitive (uppercase only)
+            # to avoid matching generic prose like "update the config".
+            re.compile(
+                r"(?:"
+                r"\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|"
+                r"ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE\s+TABLE)\b"
+                r"|\b(?:database\s+migration|schema\s+change|data\s+migration)\b"
+                r")",
+            ),
+            [
+                (["data integrity", "constraint", "validation"], "Data integrity"),
+                (["rollback", "revert", "undo"], "Rollback strategy"),
+                (["concurrent", "lock", "deadlock", "race"], "Concurrency handling"),
+            ],
+        ),
+        (
+            # Scheduled job / cron
+            re.compile(
+                r"\b(?:scheduled\s+(?:job|task)|cron|periodic|recurring\s+(?:job|task)|"
+                r"@Scheduled|timer\s+trigger)\b",
+                re.IGNORECASE,
+            ),
+            [
+                (["idempoten", "duplicate", "dedup"], "Job idempotency"),
+                (["overlap", "concurrent execution", "already running"], "Overlap handling"),
+                (["missed", "catch.up", "backfill"], "Missed execution handling"),
+            ],
+        ),
+        (
+            # User-visible notification
+            re.compile(
+                r"\b(?:notification\s+email|send\s+email|email\s+notification|"
+                r"push\s+notification|SMS|user\s+notification|alert\s+user)\b",
+                re.IGNORECASE,
+            ),
+            [
+                (
+                    ["duplicate", "dedup", "idempoten", "exactly.once"],
+                    "Duplicate notification prevention",
+                ),
+                (["opt.out", "unsubscribe", "preference"], "Opt-out / preference handling"),
+                (["delivery failure", "bounce", "retry"], "Delivery failure handling"),
+            ],
+        ),
+    ]
+
+    @property
+    def name(self) -> str:
+        return "Content-Driven Risk"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        risks_text = _extract_plan_sections(content, ["Potential Risks"])
+        if not risks_text:
+            return findings
+
+        # Also scan Technical Approach and Out of Scope for risk coverage.
+        extended_text = (
+            risks_text
+            + "\n"
+            + _extract_plan_sections(content, ["Technical Approach", "Out of Scope"])
+        )
+        extended_lower = extended_text.lower()
+        content_lower = content.lower()
+
+        for trigger_re, checklist in self._CONTENT_RISK_CHECKLISTS:
+            if not trigger_re.search(content_lower):
+                continue
+            missing: list[str] = []
+            for keywords, label in checklist:
+                if not any(kw in extended_lower for kw in keywords):
+                    missing.append(label)
+            if missing:
+                trigger_desc = trigger_re.pattern[:50].replace("\\b", "").replace("\\s+", " ")
+                findings.append(
+                    ValidationFinding(
+                        validator_name=self.name,
+                        severity=ValidationSeverity.WARNING,
+                        message=(
+                            f"Plan content indicates '{trigger_desc.strip()[:40]}...' "
+                            f"but Potential Risks does not address: {', '.join(missing)}"
+                        ),
+                        suggestion=(
+                            "Address each risk category in the Potential Risks section, "
+                            "Technical Approach, or Out of Scope."
+                        ),
+                    )
+                )
+
+        return findings
+
+
+class DownstreamImpactValidator(Validator):
+    """Detect event/signal emission without downstream impact analysis (F6).
+
+    When the plan proposes emitting events, publishing messages, or sending
+    signals, checks that downstream consumers, handlers, and user-visible
+    side effects are identified and discussed.
+
+    Severity: WARNING.  repair_worthy: conditional (True when plan mentions
+    user-visible side effects like notifications or emails).
+    """
+
+    # Detects event/signal production actions.
+    _EMIT_RE = re.compile(
+        r"\b(?:emit|publish|send|dispatch|fire|produce|broadcast|enqueue|raise)\s+"
+        r"(?:an?\s+)?(?:event|message|notification|signal|command|"
+        r"domain\s+event|integration\s+event|application\s+event)",
+        re.IGNORECASE,
+    )
+
+    # Keywords indicating downstream impact analysis is present.
+    _DOWNSTREAM_KEYWORDS = [
+        "downstream",
+        "consumer",
+        "subscriber",
+        "handler",
+        "listener",
+        "receives this",
+        "consumed by",
+        "handled by",
+        "triggers",
+        "side effect",
+        "end-to-end",
+        "event flow",
+        "event handler",
+        "message handler",
+    ]
+
+    # Patterns indicating user-visible side effects (elevates repair_worthy).
+    _USER_VISIBLE_RE = re.compile(
+        r"\b(?:email|notification|SMS|push\s+notification|"
+        r"user.facing|customer.visible|alert\s+(?:user|customer))\b",
+        re.IGNORECASE,
+    )
+
+    @property
+    def name(self) -> str:
+        return "Downstream Impact"
+
+    def validate(self, content: str, context: ValidationContext) -> list[ValidationFinding]:
+        findings: list[ValidationFinding] = []
+
+        emit_matches = list(self._EMIT_RE.finditer(content))
+        if not emit_matches:
+            return findings
+
+        # Check for downstream impact discussion anywhere in the plan.
+        content_lower = content.lower()
+        has_downstream_analysis = any(kw in content_lower for kw in self._DOWNSTREAM_KEYWORDS)
+
+        if not has_downstream_analysis:
+            has_user_visible = bool(self._USER_VISIBLE_RE.search(content))
+            # Deduplicate emit verbs for a clearer message.
+            emit_verbs = sorted({m.group(0).strip() for m in emit_matches})
+            findings.append(
+                ValidationFinding(
+                    validator_name=self.name,
+                    severity=ValidationSeverity.WARNING,
+                    message=(
+                        f"Plan proposes signal-producing actions "
+                        f"({', '.join(emit_verbs[:3])}) but does not describe "
+                        f"downstream consumers, handlers, or end-to-end impact."
+                    ),
+                    suggestion=(
+                        "Add a section or paragraph describing: (1) what consumes "
+                        "the emitted event/message, (2) what user-visible side "
+                        "effects result, (3) error handling for the downstream path."
+                    ),
+                    repair_worthy=has_user_visible,
+                )
+            )
+
+        return findings
+
+
 def create_plan_validator_registry(
     researcher_output: str = "",
     file_index: FileIndex | None = None,
@@ -2561,6 +3172,13 @@ def create_plan_validator_registry(
     registry.register(ConfigurationCompletenessValidator())
     registry.register(TestScenarioValidator())
     registry.register(ClaimConsistencyValidator(file_index=file_index))
+    # Phase 5 — diagnostic & improvement validators (F1-F6)
+    registry.register(EntityDuplicationValidator())
+    registry.register(ConventionAdherenceValidator())
+    registry.register(TestScenarioDepthValidator())
+    registry.register(OrderingConcretenesValidator())
+    registry.register(ContentDrivenRiskValidator())
+    registry.register(DownstreamImpactValidator())
     return registry
 
 
@@ -2586,5 +3204,11 @@ __all__ = [
     "ConfigurationCompletenessValidator",
     "TestScenarioValidator",
     "ClaimConsistencyValidator",
+    "EntityDuplicationValidator",
+    "ConventionAdherenceValidator",
+    "TestScenarioDepthValidator",
+    "OrderingConcretenesValidator",
+    "ContentDrivenRiskValidator",
+    "DownstreamImpactValidator",
     "create_plan_validator_registry",
 ]

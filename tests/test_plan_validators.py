@@ -15,11 +15,16 @@ from ingot.validation.plan_validators import (
     CitationContentValidator,
     ClaimConsistencyValidator,
     ConfigurationCompletenessValidator,
+    ContentDrivenRiskValidator,
+    ConventionAdherenceValidator,
     DiscoveryCoverageValidator,
+    DownstreamImpactValidator,
+    EntityDuplicationValidator,
     FileExistsValidator,
     ImplementationDetailValidator,
     NamingConsistencyValidator,
     OperationalCompletenessValidator,
+    OrderingConcretenesValidator,
     PatternSourceValidator,
     PrerequisiteConsistencyValidator,
     RegistrationIdempotencyValidator,
@@ -27,6 +32,7 @@ from ingot.validation.plan_validators import (
     RiskCategoriesValidator,
     SnippetCompletenessValidator,
     TestCoverageValidator,
+    TestScenarioDepthValidator,
     TestScenarioValidator,
     TicketReconciliationValidator,
     UnresolvedMarkersValidator,
@@ -451,7 +457,7 @@ class TestValidatorRegistry:
 
     def test_factory_returns_all_validators(self):
         registry = create_plan_validator_registry()
-        assert len(registry.validators) == 19
+        assert len(registry.validators) == 25
 
     def test_factory_passes_researcher_output(self):
         researcher = "### Interface & Class Hierarchy\n#### `Foo`\n"
@@ -2335,7 +2341,7 @@ class TestRegistryIncludesNewValidators:
 
     def test_registry_has_nineteen_validators(self):
         registry = create_plan_validator_registry()
-        assert len(registry.validators) == 19
+        assert len(registry.validators) == 25
 
     def test_registry_includes_ticket_reconciliation(self):
         registry = create_plan_validator_registry()
@@ -3885,3 +3891,691 @@ class TestRepairLoop:
         )
         # INFO findings never trigger repair, even with repair_worthy=True
         assert report.has_repair_worthy is False
+
+
+# =============================================================================
+# TestEntityDuplicationValidator
+# =============================================================================
+
+
+class TestEntityDuplicationValidator:
+    """Tests for EntityDuplicationValidator (F1)."""
+
+    def _validate(
+        self, content: str, import_index: dict[str, set[str]] | None = None
+    ) -> list[ValidationFinding]:
+        v = EntityDuplicationValidator()
+        ctx = ValidationContext(import_index=import_index or {})
+        return v.validate(content, ctx)
+
+    def test_no_import_index_returns_empty(self):
+        plan = "## Implementation Steps\n1. Create `MyClass`.\n"
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_new_file_with_existing_import_produces_error(self):
+        plan = """\
+## Implementation Steps
+1. Create a new event class.
+   <!-- NEW_FILE -->
+```java
+public class GuardEvaluatedEvent {
+    private final String guardName;
+}
+```
+"""
+        findings = self._validate(
+            plan,
+            import_index={"GuardEvaluatedEvent": {"com.example.events.GuardEvaluatedEvent"}},
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.ERROR
+        assert "GuardEvaluatedEvent" in findings[0].message
+        assert findings[0].repair_worthy is True
+
+    def test_create_directive_with_existing_import_produces_error(self):
+        plan = """\
+## Implementation Steps
+1. Create a new `OrderCancelledEvent` to represent cancellation.
+"""
+        findings = self._validate(
+            plan,
+            import_index={"OrderCancelledEvent": {"com.example.events.OrderCancelledEvent"}},
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.ERROR
+        assert "OrderCancelledEvent" in findings[0].message
+
+    def test_no_collision_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Create a new `BrandNewClass` handler.
+   <!-- NEW_FILE -->
+```java
+public class BrandNewClass {}
+```
+"""
+        findings = self._validate(
+            plan,
+            import_index={"SomeOtherClass": {"com.example.SomeOtherClass"}},
+        )
+        assert findings == []
+
+    def test_code_block_class_decl_without_new_file_marker_no_match(self):
+        """Class declarations in code blocks without NEW_FILE marker are not flagged."""
+        plan = """\
+## Implementation Steps
+1. Modify existing file.
+```java
+public class ExistingService {
+    // modifications
+}
+```
+"""
+        findings = self._validate(
+            plan,
+            import_index={"ExistingService": {"com.example.ExistingService"}},
+        )
+        assert findings == []
+
+    def test_multiple_import_paths_shown(self):
+        plan = """\
+## Implementation Steps
+1. Add a new `DuplicateType`.
+"""
+        findings = self._validate(
+            plan,
+            import_index={
+                "DuplicateType": {
+                    "com.lib1.DuplicateType",
+                    "com.lib2.DuplicateType",
+                }
+            },
+        )
+        assert len(findings) == 1
+        assert "com.lib1.DuplicateType" in findings[0].message
+        assert "com.lib2.DuplicateType" in findings[0].message
+
+    def test_fixture_f1_detects_duplication(self):
+        """Regression: plan_external_entity_dup.md should trigger entity duplication."""
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).parent / "fixtures" / "plan_regression" / "plan_external_entity_dup.md"
+        )
+        content = fixture.read_text()
+        findings = self._validate(
+            content,
+            import_index={"GuardEvaluatedEvent": {"com.example.events.GuardEvaluatedEvent"}},
+        )
+        assert len(findings) >= 1
+        assert any(f.severity == ValidationSeverity.ERROR for f in findings)
+
+
+# =============================================================================
+# TestConventionAdherenceValidator
+# =============================================================================
+
+
+class TestConventionAdherenceValidator:
+    """Tests for ConventionAdherenceValidator (F2)."""
+
+    def _validate(
+        self, content: str, convention_report: dict[str, list[str]] | None = None
+    ) -> list[ValidationFinding]:
+        v = ConventionAdherenceValidator()
+        ctx = ValidationContext(convention_report=convention_report or {})
+        return v.validate(content, ctx)
+
+    def test_no_convention_report_returns_empty(self):
+        plan = "## Implementation Steps\n1. Add a handler.\n"
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_missing_convention_produces_warning(self):
+        plan = """\
+## Implementation Steps
+1. Register in the `OrderStateMachineConfig`:
+```java
+.action(cancelOrderAction)
+```
+"""
+        findings = self._validate(
+            plan,
+            convention_report={
+                "OrderStateMachineConfig": ["metricsDecorator.wrap()"],
+            },
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "metricsDecorator" in findings[0].message
+        assert findings[0].repair_worthy is True
+
+    def test_convention_present_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Register in the `OrderStateMachineConfig` with wrap:
+```java
+.action(metricsDecorator.wrap(cancelOrderAction))
+```
+"""
+        findings = self._validate(
+            plan,
+            convention_report={
+                "OrderStateMachineConfig": ["metricsDecorator.wrap()"],
+            },
+        )
+        # The wrapper pattern regex matches metricsDecorator, so no findings
+        assert findings == []
+
+    def test_collection_not_referenced_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Add a REST endpoint.
+"""
+        findings = self._validate(
+            plan,
+            convention_report={
+                "UnrelatedConfig": ["someWrapper.wrap()"],
+            },
+        )
+        assert findings == []
+
+    def test_fixture_f2_detects_convention_miss(self):
+        """Regression: plan_convention_miss.md should trigger convention adherence."""
+        from pathlib import Path
+
+        fixture = Path(__file__).parent / "fixtures" / "plan_regression" / "plan_convention_miss.md"
+        content = fixture.read_text()
+        findings = self._validate(
+            content,
+            convention_report={
+                "OrderStateMachineConfig": ["metricsDecorator.wrap()"],
+            },
+        )
+        assert len(findings) >= 1
+        assert any(f.severity == ValidationSeverity.WARNING for f in findings)
+
+
+# =============================================================================
+# TestTestScenarioDepthValidator
+# =============================================================================
+
+
+class TestTestScenarioDepthValidator:
+    """Tests for TestScenarioDepthValidator (F3)."""
+
+    def _validate(self, content: str) -> list[ValidationFinding]:
+        v = TestScenarioDepthValidator()
+        return v.validate(content, ValidationContext())
+
+    def test_sufficient_scenarios_no_findings(self):
+        plan = """\
+## Testing Strategy
+| Component | Test file | Key scenarios |
+|---|---|---|
+| `MyService` | `MyServiceTest.java` | verify happy path returns data, verify error on null input, verify edge case empty list |
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_shallow_scenarios_produces_warning(self):
+        plan = """\
+## Testing Strategy
+| Component | Test file | Key scenarios |
+|---|---|---|
+| `MyService` | `MyServiceTest.java` | basic test |
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "scenario" in findings[0].message.lower()
+
+    def test_no_testing_section_returns_empty(self):
+        plan = "## Summary\nJust a summary.\n"
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_repair_worthy_when_side_effects(self):
+        plan = """\
+## Summary
+Emit an event when the guard evaluates.
+
+## Testing Strategy
+| Component | Test file | Key scenarios |
+|---|---|---|
+| `GuardFailureNotifier` | `GuardFailureNotifierTest.java` | basic test |
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].repair_worthy is True
+
+    def test_not_repair_worthy_without_side_effects(self):
+        plan = """\
+## Testing Strategy
+| Component | Test file | Key scenarios |
+|---|---|---|
+| `SimpleService` | `SimpleServiceTest.java` | basic test |
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].repair_worthy is False
+
+    def test_bullet_list_test_entries(self):
+        plan = """\
+## Testing Strategy
+- `MyServiceTest.java`: basic check
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+
+    def test_multiple_entries_all_checked(self):
+        plan = """\
+## Testing Strategy
+| Component | Test file | Key scenarios |
+|---|---|---|
+| `ServiceA` | `ServiceATest.java` | basic |
+| `ServiceB` | `ServiceBTest.java` | verify happy path, verify error, verify edge case |
+"""
+        findings = self._validate(plan)
+        # Only ServiceA should be flagged
+        assert len(findings) == 1
+        assert "ServiceA" in findings[0].message
+
+    def test_fixture_f3_detects_shallow_tests(self):
+        """Regression: plan_shallow_tests.md should trigger test scenario depth."""
+        from pathlib import Path
+
+        fixture = Path(__file__).parent / "fixtures" / "plan_regression" / "plan_shallow_tests.md"
+        content = fixture.read_text()
+        findings = self._validate(content)
+        assert len(findings) >= 1
+        assert any(f.severity == ValidationSeverity.WARNING for f in findings)
+
+
+# =============================================================================
+# TestOrderingConcretenesValidator
+# =============================================================================
+
+
+class TestOrderingConcretenesValidator:
+    """Tests for OrderingConcretenesValidator (F5)."""
+
+    def _validate(self, content: str) -> list[ValidationFinding]:
+        v = OrderingConcretenesValidator()
+        return v.validate(content, ValidationContext())
+
+    def test_no_ordering_verbs_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Add a new method to `MyService`.
+2. Update the configuration.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_vague_reorder_produces_warning(self):
+        plan = """\
+## Implementation Steps
+1. The transitions need reordering to fix the guard evaluation.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "reordering" in findings[0].message.lower()
+        assert findings[0].repair_worthy is True
+
+    def test_concrete_reorder_with_line_number_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Reorder the transitions at `StateMachineConfig.java:45` so guard precedes action.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_concrete_reorder_with_before_reference_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Move the error handler before `successHandler` registration.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_concrete_reorder_with_code_block_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Reorder the handlers as shown:
+```java
+// Target order:
+errorHandler.register();
+successHandler.register();
+```
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_move_before_without_anchor_produces_warning(self):
+        plan = """\
+## Implementation Steps
+1. The handlers should precede the main processing pipeline.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+
+    def test_ordering_inside_code_block_ignored(self):
+        plan = """\
+## Implementation Steps
+1. Update the config:
+```java
+// This code needs reordering internally
+list.sort();
+```
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_no_implementation_section_returns_empty(self):
+        plan = "## Summary\nJust a summary.\n"
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_fixture_f5_detects_vague_ordering(self):
+        """Regression: plan_vague_ordering.md should trigger ordering concreteness."""
+        from pathlib import Path
+
+        fixture = Path(__file__).parent / "fixtures" / "plan_regression" / "plan_vague_ordering.md"
+        content = fixture.read_text()
+        findings = self._validate(content)
+        assert len(findings) >= 1
+        assert any(f.severity == ValidationSeverity.WARNING for f in findings)
+
+
+# =============================================================================
+# TestContentDrivenRiskValidator
+# =============================================================================
+
+
+class TestContentDrivenRiskValidator:
+    """Tests for ContentDrivenRiskValidator (F4)."""
+
+    def _validate(self, content: str) -> list[ValidationFinding]:
+        v = ContentDrivenRiskValidator()
+        return v.validate(content, ValidationContext())
+
+    def test_no_triggers_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Add a simple getter method.
+
+## Potential Risks or Considerations
+- None identified.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_event_emission_missing_risks(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when the guard evaluates.
+   Publish event to the event bus.
+
+## Potential Risks or Considerations
+- **External dependencies**: None identified.
+"""
+        findings = self._validate(plan)
+        assert len(findings) >= 1
+        assert any("Idempotency" in f.message for f in findings)
+
+    def test_event_emission_with_covered_risks_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when the guard evaluates.
+
+## Potential Risks or Considerations
+- **Idempotency / duplicate handling**: Events are deduplicated by ID.
+- **Event ordering**: Events are ordered by timestamp, sequence guaranteed.
+- **Downstream consumer impact**: AnalyticsHandler consumes events.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_state_machine_missing_risks(self):
+        plan = """\
+## Implementation Steps
+1. Add a new state transition to the state machine.
+
+## Potential Risks or Considerations
+- **External dependencies**: None identified.
+"""
+        findings = self._validate(plan)
+        assert len(findings) >= 1
+
+    def test_external_api_missing_risks(self):
+        plan = """\
+## Implementation Steps
+1. Call the external API endpoint to fetch data.
+
+## Potential Risks or Considerations
+- **Performance**: API call adds latency.
+"""
+        findings = self._validate(plan)
+        assert len(findings) >= 1
+        assert any("Timeout" in f.message or "Retry" in f.message for f in findings)
+
+    def test_no_risks_section_returns_empty(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_risks_in_technical_approach_also_count(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when the guard evaluates.
+
+## Technical Approach
+Events are deduplicated (idempotency guaranteed). Event ordering is
+guaranteed by the message broker. All downstream consumers handle errors.
+
+## Potential Risks or Considerations
+- General risks noted in Technical Approach.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_fixture_f4_detects_missing_risks(self):
+        """Regression: plan_missing_risk_categories.md should trigger content-driven risk."""
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).parent
+            / "fixtures"
+            / "plan_regression"
+            / "plan_missing_risk_categories.md"
+        )
+        content = fixture.read_text()
+        findings = self._validate(content)
+        assert len(findings) >= 1
+        assert any(f.severity == ValidationSeverity.WARNING for f in findings)
+
+
+# =============================================================================
+# TestDownstreamImpactValidator
+# =============================================================================
+
+
+class TestDownstreamImpactValidator:
+    """Tests for DownstreamImpactValidator (F6)."""
+
+    def _validate(self, content: str) -> list[ValidationFinding]:
+        v = DownstreamImpactValidator()
+        return v.validate(content, ValidationContext())
+
+    def test_no_emit_no_findings(self):
+        plan = "## Implementation Steps\n1. Add a getter method.\n"
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_emit_without_downstream_produces_warning(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when guard evaluates.
+```java
+eventPublisher.publishEvent(new GuardEvaluatedEvent("OrderGuard", result, context));
+```
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].severity == ValidationSeverity.WARNING
+        assert "downstream" in findings[0].message.lower()
+
+    def test_emit_with_downstream_analysis_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when guard evaluates.
+
+## Technical Approach
+The `GuardEvaluatedEvent` is consumed by the `AnalyticsEventHandler` downstream,
+which records the evaluation result.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_emit_with_consumer_keyword_no_findings(self):
+        plan = """\
+## Implementation Steps
+1. Publish event to notify subscribers.
+
+The event handler listens for this event and processes it.
+"""
+        findings = self._validate(plan)
+        assert findings == []
+
+    def test_repair_worthy_when_user_visible_effects(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when the guard fails. This results in a notification email
+   being sent to the affected user.
+"""
+        findings = self._validate(plan)
+        # Should have finding since no downstream analysis, but "email" is user-visible
+        assert len(findings) == 1
+        assert findings[0].repair_worthy is True
+
+    def test_not_repair_worthy_without_user_visible(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event for internal analytics tracking.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1
+        assert findings[0].repair_worthy is False
+
+    def test_multiple_emit_types_deduplicated(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when guard evaluates.
+2. Publish a message to the queue.
+3. Fire an event for logging.
+"""
+        findings = self._validate(plan)
+        assert len(findings) == 1  # Single finding, not three
+
+    def test_fixture_f6_detects_no_downstream(self):
+        """Regression: plan_no_downstream.md should trigger downstream impact."""
+        from pathlib import Path
+
+        fixture = Path(__file__).parent / "fixtures" / "plan_regression" / "plan_no_downstream.md"
+        content = fixture.read_text()
+        findings = self._validate(content)
+        assert len(findings) >= 1
+        assert any(f.severity == ValidationSeverity.WARNING for f in findings)
+
+
+# =============================================================================
+# TestRegistryIncludesPhase5Validators
+# =============================================================================
+
+
+class TestRegistryIncludesPhase5Validators:
+    """Test that Phase 5 validators (F1-F6) are registered in the factory."""
+
+    def test_registry_includes_entity_duplication(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Entity Duplication" in names
+
+    def test_registry_includes_convention_adherence(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Convention Adherence" in names
+
+    def test_registry_includes_test_scenario_depth(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Test Scenario Depth" in names
+
+    def test_registry_includes_ordering_concreteness(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Ordering Concreteness" in names
+
+    def test_registry_includes_content_driven_risk(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Content-Driven Risk" in names
+
+    def test_registry_includes_downstream_impact(self):
+        registry = create_plan_validator_registry()
+        names = [v.name for v in registry.validators]
+        assert "Downstream Impact" in names
+
+    def test_registry_has_twenty_five_validators(self):
+        registry = create_plan_validator_registry()
+        assert len(registry.validators) == 25
+
+
+# =============================================================================
+# TestCleanFixtureV2PassesAllValidators
+# =============================================================================
+
+
+class TestCleanFixtureV2PassesAllValidators:
+    """Verify the clean V2 fixture produces 0 findings across all validators."""
+
+    def test_clean_v2_fixture_zero_findings(self):
+        from pathlib import Path
+
+        fixture = Path(__file__).parent / "fixtures" / "plan_regression" / "plan_all_good_v2.md"
+        content = fixture.read_text()
+
+        # Run with all Phase 5 validators
+        ctx = ValidationContext(
+            import_index={"SomeUnrelatedType": {"com.example.SomeUnrelatedType"}},
+            convention_report={
+                "ControllerRegistry": ["metricsInterceptor.wrap()"],
+            },
+        )
+
+        validators = [
+            EntityDuplicationValidator(),
+            ConventionAdherenceValidator(),
+            TestScenarioDepthValidator(),
+            OrderingConcretenesValidator(),
+            ContentDrivenRiskValidator(),
+            DownstreamImpactValidator(),
+        ]
+
+        all_findings = []
+        for v in validators:
+            findings = v.validate(content, ctx)
+            all_findings.extend(findings)
+
+        assert all_findings == [], (
+            f"Clean V2 fixture produced {len(all_findings)} finding(s): "
+            + "; ".join(f"{f.validator_name}: {f.message}" for f in all_findings)
+        )

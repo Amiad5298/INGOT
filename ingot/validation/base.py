@@ -46,6 +46,13 @@ class ValidationContext:
     )  # Category signals (e.g., "metric", "alert")
     ticket_files_to_modify: list[str] = field(default_factory=list)
     ticket_acceptance_criteria: list[str] = field(default_factory=list)
+    # import_index: maps short_type_name -> set of full import paths.
+    # Populated by ImportIndexer; used by EntityDuplicationValidator to detect
+    # types available from external dependencies.
+    import_index: dict[str, set[str]] = field(default_factory=dict)
+    # convention_report: maps collection identifiers to their common wrapping patterns.
+    # Populated by SiblingPatternAnalyzer; used by ConventionAdherenceValidator.
+    convention_report: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
