@@ -91,6 +91,12 @@ class WorkflowState:
     # User-provided constraints & preferences
     user_constraints: str = ""
 
+    # Ticket signals extracted from ticket text (e.g., "metric", "alert", "migration")
+    ticket_signals: list[str] = field(default_factory=list)
+
+    # Structured fields extracted from ticket description (e.g., "Files to Modify", "Acceptance Criteria")
+    ticket_structured_fields: dict[str, list[str]] = field(default_factory=dict)
+
     # Conflict detection (Fail-Fast Semantic Check)
     # Detects semantic conflicts between ticket description and user constraints
     conflict_detected: bool = False
@@ -125,6 +131,7 @@ class WorkflowState:
     # Plan validation
     enable_plan_validation: bool = True
     validation_strict: bool = True  # Block workflow on validation errors (vs. warn-and-proceed)
+    researcher_context_budget: int = 12000  # Max chars of researcher output injected into planner
 
     # Re-planning state
     replan_count: int = 0  # Number of execution replans (Step 3 post-review)

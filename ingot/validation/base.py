@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from ingot.utils.logging import log_message
 
@@ -30,6 +31,8 @@ class ValidationFinding:
     message: str
     line_number: int | None = None  # Optional: line in the plan where issue was found
     suggestion: str | None = None  # Optional: how to fix
+    metadata: dict[str, Any] = field(default_factory=dict)  # Structured data for fixers
+    repair_worthy: bool = False  # If True, triggers AI fix even for WARNING findings
 
 
 @dataclass
@@ -38,6 +41,18 @@ class ValidationContext:
 
     repo_root: Path | None = None  # For filesystem checks (must be injected, not auto-discovered)
     ticket_id: str = ""  # Reserved for future validator use
+    ticket_signals: list[str] = field(
+        default_factory=list
+    )  # Category signals (e.g., "metric", "alert")
+    ticket_files_to_modify: list[str] = field(default_factory=list)
+    ticket_acceptance_criteria: list[str] = field(default_factory=list)
+    # import_index: maps short_type_name -> set of full import paths.
+    # Populated by ImportIndexer; used by EntityDuplicationValidator to detect
+    # types available from external dependencies.
+    import_index: dict[str, set[str]] = field(default_factory=dict)
+    # convention_report: maps collection identifiers to their common wrapping patterns.
+    # Populated by SiblingPatternAnalyzer; used by ConventionAdherenceValidator.
+    convention_report: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -65,6 +80,13 @@ class ValidationReport:
     @property
     def info_count(self) -> int:
         return sum(1 for f in self.findings if f.severity == ValidationSeverity.INFO)
+
+    @property
+    def has_repair_worthy(self) -> bool:
+        """True if any finding is ERROR or a repair-worthy WARNING."""
+        return self.has_errors or any(
+            f.repair_worthy and f.severity == ValidationSeverity.WARNING for f in self.findings
+        )
 
 
 class Validator(ABC):

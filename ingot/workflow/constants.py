@@ -30,8 +30,8 @@ RESEARCHER_SECTION_HEADINGS = [
     "### Unresolved",
 ]
 
-# Maximum auto-retry attempts when plan validation finds errors
-MAX_GENERATION_RETRIES = 3
+# Maximum plan generation attempts (1 full generation + N-1 AI fix passes)
+MAX_GENERATION_ATTEMPTS = 3
 
 # Default timeout values (seconds)
 DEFAULT_EXECUTION_TIMEOUT = 60
@@ -62,7 +62,7 @@ __all__ = [
     # Researcher section headings
     "RESEARCHER_SECTION_HEADINGS",
     # Generation retry limit
-    "MAX_GENERATION_RETRIES",
+    "MAX_GENERATION_ATTEMPTS",
     # Timeout constants
     "DEFAULT_EXECUTION_TIMEOUT",
     "FIRST_RUN_TIMEOUT",

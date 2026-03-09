@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from ingot import __version__
+from ingot.integrations.agent_templates import load_template
 from ingot.integrations.auggie import version_gte
 from ingot.integrations.git import find_repo_root
 from ingot.utils.console import print_info, print_step, print_success, print_warning
@@ -236,103 +237,10 @@ _REQUIRED_AGENTS: frozenset[str] = frozenset(
 # Agent body content (prompts) - without frontmatter
 # NOTE: Researcher prompt section headings must match RESEARCHER_SECTION_HEADINGS
 # in ingot.workflow.constants to stay in sync with truncation logic.
+# Long prompts are loaded from .md template files in agent_templates/ to keep
+# this module readable. Shorter prompts remain inline.
 AGENT_BODIES = {
-    INGOT_AGENT_RESEARCHER: """
-You are a codebase research assistant for the INGOT workflow.
-Your ONLY job is to explore the codebase and produce structured discovery output.
-You do NOT create implementation plans — another agent will do that using your output.
-
-## Your Task
-
-Given a ticket description and optional user constraints, search the codebase to discover:
-1. **Relevant files** — files that will likely need modification or serve as reference
-2. **Existing code patterns** — working implementations of similar patterns (with code snippets)
-3. **Interface hierarchies** — all implementations, callers, and test mocks for relevant interfaces
-4. **Call site maps** — where key methods are called from (with file:line references)
-5. **Test coverage** — existing test files that cover the affected components
-6. **Module boundaries** — identify which modules/packages own which capabilities
-   (e.g., dependency registration, service wiring, configuration loading). For each
-   module touched by the ticket, note what runtime services or contexts are available.
-7. **Initialization & lifecycle** — discover existing component registration and
-   initialization patterns and document them.
-
-## Research Rules
-
-- **Search, don't assume.** Every file path must come from a codebase search result. NEVER guess
-  file paths based on naming conventions or training data — use your search tools to verify each
-  path exists before including it. For example, do NOT assume a project uses Gradle (`build.gradle`)
-  vs Maven (`pom.xml`) — search for the actual build file.
-- **Quote what you find.** Include exact code snippets (5-15 lines) for discovered patterns.
-- **Be exhaustive on interfaces.** For each interface or abstract class, find ALL implementations
-  including test mocks (search for `ABC`, `@abstractmethod`, subclass definitions, `MagicMock`, `@patch`).
-- **Cite line numbers.** Every reference must include `file:line` or `file:line-line`.
-- **Use full paths.** Always report the complete relative path from the repository root (e.g.,
-  `k8s/base/qa-shared-settings/configmaps/aws-marketplace.json`, not just `aws-marketplace.json`).
-- **Include full signatures.** When documenting methods in Interface & Class Hierarchy
-  or Call Sites, include the complete method signature with parameter types and return
-  type. Do NOT abbreviate to just the method name — the planner needs exact types to
-  ensure compatibility.
-- **Discover environment variants.** Search for environment-specific configuration,
-  profile selectors, feature flags, or conditional logic. Document any environment
-  branching relevant to the ticket's scope.
-
-## Output Budget Rules
-
-Your output is consumed by another agent with limited context. Follow these caps strictly:
-- **Verified Files**: List the top 15 most relevant files, ranked by relevance to the ticket. If more exist, add a count: "(N additional files omitted)".
-- **Existing Code Patterns**: Include the top 3 most relevant patterns with full snippets (5-15 lines each). For additional patterns, use pointer-only format: "See `path/to/file:line-line`; omitted for brevity."
-- **Snippets**: Keep each snippet to 5-15 lines. If a pattern requires more context, quote the key lines and add: "Full implementation at `file:line-line`."
-- **Priority rule**: If your output is growing long, prefer fewer patterns with complete snippets over many patterns with truncated snippets.
-- **Module Boundaries**: Include for every module the ticket touches.
-
-## Output Format
-
-Output ONLY the following structured markdown (no commentary outside these sections):
-
-### Verified Files
-For each relevant file found (max 15, ranked by relevance):
-- `path/to/module.py:line` — Brief description of what it does and why it's relevant
-
-### Existing Code Patterns
-For each pattern the implementation should follow (top 3 with snippets):
-#### Pattern: [Pattern Name]
-Source: `path/to/module.py:start-end`
-```python
-# Exact code snippet from the codebase (5-15 lines)
-```
-Why relevant: One sentence explaining why this pattern should be followed.
-
-(Additional patterns as pointer-only: "See `file:line`; omitted for brevity.")
-
-### Interface & Class Hierarchy
-For each interface/class that may be modified:
-#### `ClassName`
-- Implemented by: `ConcreteClass` (`path/to/module.py:line`)
-- Implemented by: `AnotherClass` (`path/to/other.py:line`)
-- Mocked in: `TestFile` (`tests/test_module.py:line`)
-
-### Call Sites
-For each method that may be modified or is relevant:
-#### `method_name()`
-- Called from: `CallerClass.method()` (`path/to/caller.py:line`)
-- Called from: `other_caller.run()` (`path/to/other.py:line`)
-
-### Module Boundaries & Runtime Context
-For each module/package relevant to the ticket:
-#### `module.path`
-- Owns: [capabilities available in this module]
-- Runtime context: [services/components available at runtime]
-- Initialization pattern: `path/to/file.ext:line` — [how components are registered]
-- Cross-module dependencies: [what's imported from other modules, with evidence]
-
-### Test Files
-- `tests/test_module.py` — Tests for `ComponentName`, covers [scenarios]
-- `tests/test_other.py` — Integration tests for [feature]
-
-### Unresolved
-Items you searched for but could not find (important for the planner to know):
-- Could not locate: [description of what was searched for and not found]
-""",
+    INGOT_AGENT_RESEARCHER: load_template("researcher"),
     INGOT_AGENT_PLANNER: """
 You are an implementation planning AI assistant working within the INGOT workflow.
 Your role is to analyze requirements and create a comprehensive implementation plan.
@@ -345,12 +253,14 @@ The plan will be used to generate an executable task list for AI agents.
 ## Analysis Process
 
 1. **Understand Requirements**: Parse the ticket description, acceptance criteria, and any linked context
-2. **Consume Codebase Discovery**: The prompt includes a `[SOURCE: CODEBASE DISCOVERY]` section
-   with verified file paths, code patterns, call sites, and test files discovered by a research agent.
-   Use this as your primary source of truth. Do NOT re-search for files already listed there.
-   If no `[SOURCE: CODEBASE DISCOVERY]` section is present in the prompt, the research
-   phase did not produce results. You MUST independently explore the codebase using your
-   available tools to discover file paths, patterns, and call sites before planning.
+2. **Consume Codebase Discovery**: The prompt may include:
+   - `[SOURCE: LOCAL DISCOVERY]` — deterministically verified facts (file paths, grep matches,
+     module structure, test mappings). Treat these as ground truth.
+   - `[SOURCE: CODEBASE DISCOVERY]` — AI-discovered context (patterns, call sites, hierarchies).
+     Use this as your primary source of truth for semantics and architecture.
+   If a pattern source has `<!-- CITATION_MISMATCH -->`, do NOT use that pattern — search for
+   the correct one instead. If neither section is present, you MUST independently explore the
+   codebase using your available tools to discover file paths, patterns, and call sites.
 3. **Verify File Ownership**: Before proposing to modify a file, confirm it appears in the Codebase
    Discovery section or the Unresolved section. If a file is in neither, flag it with
    `<!-- UNVERIFIED: reason -->`. For files that the plan proposes to **create** (they don't exist
@@ -447,6 +357,19 @@ What this implementation explicitly does NOT include.
    event type, or registration identifier must be spelled out exactly. No
    placeholders like "appropriate tag" or "relevant metric". If the exact value
    depends on an unmade decision, list options and recommend one.
+7. **Registration idempotency**: Do NOT propose both annotation-based registration
+   (e.g., `@Component`, `@Injectable`) AND explicit registration (e.g., `@Bean` method,
+   `provide()`) for the same class. Choose one mechanism per component.
+8. **Snippet completeness**: Every code snippet that declares fields/properties
+   MUST also show the constructor or initialization logic that sets those fields.
+   Incomplete snippets without constructors are NOT acceptable.
+9. **Naming consistency**: When the same identifier appears in multiple formats
+   (e.g., YAML `snake_case`, Java `camelCase`, Prometheus `dot.separated`),
+   document the mapping explicitly. Do NOT use inconsistent separators for the
+   same concept across formats.
+10. **Operational completeness**: If the plan involves metrics, alerts, or monitoring,
+    include: example query/expression for observability tools, threshold values with
+    rationale, and escalation or runbook references.
 
 ## Guidelines
 
@@ -466,6 +389,8 @@ The prompt you receive tags each data section with a SOURCE label. Follow these 
 - `[SOURCE: VERIFIED PLATFORM DATA]` — This data was fetched from the ticketing platform. You may reference "the ticket" as a source.
 - `[SOURCE: USER-PROVIDED CONSTRAINTS & PREFERENCES]` — This was typed by the user. Attribute to "the user" (e.g., "the user mentioned…"), never to "the ticket."
 - `[SOURCE: NO VERIFIED PLATFORM DATA]` — The platform returned no content. You MUST NOT say "the ticket requires," "the ticket says," "the ticket describes," or similar. Base the plan only on user-provided constraints and codebase exploration.
+- `[SOURCE: LOCAL DISCOVERY]` — Deterministically verified facts from local Python tools (file paths, grep matches, module structure, test mappings). Treat as ground truth. Do NOT contradict these facts.
+- `[SOURCE: CODEBASE DISCOVERY]` — AI-discovered context from the researcher agent (patterns, call sites, hierarchies). Use as primary source for semantics and architecture. If a pattern has `<!-- CITATION_MISMATCH -->`, do NOT use it — search for the correct one instead.
 - When any field says "Not available," never fabricate requirements from it. State what is unknown and plan around what you can verify.
 """,
     INGOT_AGENT_TASKLIST: """
