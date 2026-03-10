@@ -69,6 +69,14 @@ class TestAIBackendCompliance:
                 return True
 
             @property
+            def subagent_model_overrides(self) -> dict[str, str]:
+                return {}
+
+            @subagent_model_overrides.setter
+            def subagent_model_overrides(self, overrides: dict[str, str]) -> None:
+                pass
+
+            @property
             def supports_plan_mode(self) -> bool:
                 return False
 

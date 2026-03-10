@@ -61,6 +61,7 @@ class FakeBackend:
         self._supports_parallel = supports_parallel
         self._supports_plan_mode = supports_plan_mode
         self._models = models
+        self._subagent_model_overrides: dict[str, str] = {}
         self.closed: bool = False
         self.call_count: int = 0
         self.calls: list[tuple[str, dict]] = []
@@ -90,6 +91,14 @@ class FakeBackend:
     @property
     def model(self) -> str:
         return ""
+
+    @property
+    def subagent_model_overrides(self) -> dict[str, str]:
+        return self._subagent_model_overrides
+
+    @subagent_model_overrides.setter
+    def subagent_model_overrides(self, overrides: dict[str, str]) -> None:
+        self._subagent_model_overrides = overrides
 
     @property
     def supports_parallel(self) -> bool:
