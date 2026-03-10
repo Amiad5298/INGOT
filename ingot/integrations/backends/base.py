@@ -530,25 +530,34 @@ class BaseBackend(ABC):
                 avoid double-parsing.
         """
         # 1. Explicit override takes precedence
+        resolved: str | None = None
         if explicit_model:
-            return explicit_model
+            resolved = explicit_model
 
         # 2. Check subagent model overrides (from workflow config)
-        if subagent and subagent in self._subagent_model_overrides:
+        elif subagent and subagent in self._subagent_model_overrides:
             override = self._subagent_model_overrides[subagent]
             if override:
-                return override
+                resolved = override
 
         # 3. Check subagent frontmatter
-        if subagent:
+        if resolved is None and subagent:
             metadata = (
                 _metadata if _metadata is not None else self._parse_subagent_prompt(subagent)[0]
             )
             if metadata.model:
-                return metadata.model
+                resolved = metadata.model
 
         # 4. Fall back to instance default
-        return self._model or None
+        if resolved is None:
+            resolved = self._model or None
+
+        if subagent:
+            from ingot.utils.console import print_info
+
+            print_info(f"Running agent: {subagent} (model: {resolved or 'default'})")
+
+        return resolved
 
     def _resolve_subagent(
         self,

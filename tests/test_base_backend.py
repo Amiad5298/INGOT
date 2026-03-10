@@ -271,6 +271,28 @@ class TestResolveModel:
         assert result == "explicit-model"
 
 
+class TestResolveModelLogging:
+    def test_resolve_model_logs_agent_and_model(self, tmp_path, monkeypatch, mocker):
+        monkeypatch.chdir(tmp_path)
+        mock_print_info = mocker.patch("ingot.utils.console.print_info")
+        backend = ConcreteTestBackend(model="test-model")
+        backend._resolve_model(explicit_model=None, subagent="ingot-planner")
+        mock_print_info.assert_called_once_with("Running agent: ingot-planner (model: test-model)")
+
+    def test_resolve_model_logs_default_when_no_model(self, tmp_path, monkeypatch, mocker):
+        monkeypatch.chdir(tmp_path)
+        mock_print_info = mocker.patch("ingot.utils.console.print_info")
+        backend = ConcreteTestBackend()
+        backend._resolve_model(explicit_model=None, subagent="ingot-planner")
+        mock_print_info.assert_called_once_with("Running agent: ingot-planner (model: default)")
+
+    def test_resolve_model_no_log_without_subagent(self, mocker):
+        mock_print_info = mocker.patch("ingot.utils.console.print_info")
+        backend = ConcreteTestBackend(model="test-model")
+        backend._resolve_model(explicit_model=None, subagent=None)
+        mock_print_info.assert_not_called()
+
+
 class TestSubagentModelOverrides:
     def test_default_overrides_empty(self):
         backend = ConcreteTestBackend()
