@@ -40,7 +40,6 @@ def mock_config():
     """Create a mock ConfigManager."""
     config = MagicMock()
     config.settings = MagicMock()
-    config.settings.default_model = "default-model"
     return config
 
 

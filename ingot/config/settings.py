@@ -36,7 +36,6 @@ class Settings:
     the configuration file (~/.ingot-config).
 
     Attributes:
-        default_model: Legacy default AI model for all phases
         planning_model: AI model for Steps 1-2 (Discovery & Planning)
         implementation_model: AI model for Step 3 (Execution)
         jira_integration_status: Cached Jira integration status
@@ -61,7 +60,6 @@ class Settings:
     """
 
     # Model settings
-    default_model: str = ""
     planning_model: str = ""
     implementation_model: str = ""
 
@@ -129,7 +127,6 @@ class Settings:
     # Config key to attribute mapping
     _config_key_to_attribute: dict[str, str] = field(
         default_factory=lambda: {
-            "DEFAULT_MODEL": "default_model",
             "PLANNING_MODEL": "planning_model",
             "IMPLEMENTATION_MODEL": "implementation_model",
             "JIRA_INTEGRATION_STATUS": "jira_integration_status",

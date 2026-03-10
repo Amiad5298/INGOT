@@ -21,7 +21,6 @@ def _make_workflow_mock_config(**overrides: object) -> MagicMock:
         "max_parallel_tasks": 3,
         "parallel_execution_enabled": True,
         "fail_fast": False,
-        "default_model": "test-model",
         "planning_model": "",
         "implementation_model": "",
         "skip_clarification": False,

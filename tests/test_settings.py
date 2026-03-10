@@ -9,7 +9,6 @@ class TestSettings:
     def test_default_values(self):
         settings = Settings()
 
-        assert settings.default_model == ""
         assert settings.planning_model == ""
         assert settings.implementation_model == ""
         assert settings.jira_integration_status == ""
@@ -21,13 +20,11 @@ class TestSettings:
 
     def test_custom_values(self):
         settings = Settings(
-            default_model="claude-3",
             planning_model="claude-3-opus",
             auto_open_files=False,
             skip_clarification=True,
         )
 
-        assert settings.default_model == "claude-3"
         assert settings.planning_model == "claude-3-opus"
         assert settings.auto_open_files is False
         assert settings.skip_clarification is True
@@ -35,7 +32,6 @@ class TestSettings:
     def test_get_attribute_for_key(self):
         settings = Settings()
 
-        assert settings.get_attribute_for_key("DEFAULT_MODEL") == "default_model"
         assert settings.get_attribute_for_key("PLANNING_MODEL") == "planning_model"
         assert settings.get_attribute_for_key("AUTO_OPEN_FILES") == "auto_open_files"
         assert settings.get_attribute_for_key("UNKNOWN_KEY") is None
@@ -43,7 +39,6 @@ class TestSettings:
     def test_get_key_for_attribute(self):
         settings = Settings()
 
-        assert settings.get_key_for_attribute("default_model") == "DEFAULT_MODEL"
         assert settings.get_key_for_attribute("planning_model") == "PLANNING_MODEL"
         assert settings.get_key_for_attribute("auto_open_files") == "AUTO_OPEN_FILES"
         assert settings.get_key_for_attribute("unknown_attr") is None
@@ -51,7 +46,6 @@ class TestSettings:
     def test_get_config_keys(self):
         keys = Settings.get_config_keys()
 
-        assert "DEFAULT_MODEL" in keys
         assert "PLANNING_MODEL" in keys
         assert "IMPLEMENTATION_MODEL" in keys
         assert "AUTO_OPEN_FILES" in keys

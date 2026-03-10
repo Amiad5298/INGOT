@@ -82,12 +82,8 @@ def _run_workflow(
     )
 
     # Determine models
-    effective_planning_model = (
-        planning_model or model or config.settings.planning_model or config.settings.default_model
-    )
-    effective_impl_model = (
-        impl_model or model or config.settings.implementation_model or config.settings.default_model
-    )
+    effective_planning_model = planning_model or model or config.settings.planning_model
+    effective_impl_model = impl_model or model or config.settings.implementation_model
 
     # Determine parallel execution settings
     effective_parallel = (

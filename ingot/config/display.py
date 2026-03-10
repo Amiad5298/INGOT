@@ -246,7 +246,6 @@ def show_config(manager: ConfigManager) -> None:
 
     # Model Settings section (reorganized)
     console.print("  [bold]Model Settings:[/bold]")
-    console.print(f"    Default Model (Legacy): {s.default_model or '(not set)'}")
     console.print(f"    Planning Model: {s.planning_model or '(not set)'}")
     console.print(f"    Implementation Model: {s.implementation_model or '(not set)'}")
     console.print()

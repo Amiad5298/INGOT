@@ -16,7 +16,6 @@ def temp_config_file(tmp_path: Path) -> Path:
     config_file = tmp_path / ".ingot-config"
     config_file.write_text(
         """# INGOT Configuration
-DEFAULT_MODEL="claude-3"
 PLANNING_MODEL="claude-3-opus"
 IMPLEMENTATION_MODEL="claude-3-sonnet"
 AUTO_OPEN_FILES="true"

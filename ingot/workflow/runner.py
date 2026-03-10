@@ -104,8 +104,8 @@ def run_ingot_workflow(
     # Initialize state with subagent names from config
     state = WorkflowState(
         ticket=ticket,
-        planning_model=planning_model or config.settings.default_model,
-        implementation_model=implementation_model or config.settings.default_model,
+        planning_model=planning_model,
+        implementation_model=implementation_model,
         skip_clarification=skip_clarification,
         squash_at_end=squash_at_end,
         parallel_execution_enabled=parallel_execution_enabled,
@@ -135,10 +135,7 @@ def run_ingot_workflow(
     )
 
     # Configure subagent model overrides from explicit planning/implementation model args.
-    # Only creates overrides when the user explicitly passed a model — we use the raw
-    # planning_model/implementation_model params, NOT state.planning_model which falls
-    # back to default_model. default_model is already the backend's instance default
-    # (precedence level 4) and should not be promoted to override frontmatter (level 2).
+    # Only creates overrides when the user explicitly passed a model.
     # Note: doc_updater is intentionally excluded — it uses its own frontmatter model.
     subagent_overrides: dict[str, str] = {}
     if planning_model:

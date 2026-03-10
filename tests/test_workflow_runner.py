@@ -53,7 +53,6 @@ def mock_config():
     """Create a mock ConfigManager."""
     config = MagicMock()
     config.settings = MagicMock()
-    config.settings.default_model = "default-model"
     return config
 
 
@@ -628,9 +627,7 @@ class TestRunIngotWorkflowSubagentModelOverrides:
             implementation_model="",
         )
 
-        # Empty raw params produce no overrides, even when default_model is set.
-        # default_model stays at precedence level 4 (instance default) and is
-        # not promoted to level 2 (subagent override).
+        # Empty raw params produce no overrides.
         overrides = mock_backend.subagent_model_overrides
         assert overrides == {}
 

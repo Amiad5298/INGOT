@@ -24,7 +24,7 @@ class TestConfigManagerLoad:
 
         settings = manager.load()
 
-        assert settings.default_model == ""
+        assert settings.planning_model == ""
         assert settings.auto_open_files is True
 
     def test_load_valid_file(self, temp_config_file):
@@ -32,7 +32,6 @@ class TestConfigManagerLoad:
 
         settings = manager.load()
 
-        assert settings.default_model == "claude-3"
         assert settings.planning_model == "claude-3-opus"
         assert settings.implementation_model == "claude-3-sonnet"
 
@@ -40,24 +39,24 @@ class TestConfigManagerLoad:
         config_file = tmp_path / "config"
         config_file.write_text(
             """# This is a comment
-DEFAULT_MODEL="test"
+PLANNING_MODEL="test"
 # Another comment
-PLANNING_MODEL="test2"
+IMPLEMENTATION_MODEL="test2"
 """
         )
         manager = ConfigManager(config_file)
 
         settings = manager.load()
 
-        assert settings.default_model == "test"
-        assert settings.planning_model == "test2"
+        assert settings.planning_model == "test"
+        assert settings.implementation_model == "test2"
 
     def test_load_ignores_empty_lines(self, tmp_path):
         config_file = tmp_path / "config"
         config_file.write_text(
-            """DEFAULT_MODEL="test"
+            """PLANNING_MODEL="test"
 
-PLANNING_MODEL="test2"
+IMPLEMENTATION_MODEL="test2"
 
 """
         )
@@ -65,8 +64,8 @@ PLANNING_MODEL="test2"
 
         settings = manager.load()
 
-        assert settings.default_model == "test"
-        assert settings.planning_model == "test2"
+        assert settings.planning_model == "test"
+        assert settings.implementation_model == "test2"
 
     def test_load_parses_boolean_true(self, tmp_path):
         config_file = tmp_path / "config"
@@ -97,27 +96,26 @@ PLANNING_MODEL="test2"
 
     def test_load_handles_unquoted_values(self, tmp_path):
         config_file = tmp_path / "config"
-        config_file.write_text("DEFAULT_MODEL=test-model\n")
+        config_file.write_text("PLANNING_MODEL=test-model\n")
         manager = ConfigManager(config_file)
 
         settings = manager.load()
 
-        assert settings.default_model == "test-model"
+        assert settings.planning_model == "test-model"
 
     def test_load_handles_single_quotes(self, tmp_path):
         config_file = tmp_path / "config"
-        config_file.write_text("DEFAULT_MODEL='test-model'\n")
+        config_file.write_text("PLANNING_MODEL='test-model'\n")
         manager = ConfigManager(config_file)
 
         settings = manager.load()
 
-        assert settings.default_model == "test-model"
+        assert settings.planning_model == "test-model"
 
     def test_load_extracts_model_id_from_full_format(self, tmp_path):
         config_file = tmp_path / "config"
         config_file.write_text(
-            """DEFAULT_MODEL="Claude Opus 4.5 [opus4.5]"
-PLANNING_MODEL="Haiku 4.5 [haiku4.5]"
+            """PLANNING_MODEL="Haiku 4.5 [haiku4.5]"
 IMPLEMENTATION_MODEL="Sonnet 4.5 [sonnet4.5]"
 """
         )
@@ -125,23 +123,22 @@ IMPLEMENTATION_MODEL="Sonnet 4.5 [sonnet4.5]"
 
         settings = manager.load()
 
-        assert settings.default_model == "opus4.5"
         assert settings.planning_model == "haiku4.5"
         assert settings.implementation_model == "sonnet4.5"
 
     def test_load_keeps_model_id_format_unchanged(self, tmp_path):
         config_file = tmp_path / "config"
         config_file.write_text(
-            """DEFAULT_MODEL="opus4.5"
-PLANNING_MODEL="haiku4.5"
+            """PLANNING_MODEL="haiku4.5"
+IMPLEMENTATION_MODEL="opus4.5"
 """
         )
         manager = ConfigManager(config_file)
 
         settings = manager.load()
 
-        assert settings.default_model == "opus4.5"
         assert settings.planning_model == "haiku4.5"
+        assert settings.implementation_model == "opus4.5"
 
 
 class TestConfigManagerSave:
@@ -206,9 +203,9 @@ class TestConfigManagerGet:
         manager = ConfigManager(temp_config_file)
         manager.load()
 
-        value = manager.get("DEFAULT_MODEL")
+        value = manager.get("PLANNING_MODEL")
 
-        assert value == "claude-3"
+        assert value == "claude-3-opus"
 
     def test_get_returns_default(self, tmp_path):
         config_path = tmp_path / "config"
@@ -497,23 +494,23 @@ class TestCascadingConfigHierarchy:
     def test_global_config_loaded(self, tmp_path):
         # Create global config
         global_config = tmp_path / ".ingot-config"
-        global_config.write_text('DEFAULT_MODEL="global-model"\n')
+        global_config.write_text('PLANNING_MODEL="global-model"\n')
 
         manager = ConfigManager(global_config)
         settings = manager.load()
 
-        assert settings.default_model == "global-model"
+        assert settings.planning_model == "global-model"
 
     def test_local_overrides_global(self, tmp_path, monkeypatch):
         # Create global config
         global_config = tmp_path / ".ingot-config"
-        global_config.write_text('DEFAULT_MODEL="global-model"\n')
+        global_config.write_text('PLANNING_MODEL="global-model"\n')
 
         # Create local config in a subdirectory
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         local_config = project_dir / ".ingot"
-        local_config.write_text('DEFAULT_MODEL="local-model"\n')
+        local_config.write_text('PLANNING_MODEL="local-model"\n')
 
         # Create fake .git to mark repo root
         (project_dir / ".git").mkdir()
@@ -525,35 +522,35 @@ class TestCascadingConfigHierarchy:
         manager = ConfigManager(global_config)
         settings = manager.load()
 
-        assert settings.default_model == "local-model"
+        assert settings.planning_model == "local-model"
 
     def test_environment_overrides_all(self, tmp_path, monkeypatch):
         # Create global config
         global_config = tmp_path / ".ingot-config"
-        global_config.write_text('DEFAULT_MODEL="global-model"\n')
+        global_config.write_text('PLANNING_MODEL="global-model"\n')
 
         # Create local config
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         local_config = project_dir / ".ingot"
-        local_config.write_text('DEFAULT_MODEL="local-model"\n')
+        local_config.write_text('PLANNING_MODEL="local-model"\n')
         (project_dir / ".git").mkdir()
         monkeypatch.chdir(project_dir)
 
         # Set environment variable
-        monkeypatch.setenv("DEFAULT_MODEL", "env-model")
+        monkeypatch.setenv("PLANNING_MODEL", "env-model")
 
         manager = ConfigManager(global_config)
         settings = manager.load()
 
-        assert settings.default_model == "env-model"
+        assert settings.planning_model == "env-model"
 
     def test_multiple_keys_from_different_sources(self, tmp_path, monkeypatch):
         # Global has multiple keys
         global_config = tmp_path / ".ingot-config"
         global_config.write_text(
-            """DEFAULT_MODEL="global-model"
-PLANNING_MODEL="global-planning"
+            """PLANNING_MODEL="global-planning"
+IMPLEMENTATION_MODEL="global-impl"
 DEFAULT_PLATFORM="jira"
 """
         )
@@ -572,8 +569,8 @@ DEFAULT_PLATFORM="jira"
         manager = ConfigManager(global_config)
         settings = manager.load()
 
-        assert settings.default_model == "global-model"  # from global
         assert settings.planning_model == "env-planning"  # from env
+        assert settings.implementation_model == "global-impl"  # from global
         assert settings.default_platform == "linear"  # from local
 
 
@@ -652,24 +649,24 @@ class TestLoadEnvironment:
     def test_loads_known_keys_only(self, tmp_path, monkeypatch):
         config_path = tmp_path / "config"
         config_path.write_text("")
-        monkeypatch.setenv("DEFAULT_MODEL", "env-model")
+        monkeypatch.setenv("PLANNING_MODEL", "env-model")
         monkeypatch.setenv("UNKNOWN_RANDOM_VAR", "should-be-ignored")
 
         manager = ConfigManager(config_path)
         manager.load()
 
-        assert manager._raw_values.get("DEFAULT_MODEL") == "env-model"
+        assert manager._raw_values.get("PLANNING_MODEL") == "env-model"
         assert "UNKNOWN_RANDOM_VAR" not in manager._raw_values
 
     def test_empty_env_values_are_loaded(self, tmp_path, monkeypatch):
         config_path = tmp_path / "config"
-        config_path.write_text('DEFAULT_MODEL="file-model"\n')
-        monkeypatch.setenv("DEFAULT_MODEL", "")
+        config_path.write_text('PLANNING_MODEL="file-model"\n')
+        monkeypatch.setenv("PLANNING_MODEL", "")
 
         manager = ConfigManager(config_path)
         manager.load()
 
-        assert manager._raw_values.get("DEFAULT_MODEL") == ""
+        assert manager._raw_values.get("PLANNING_MODEL") == ""
 
 
 class TestConfigManagerPathAccessors:
@@ -702,18 +699,18 @@ class TestConfigManagerPathAccessors:
 class TestConfigManagerIdempotency:
     def test_load_resets_settings_on_each_call(self, tmp_path):
         config_path = tmp_path / "config"
-        config_path.write_text('DEFAULT_MODEL="first-model"\n')
+        config_path.write_text('PLANNING_MODEL="first-model"\n')
 
         manager = ConfigManager(config_path)
         settings1 = manager.load()
-        assert settings1.default_model == "first-model"
+        assert settings1.planning_model == "first-model"
 
         # Change the config file
-        config_path.write_text('DEFAULT_MODEL="second-model"\n')
+        config_path.write_text('PLANNING_MODEL="second-model"\n')
 
         # Load again - should get new values, not stale ones
         settings2 = manager.load()
-        assert settings2.default_model == "second-model"
+        assert settings2.planning_model == "second-model"
 
     def test_load_resets_local_config_path(self, tmp_path, monkeypatch):
         # First load with local config
@@ -851,12 +848,12 @@ class TestConfigManagerSavePrecedence:
     def test_global_save_when_local_overrides(self, tmp_path, monkeypatch):
         # Setup: global has one value, local has a different value
         global_config = tmp_path / ".ingot-config"
-        global_config.write_text('DEFAULT_MODEL="global-model"\n')
+        global_config.write_text('PLANNING_MODEL="global-model"\n')
 
         project = tmp_path / "project"
         project.mkdir()
         local_config = project / ".ingot"
-        local_config.write_text('DEFAULT_MODEL="local-model"\n')
+        local_config.write_text('PLANNING_MODEL="local-model"\n')
         (project / ".git").mkdir()
         monkeypatch.chdir(project)
 
@@ -864,10 +861,10 @@ class TestConfigManagerSavePrecedence:
         manager.load()
 
         # Verify initial state
-        assert manager.settings.default_model == "local-model"
+        assert manager.settings.planning_model == "local-model"
 
         # Act: save a new value to global
-        warning = manager.save("DEFAULT_MODEL", "new-global", scope="global")
+        warning = manager.save("PLANNING_MODEL", "new-global", scope="global")
 
         # Assert: warning mentions local override
         assert warning is not None
@@ -875,25 +872,25 @@ class TestConfigManagerSavePrecedence:
         assert "local" in warning.lower()
 
         # Assert: global file was updated
-        assert 'DEFAULT_MODEL="new-global"' in global_config.read_text()
+        assert 'PLANNING_MODEL="new-global"' in global_config.read_text()
 
         # Assert: in-memory state still reflects local (higher priority)
-        assert manager.settings.default_model == "local-model"
-        assert manager.get("DEFAULT_MODEL") == "local-model"
+        assert manager.settings.planning_model == "local-model"
+        assert manager.get("PLANNING_MODEL") == "local-model"
 
     def test_global_save_when_env_overrides(self, tmp_path, monkeypatch):
         # Setup: set environment variable
-        monkeypatch.setenv("DEFAULT_MODEL", "env-model")
+        monkeypatch.setenv("PLANNING_MODEL", "env-model")
 
         global_config = tmp_path / ".ingot-config"
         manager = ConfigManager(global_config)
         manager.load()
 
         # Verify initial state
-        assert manager.settings.default_model == "env-model"
+        assert manager.settings.planning_model == "env-model"
 
         # Act: save a new value to global
-        warning = manager.save("DEFAULT_MODEL", "new-global", scope="global")
+        warning = manager.save("PLANNING_MODEL", "new-global", scope="global")
 
         # Assert: warning mentions env override
         assert warning is not None
@@ -901,15 +898,15 @@ class TestConfigManagerSavePrecedence:
         assert "environment" in warning.lower()
 
         # Assert: global file was updated
-        assert 'DEFAULT_MODEL="new-global"' in global_config.read_text()
+        assert 'PLANNING_MODEL="new-global"' in global_config.read_text()
 
         # Assert: in-memory state still reflects env (highest priority)
-        assert manager.settings.default_model == "env-model"
-        assert manager.get("DEFAULT_MODEL") == "env-model"
+        assert manager.settings.planning_model == "env-model"
+        assert manager.get("PLANNING_MODEL") == "env-model"
 
     def test_local_save_when_env_overrides(self, tmp_path, monkeypatch):
         # Setup: set environment variable
-        monkeypatch.setenv("DEFAULT_MODEL", "env-model")
+        monkeypatch.setenv("PLANNING_MODEL", "env-model")
 
         project = tmp_path / "project"
         project.mkdir()
@@ -921,10 +918,10 @@ class TestConfigManagerSavePrecedence:
         manager.load()
 
         # Verify initial state
-        assert manager.settings.default_model == "env-model"
+        assert manager.settings.planning_model == "env-model"
 
         # Act: save a new value to local
-        warning = manager.save("DEFAULT_MODEL", "new-local", scope="local")
+        warning = manager.save("PLANNING_MODEL", "new-local", scope="local")
 
         # Assert: warning mentions env override
         assert warning is not None
@@ -934,11 +931,11 @@ class TestConfigManagerSavePrecedence:
         # Assert: local file was created with new value
         local_config = project / ".ingot"
         assert local_config.exists()
-        assert 'DEFAULT_MODEL="new-local"' in local_config.read_text()
+        assert 'PLANNING_MODEL="new-local"' in local_config.read_text()
 
         # Assert: in-memory state still reflects env (highest priority)
-        assert manager.settings.default_model == "env-model"
-        assert manager.get("DEFAULT_MODEL") == "env-model"
+        assert manager.settings.planning_model == "env-model"
+        assert manager.get("PLANNING_MODEL") == "env-model"
 
     def test_global_save_without_override_updates_memory(self, tmp_path):
         global_config = tmp_path / ".ingot-config"
@@ -946,20 +943,20 @@ class TestConfigManagerSavePrecedence:
         manager.load()
 
         # Verify initial state (defaults)
-        assert manager.settings.default_model == ""
+        assert manager.settings.planning_model == ""
 
         # Act: save a new value to global
-        warning = manager.save("DEFAULT_MODEL", "new-global", scope="global")
+        warning = manager.save("PLANNING_MODEL", "new-global", scope="global")
 
         # Assert: no warning
         assert warning is None
 
         # Assert: global file was created with new value
-        assert 'DEFAULT_MODEL="new-global"' in global_config.read_text()
+        assert 'PLANNING_MODEL="new-global"' in global_config.read_text()
 
         # Assert: in-memory state is updated
-        assert manager.settings.default_model == "new-global"
-        assert manager.get("DEFAULT_MODEL") == "new-global"
+        assert manager.settings.planning_model == "new-global"
+        assert manager.get("PLANNING_MODEL") == "new-global"
 
     def test_local_save_without_env_updates_memory(self, tmp_path, monkeypatch):
         project = tmp_path / "project"
@@ -968,16 +965,16 @@ class TestConfigManagerSavePrecedence:
         monkeypatch.chdir(project)
 
         global_config = tmp_path / ".ingot-config"
-        global_config.write_text('DEFAULT_MODEL="global-model"\n')
+        global_config.write_text('PLANNING_MODEL="global-model"\n')
 
         manager = ConfigManager(global_config)
         manager.load()
 
         # Verify initial state
-        assert manager.settings.default_model == "global-model"
+        assert manager.settings.planning_model == "global-model"
 
         # Act: save a new value to local
-        warning = manager.save("DEFAULT_MODEL", "new-local", scope="local")
+        warning = manager.save("PLANNING_MODEL", "new-local", scope="local")
 
         # Assert: no warning (local is higher priority than global)
         assert warning is None
@@ -985,11 +982,11 @@ class TestConfigManagerSavePrecedence:
         # Assert: local file was created with new value
         local_config = project / ".ingot"
         assert local_config.exists()
-        assert 'DEFAULT_MODEL="new-local"' in local_config.read_text()
+        assert 'PLANNING_MODEL="new-local"' in local_config.read_text()
 
         # Assert: in-memory state is updated (local > global)
-        assert manager.settings.default_model == "new-local"
-        assert manager.get("DEFAULT_MODEL") == "new-local"
+        assert manager.settings.planning_model == "new-local"
+        assert manager.get("PLANNING_MODEL") == "new-local"
 
     def test_local_config_path_correct_after_save(self, tmp_path, monkeypatch):
         project = tmp_path / "project"
@@ -1046,7 +1043,7 @@ class TestConfigManagerSensitiveValueMasking:
     def test_is_sensitive_key_non_sensitive(self):
         from ingot.utils.env_utils import is_sensitive_key
 
-        assert is_sensitive_key("DEFAULT_MODEL") is False
+        assert is_sensitive_key("PLANNING_MODEL") is False
         assert is_sensitive_key("AUTO_OPEN_FILES") is False
         assert is_sensitive_key("JIRA_PROJECT") is False
 
@@ -1943,7 +1940,7 @@ class TestNoSecretLeakage:
         assert is_sensitive_key("SECRET_VALUE") is True
         assert is_sensitive_key("MY_PASSWORD") is True
         assert is_sensitive_key("CREDENTIAL_DATA") is True
-        assert is_sensitive_key("DEFAULT_MODEL") is False
+        assert is_sensitive_key("PLANNING_MODEL") is False
         assert is_sensitive_key("AI_BACKEND") is False
 
     def test_fallback_credentials_not_in_settings(self, tmp_path):

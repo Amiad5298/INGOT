@@ -245,7 +245,6 @@ def mock_config_for_cli():
     """
     mock_config = MagicMock()
     mock_config.settings.get_default_platform.return_value = None
-    mock_config.settings.default_model = "test-model"
     mock_config.settings.planning_model = ""
     mock_config.settings.implementation_model = ""
     mock_config.settings.skip_clarification = False

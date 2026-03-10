@@ -240,7 +240,7 @@ class ConfigManager:
                 )
         else:
             # String values - extract model ID for model-related keys
-            if key in ("DEFAULT_MODEL", "PLANNING_MODEL", "IMPLEMENTATION_MODEL"):
+            if key in ("PLANNING_MODEL", "IMPLEMENTATION_MODEL"):
                 from ingot.integrations.auggie import extract_model_id
 
                 value = extract_model_id(value)
