@@ -271,6 +271,105 @@ class TestResolveModel:
         assert result == "explicit-model"
 
 
+class TestSubagentModelOverrides:
+    def test_default_overrides_empty(self):
+        backend = ConcreteTestBackend()
+        assert backend.subagent_model_overrides == {}
+
+    def test_set_and_get_overrides(self):
+        backend = ConcreteTestBackend()
+        overrides = {"ingot-planner": "opus4.5", "ingot-implementer": "sonnet4.5"}
+        backend.subagent_model_overrides = overrides
+        assert backend.subagent_model_overrides == overrides
+
+    def test_resolve_model_override_beats_frontmatter(self, tmp_path, monkeypatch):
+        agents_dir = tmp_path / ".ingot" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text("---\nmodel: frontmatter-model\n---\nPrompt.")
+        monkeypatch.chdir(tmp_path)
+
+        backend = ConcreteTestBackend(model="default-model")
+        backend.subagent_model_overrides = {"ingot-planner": "config-model"}
+        result = backend._resolve_model(explicit_model=None, subagent="ingot-planner")
+        assert result == "config-model"
+
+    def test_resolve_model_explicit_beats_override(self, tmp_path, monkeypatch):
+        agents_dir = tmp_path / ".ingot" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text("---\nmodel: frontmatter-model\n---\nPrompt.")
+        monkeypatch.chdir(tmp_path)
+
+        backend = ConcreteTestBackend(model="default-model")
+        backend.subagent_model_overrides = {"ingot-planner": "config-model"}
+        result = backend._resolve_model(explicit_model="explicit-model", subagent="ingot-planner")
+        assert result == "explicit-model"
+
+    def test_resolve_model_falls_through_when_no_override(self, tmp_path, monkeypatch):
+        agents_dir = tmp_path / ".ingot" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text("---\nmodel: frontmatter-model\n---\nPrompt.")
+        monkeypatch.chdir(tmp_path)
+
+        backend = ConcreteTestBackend(model="default-model")
+        backend.subagent_model_overrides = {"ingot-implementer": "config-model"}
+        result = backend._resolve_model(explicit_model=None, subagent="ingot-planner")
+        assert result == "frontmatter-model"
+
+    def test_resolve_model_empty_override_skipped(self, tmp_path, monkeypatch):
+        agents_dir = tmp_path / ".ingot" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text("---\nmodel: frontmatter-model\n---\nPrompt.")
+        monkeypatch.chdir(tmp_path)
+
+        backend = ConcreteTestBackend(model="default-model")
+        backend.subagent_model_overrides = {"ingot-planner": ""}
+        result = backend._resolve_model(explicit_model=None, subagent="ingot-planner")
+        assert result == "frontmatter-model"
+
+    def test_resolve_subagent_override_beats_frontmatter(self, tmp_path, monkeypatch):
+        agents_dir = tmp_path / ".ingot" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text(
+            "---\nmodel: frontmatter-model\n---\nYou are a planner."
+        )
+        monkeypatch.chdir(tmp_path)
+
+        backend = ConcreteTestBackend(model="default-model")
+        backend.subagent_model_overrides = {"ingot-planner": "config-model"}
+        model, prompt = backend._resolve_subagent(subagent="ingot-planner", model=None)
+        assert model == "config-model"
+        assert prompt == "You are a planner."
+
+    def test_resolve_subagent_explicit_beats_override(self, tmp_path, monkeypatch):
+        agents_dir = tmp_path / ".ingot" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text(
+            "---\nmodel: frontmatter-model\n---\nYou are a planner."
+        )
+        monkeypatch.chdir(tmp_path)
+
+        backend = ConcreteTestBackend(model="default-model")
+        backend.subagent_model_overrides = {"ingot-planner": "config-model"}
+        model, prompt = backend._resolve_subagent(subagent="ingot-planner", model="explicit-model")
+        assert model == "explicit-model"
+
+    def test_overrides_propagate_to_new_backend(self):
+        """Verify overrides can be copied between backends (parallel executor pattern)."""
+        source = ConcreteTestBackend(model="default-model")
+        source.subagent_model_overrides = {
+            "ingot-planner": "opus4.5",
+            "ingot-implementer": "sonnet4.5",
+        }
+
+        target = ConcreteTestBackend(model="default-model")
+        target.subagent_model_overrides = source.subagent_model_overrides
+
+        assert target.subagent_model_overrides == {
+            "ingot-planner": "opus4.5",
+            "ingot-implementer": "sonnet4.5",
+        }
+
+
 class TestRunStreamingWithTimeout:
     def test_run_streaming_with_timeout_success(self, mocker):
         mock_process = mocker.MagicMock()

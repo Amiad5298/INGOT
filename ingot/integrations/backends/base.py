@@ -160,6 +160,19 @@ class AIBackend(Protocol):
         ...
 
     @property
+    def subagent_model_overrides(self) -> dict[str, str]:
+        """Per-subagent model overrides (set by workflow runner).
+
+        Maps subagent name (e.g. "ingot-planner") to model ID.
+        Used to propagate planning_model / implementation_model config.
+        """
+        ...
+
+    @subagent_model_overrides.setter
+    def subagent_model_overrides(self, overrides: dict[str, str]) -> None:
+        ...
+
+    @property
     def supports_parallel(self) -> bool:
         """Whether this backend supports parallel execution.
 
@@ -353,11 +366,21 @@ class BaseBackend(ABC):
         """Initialize the backend with optional default model."""
         self._model = model
         self._models_cache: list[BackendModel] | None = None
+        self._subagent_model_overrides: dict[str, str] = {}
 
     @property
     def model(self) -> str:
         """Default model for this backend instance."""
         return self._model
+
+    @property
+    def subagent_model_overrides(self) -> dict[str, str]:
+        """Per-subagent model overrides (set by workflow runner)."""
+        return self._subagent_model_overrides
+
+    @subagent_model_overrides.setter
+    def subagent_model_overrides(self, overrides: dict[str, str]) -> None:
+        self._subagent_model_overrides = overrides
 
     @property
     @abstractmethod
@@ -488,25 +511,43 @@ class BaseBackend(ABC):
         self,
         explicit_model: str | None,
         subagent: str | None,
+        *,
+        _metadata: SubagentMetadata | None = None,
     ) -> str | None:
         """Resolve which model to use based on precedence.
 
         Implements Decision 6 model selection precedence:
         1. Explicit per-call model override (highest precedence)
-        2. Subagent frontmatter model field
-        3. Instance default model (self._model)
+        2. Subagent model overrides from workflow config (planning_model / implementation_model)
+        3. Subagent frontmatter model field
+        4. Instance default model (self._model)
+
+        Args:
+            explicit_model: Per-call model override (highest precedence).
+            subagent: Optional subagent name for frontmatter/override lookup.
+            _metadata: Pre-parsed frontmatter metadata. When provided, skips
+                re-reading the subagent file. Used by _resolve_subagent() to
+                avoid double-parsing.
         """
         # 1. Explicit override takes precedence
         if explicit_model:
             return explicit_model
 
-        # 2. Check subagent frontmatter
+        # 2. Check subagent model overrides (from workflow config)
+        if subagent and subagent in self._subagent_model_overrides:
+            override = self._subagent_model_overrides[subagent]
+            if override:
+                return override
+
+        # 3. Check subagent frontmatter
         if subagent:
-            metadata, _ = self._parse_subagent_prompt(subagent)
+            metadata = (
+                _metadata if _metadata is not None else self._parse_subagent_prompt(subagent)[0]
+            )
             if metadata.model:
                 return metadata.model
 
-        # 3. Fall back to instance default
+        # 4. Fall back to instance default
         return self._model or None
 
     def _resolve_subagent(
@@ -518,8 +559,10 @@ class BaseBackend(ABC):
 
         Uses _parse_subagent_prompt() to get both the prompt body and
         model from frontmatter. Avoids reading the subagent file twice.
+        Delegates model resolution to _resolve_model() with pre-parsed
+        metadata to keep precedence logic in one place.
 
-        Model precedence: explicit > frontmatter > instance default.
+        Model precedence: explicit > subagent overrides > frontmatter > instance default.
 
         Args:
             subagent: Optional subagent name.
@@ -529,15 +572,13 @@ class BaseBackend(ABC):
             Tuple of (resolved_model, subagent_prompt_body).
         """
         subagent_prompt: str | None = None
+        metadata = SubagentMetadata()
 
         if subagent:
             metadata, prompt_body = self._parse_subagent_prompt(subagent)
             subagent_prompt = prompt_body if prompt_body else None
 
-            if not model and metadata.model:
-                model = metadata.model
-
-        resolved_model = model or self._model or None
+        resolved_model = self._resolve_model(model, subagent, _metadata=metadata)
         return resolved_model, subagent_prompt
 
     def _compose_prompt(self, prompt: str, subagent_prompt: str | None) -> str:

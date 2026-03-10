@@ -32,6 +32,7 @@ from ingot.utils.console import (
 from ingot.utils.errors import IngotError, UserCancelledError
 from ingot.utils.logging import log_message
 from ingot.workflow.conflict_detection import detect_context_conflict
+from ingot.workflow.constants import IMPLEMENTATION_ROLES, PLANNING_ROLES
 from ingot.workflow.git_utils import DirtyTreePolicy, restore_to_baseline
 from ingot.workflow.review import ReviewOutcome
 from ingot.workflow.state import RateLimitConfig, WorkflowState
@@ -123,6 +124,7 @@ def run_ingot_workflow(
         backend_name=backend.name,
         subagent_names={
             "planner": config.settings.subagent_planner,
+            "researcher": config.settings.subagent_researcher,
             "tasklist": config.settings.subagent_tasklist,
             "tasklist_refiner": config.settings.subagent_tasklist_refiner,
             "implementer": config.settings.subagent_implementer,
@@ -131,6 +133,26 @@ def run_ingot_workflow(
             "doc_updater": config.settings.subagent_doc_updater,
         },
     )
+
+    # Configure subagent model overrides from explicit planning/implementation model args.
+    # Only creates overrides when the user explicitly passed a model — we use the raw
+    # planning_model/implementation_model params, NOT state.planning_model which falls
+    # back to default_model. default_model is already the backend's instance default
+    # (precedence level 4) and should not be promoted to override frontmatter (level 2).
+    # Note: doc_updater is intentionally excluded — it uses its own frontmatter model.
+    subagent_overrides: dict[str, str] = {}
+    if planning_model:
+        for role in PLANNING_ROLES:
+            name = state.subagent_names.get(role)
+            if name:
+                subagent_overrides[name] = planning_model
+    if implementation_model:
+        for role in IMPLEMENTATION_ROLES:
+            name = state.subagent_names.get(role)
+            if name:
+                subagent_overrides[name] = implementation_model
+
+    backend.subagent_model_overrides = subagent_overrides
 
     with workflow_cleanup(state, backend):
         # Handle dirty state before starting
@@ -144,11 +166,14 @@ def run_ingot_workflow(
         # Ensure INGOT subagent files are installed (includes .gitignore configuration)
         # This is done AFTER dirty state handling so the .gitignore updates aren't discarded
         # Lazy import to break circular: agents → workflow.constants → workflow.__init__ → runner → agents
-        from ingot.integrations.agents import ensure_agents_installed
+        from ingot.integrations.agents import apply_model_overrides, ensure_agents_installed
 
         if not ensure_agents_installed():
             print_error("Failed to install INGOT subagent files")
             return WorkflowResult(success=False, error="Failed to install subagent files")
+
+        # Patch agent file frontmatter so the model: field reflects user config
+        apply_model_overrides(subagent_overrides)
 
         # Display ticket information (already fetched via TicketService before workflow)
         print_success(f"Ticket: {display_name}")

@@ -529,6 +529,112 @@ class TestRunIngotWorkflowInit:
         assert state.squash_at_end is False
 
 
+class TestRunIngotWorkflowSubagentModelOverrides:
+    @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
+    @patch("ingot.workflow.runner.step_3_execute")
+    @patch("ingot.workflow.runner.step_2_create_tasklist")
+    @patch("ingot.workflow.runner.step_1_create_plan")
+    @patch("ingot.workflow.runner.get_current_commit")
+    @patch("ingot.workflow.runner._setup_branch")
+    @patch("ingot.workflow.runner.prompt_confirm")
+    @patch("ingot.workflow.runner.is_dirty")
+    @patch("ingot.workflow.runner.get_current_branch")
+    def test_sets_subagent_model_overrides_on_backend(
+        self,
+        mock_get_branch,
+        mock_is_dirty,
+        mock_confirm,
+        mock_setup_branch,
+        mock_commit,
+        mock_step1,
+        mock_step2,
+        mock_step3,
+        mock_step5,
+        mock_completion,
+        mock_backend,
+        ticket,
+        mock_config,
+    ):
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = Step3Result(success=True)
+        mock_step5.return_value = Step5Result()
+
+        run_ingot_workflow(
+            ticket=ticket,
+            config=mock_config,
+            backend=mock_backend,
+            planning_model="opus4.5",
+            implementation_model="sonnet4.5",
+        )
+
+        overrides = mock_backend.subagent_model_overrides
+        # Planning roles should use planning_model
+        assert overrides[mock_config.settings.subagent_planner] == "opus4.5"
+        assert overrides[mock_config.settings.subagent_researcher] == "opus4.5"
+        assert overrides[mock_config.settings.subagent_tasklist] == "opus4.5"
+        assert overrides[mock_config.settings.subagent_reviewer] == "opus4.5"
+        # Implementation roles should use implementation_model
+        assert overrides[mock_config.settings.subagent_implementer] == "sonnet4.5"
+        assert overrides[mock_config.settings.subagent_fixer] == "sonnet4.5"
+
+    @patch("ingot.workflow.runner._show_completion")
+    @patch("ingot.workflow.runner.step_5_commit")
+    @patch("ingot.workflow.runner.step_3_execute")
+    @patch("ingot.workflow.runner.step_2_create_tasklist")
+    @patch("ingot.workflow.runner.step_1_create_plan")
+    @patch("ingot.workflow.runner.get_current_commit")
+    @patch("ingot.workflow.runner._setup_branch")
+    @patch("ingot.workflow.runner.prompt_confirm")
+    @patch("ingot.workflow.runner.is_dirty")
+    @patch("ingot.workflow.runner.get_current_branch")
+    def test_empty_models_produce_no_overrides(
+        self,
+        mock_get_branch,
+        mock_is_dirty,
+        mock_confirm,
+        mock_setup_branch,
+        mock_commit,
+        mock_step1,
+        mock_step2,
+        mock_step3,
+        mock_step5,
+        mock_completion,
+        mock_backend,
+        ticket,
+        mock_config,
+    ):
+        mock_get_branch.return_value = "main"
+        mock_is_dirty.return_value = False
+        mock_confirm.return_value = False
+        mock_setup_branch.return_value = True
+        mock_commit.return_value = "abc123"
+        mock_step1.return_value = True
+        mock_step2.return_value = True
+        mock_step3.return_value = Step3Result(success=True)
+        mock_step5.return_value = Step5Result()
+
+        run_ingot_workflow(
+            ticket=ticket,
+            config=mock_config,
+            backend=mock_backend,
+            planning_model="",
+            implementation_model="",
+        )
+
+        # Empty raw params produce no overrides, even when default_model is set.
+        # default_model stays at precedence level 4 (instance default) and is
+        # not promoted to level 2 (subagent override).
+        overrides = mock_backend.subagent_model_overrides
+        assert overrides == {}
+
+
 class TestRunIngotWorkflowDirtyState:
     @patch("ingot.workflow.runner.handle_dirty_state")
     @patch("ingot.workflow.runner.show_git_dirty_menu")

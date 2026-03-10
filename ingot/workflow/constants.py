@@ -44,6 +44,11 @@ MAX_REVIEW_ITERATIONS = 10
 # Sequential tasks share a session, resetting every N tasks to prevent context overflow.
 SESSION_RESET_INTERVAL = 4
 
+# Subagent roles governed by planning_model / implementation_model overrides.
+# doc_updater is intentionally excluded — it uses its own frontmatter model.
+PLANNING_ROLES = ("planner", "researcher", "tasklist", "tasklist_refiner", "reviewer")
+IMPLEMENTATION_ROLES = ("implementer", "fixer")
+
 
 def noop_output_callback(_line: str) -> None:
     """No-op output callback for silent backend calls."""
@@ -71,6 +76,9 @@ __all__ = [
     "MAX_REVIEW_ITERATIONS",
     # Session reset interval
     "SESSION_RESET_INTERVAL",
+    # Subagent role groupings
+    "PLANNING_ROLES",
+    "IMPLEMENTATION_ROLES",
     # Shared callbacks
     "noop_output_callback",
 ]

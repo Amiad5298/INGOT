@@ -1122,6 +1122,39 @@ def ensure_agents_installed(quiet: bool = False) -> bool:
     return True
 
 
+def apply_model_overrides(overrides: dict[str, str]) -> None:
+    """Patch the model field in agent frontmatter to match user config.
+
+    Called after ensure_agents_installed() so that agent files on disk
+    reflect the user's configured planning_model / implementation_model
+    rather than the hardcoded default from AGENT_METADATA.
+
+    Args:
+        overrides: Mapping of agent name (e.g. "ingot-planner") to model ID.
+    """
+    if not overrides:
+        return
+    agents_dir = get_agents_dir()
+    for agent_name, model in overrides.items():
+        agent_path = agents_dir / f"{agent_name}.md"
+        if not agent_path.exists():
+            continue
+        content = agent_path.read_text()
+        # Verify the file has frontmatter and check current model
+        frontmatter = parse_agent_frontmatter(content)
+        if not frontmatter or frontmatter.get("model") == model:
+            continue  # No frontmatter or already correct
+        # Replace the model line within frontmatter
+        lines = content.split("\n")
+        for i, line in enumerate(lines):
+            if line.startswith("model:"):
+                lines[i] = f"model: {model}"
+                break
+            if line.strip() == "---" and i > 0:
+                break  # Past frontmatter without finding model line
+        agent_path.write_text("\n".join(lines))
+
+
 def verify_agents_available() -> tuple[bool, list[str]]:
     """Verify that all required INGOT subagent files exist.
 
@@ -1148,6 +1181,7 @@ def verify_agents_available() -> tuple[bool, list[str]]:
 __all__ = [
     # Main functions
     "ensure_agents_installed",
+    "apply_model_overrides",
     "verify_agents_available",
     "get_agents_dir",
     # Gitignore management

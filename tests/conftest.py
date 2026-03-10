@@ -115,6 +115,7 @@ def mock_backend():
     backend.run_print_quiet.return_value = "output"
     backend.run_streaming.return_value = (True, "output")
     backend.detect_rate_limit.return_value = False
+    backend.subagent_model_overrides = {}
     return backend
 
 

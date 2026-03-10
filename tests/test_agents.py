@@ -4,7 +4,9 @@ from ingot.integrations.agents import (
     _REQUIRED_AGENTS,
     AGENT_BODIES,
     AGENT_METADATA,
+    apply_model_overrides,
     get_agents_dir,
+    parse_agent_frontmatter,
     verify_agents_available,
 )
 from ingot.workflow.constants import (
@@ -59,3 +61,113 @@ class TestResearcherSectionHeadingsSync:
             assert (
                 heading_text in researcher_body
             ), f"Heading '{heading}' not found in researcher prompt body"
+
+
+SAMPLE_AGENT_CONTENT = """\
+---
+name: ingot-planner
+description: INGOT workflow planner
+model: claude-sonnet-4-5
+color: blue
+ingot_version: 1.0.0
+ingot_content_hash: abc123
+---
+
+You are a planner agent.
+"""
+
+
+class TestApplyModelOverrides:
+    """Tests for apply_model_overrides()."""
+
+    def test_patches_model_in_frontmatter(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        agents_dir = get_agents_dir()
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text(SAMPLE_AGENT_CONTENT)
+
+        apply_model_overrides({"ingot-planner": "claude-opus-4-5"})
+
+        updated = (agents_dir / "ingot-planner.md").read_text()
+        fm = parse_agent_frontmatter(updated)
+        assert fm["model"] == "claude-opus-4-5"
+
+    def test_skips_when_model_already_correct(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        agents_dir = get_agents_dir()
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text(SAMPLE_AGENT_CONTENT)
+
+        apply_model_overrides({"ingot-planner": "claude-sonnet-4-5"})
+
+        # Content should be unchanged (model already matches)
+        updated = (agents_dir / "ingot-planner.md").read_text()
+        assert updated == SAMPLE_AGENT_CONTENT
+
+    def test_skips_missing_agent_file(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        agents_dir = get_agents_dir()
+        agents_dir.mkdir(parents=True)
+        # No agent file created — should not raise
+        apply_model_overrides({"ingot-planner": "claude-opus-4-5"})
+
+    def test_skips_file_without_frontmatter(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        agents_dir = get_agents_dir()
+        agents_dir.mkdir(parents=True)
+        content = "You are a plain agent without frontmatter."
+        (agents_dir / "ingot-planner.md").write_text(content)
+
+        apply_model_overrides({"ingot-planner": "claude-opus-4-5"})
+
+        # Content should be unchanged
+        assert (agents_dir / "ingot-planner.md").read_text() == content
+
+    def test_noop_with_empty_overrides(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        agents_dir = get_agents_dir()
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text(SAMPLE_AGENT_CONTENT)
+
+        apply_model_overrides({})
+
+        # Content should be unchanged
+        assert (agents_dir / "ingot-planner.md").read_text() == SAMPLE_AGENT_CONTENT
+
+    def test_patches_multiple_agents(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        agents_dir = get_agents_dir()
+        agents_dir.mkdir(parents=True)
+
+        planner_content = SAMPLE_AGENT_CONTENT
+        impl_content = SAMPLE_AGENT_CONTENT.replace("ingot-planner", "ingot-implementer").replace(
+            "planner", "implementer"
+        )
+        (agents_dir / "ingot-planner.md").write_text(planner_content)
+        (agents_dir / "ingot-implementer.md").write_text(impl_content)
+
+        apply_model_overrides(
+            {
+                "ingot-planner": "claude-opus-4-5",
+                "ingot-implementer": "claude-haiku-3-5",
+            }
+        )
+
+        planner_fm = parse_agent_frontmatter((agents_dir / "ingot-planner.md").read_text())
+        impl_fm = parse_agent_frontmatter((agents_dir / "ingot-implementer.md").read_text())
+        assert planner_fm["model"] == "claude-opus-4-5"
+        assert impl_fm["model"] == "claude-haiku-3-5"
+
+    def test_preserves_other_frontmatter_fields(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        agents_dir = get_agents_dir()
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "ingot-planner.md").write_text(SAMPLE_AGENT_CONTENT)
+
+        apply_model_overrides({"ingot-planner": "claude-opus-4-5"})
+
+        fm = parse_agent_frontmatter((agents_dir / "ingot-planner.md").read_text())
+        assert fm["name"] == "ingot-planner"
+        assert fm["color"] == "blue"
+        assert fm["ingot_version"] == "1.0.0"
+        assert fm["ingot_content_hash"] == "abc123"

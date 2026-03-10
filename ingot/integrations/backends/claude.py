@@ -24,7 +24,7 @@ import subprocess
 from collections.abc import Callable
 
 from ingot.config.fetch_config import AgentPlatform
-from ingot.integrations.backends.base import BackendModel, BaseBackend
+from ingot.integrations.backends.base import BackendModel, BaseBackend, SubagentMetadata
 from ingot.integrations.backends.errors import BackendTimeoutError
 from ingot.integrations.claude import (
     ClaudeClient,
@@ -86,7 +86,10 @@ class ClaudeBackend(BaseBackend):
 
         Uses BaseBackend._parse_subagent_prompt() to get both the system
         prompt body and model from frontmatter. Avoids reading the subagent
-        file multiple times.
+        file multiple times. Delegates model resolution to _resolve_model()
+        with pre-parsed metadata to keep precedence logic in one place.
+
+        Model precedence: explicit > subagent overrides > frontmatter > instance default.
 
         Args:
             subagent: Optional subagent name.
@@ -96,17 +99,13 @@ class ClaudeBackend(BaseBackend):
             Tuple of (resolved_model, system_prompt).
         """
         system_prompt: str | None = None
+        metadata = SubagentMetadata()
 
         if subagent:
             metadata, prompt_body = self._parse_subagent_prompt(subagent)
             system_prompt = prompt_body if prompt_body else None
 
-            # Model precedence: explicit > frontmatter > instance default
-            if not model and metadata.model:
-                model = metadata.model
-
-        # Fall back to instance default if nothing else set
-        resolved_model = model or self._model or None
+        resolved_model = self._resolve_model(model, subagent, _metadata=metadata)
         return resolved_model, system_prompt
 
     def run_with_callback(
