@@ -77,6 +77,9 @@ Numbered, ordered steps to implement the feature. Each step MUST reference **exa
 **Important — distinguish new files from existing files:**
 - For existing files: "**File**: `path/to/existing.java` (lines X-Y)" — path must exist in the repo.
 - For new files: "**File**: Create `path/to/new-file.java`" — use the word "Create" or add `<!-- NEW_FILE -->`.
+- For new transitions, events, or behavioral paths: prefix with **[NEW]**.
+- For modifications to existing behavior: prefix with **[MODIFIED]** and state
+  both current and proposed behavior.
 
 Each step MUST include one of:
 - A **code snippet** showing the implementation pattern (with `Pattern source:` citation), OR
@@ -106,6 +109,9 @@ parameters, and return handling are NOT acceptable.
 For each test infrastructure change, provide the exact code change:
 - File path and line number
 - The specific annotation, mock, or configuration to add
+- When introducing a new component, check the Codebase Discovery for abstract test
+  base classes. If sibling components have `@SpyBean`/`@MockBean` entries there,
+  add one for the new component.
 
 For components with >3 test scenarios, provide at least ONE representative test method
 skeleton showing mock setup, method invocation, and key assertion.
@@ -120,6 +126,8 @@ Address EACH category (write "None identified" if not applicable):
 - **Environment / configuration drift**: Dev vs. prod differences, feature flag states
 - **Performance / scalability**: Hot paths, latency, memory, N+1 queries
 - **Backward compatibility**: Breaking changes to APIs, formats, schemas
+- **Event + state machine interactions**: When emitting events AND modifying state
+  transitions, address race conditions, idempotency, and event ordering.
 
 ### Out of Scope
 What this implementation explicitly does NOT include.

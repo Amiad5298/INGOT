@@ -2759,6 +2759,82 @@ because the action was renamed.
         assert len(findings) == 1
         assert "TemporalConfig" in findings[0].message
 
+    def test_ac_in_out_of_scope_warns_with_repair_worthy(self):
+        plan = """\
+## Implementation Steps
+1. Add logging to the service layer.
+
+## Out of Scope
+Temporal client connection settings and configuration are not covered.
+"""
+        findings = self._validate(
+            plan,
+            acs=["Temporal client is configured with proper connection settings"],
+        )
+        oos_findings = [f for f in findings if "Out of Scope" in f.message]
+        assert len(oos_findings) == 1
+        assert oos_findings[0].severity == ValidationSeverity.WARNING
+        assert oos_findings[0].repair_worthy is True
+
+    def test_ac_not_in_out_of_scope_no_oos_finding(self):
+        plan = """\
+## Implementation Steps
+1. Add logging to the service layer.
+
+## Out of Scope
+Performance optimization and caching strategies.
+"""
+        findings = self._validate(
+            plan,
+            acs=["Temporal client is configured with proper connection settings"],
+        )
+        oos_findings = [f for f in findings if "Out of Scope" in f.message]
+        assert oos_findings == []
+
+    def test_ac_in_out_of_scope_with_no_oos_section(self):
+        plan = """\
+## Implementation Steps
+1. Add logging to the service layer.
+"""
+        findings = self._validate(
+            plan,
+            acs=["Temporal client is configured with proper connection settings"],
+        )
+        oos_findings = [f for f in findings if "Out of Scope" in f.message]
+        assert oos_findings == []
+
+    def test_ac_single_word_match_no_false_positive(self):
+        """AC with only 1 matching word in OOS should not trigger (minimum 2 guard)."""
+        plan = """\
+## Implementation Steps
+1. Add logging to the service layer.
+
+## Out of Scope
+Configuration of unrelated services.
+"""
+        findings = self._validate(
+            plan,
+            acs=["Configuration"],
+        )
+        oos_findings = [f for f in findings if "Out of Scope" in f.message]
+        assert oos_findings == []
+
+    def test_ac_substring_match_no_false_positive(self):
+        """Phrase 'config' inside 'preconfigured' should not count as a match."""
+        plan = """\
+## Implementation Steps
+1. Add logging to the service layer.
+
+## Out of Scope
+The system is preconfigured and reconfiguration is unnecessary.
+"""
+        findings = self._validate(
+            plan,
+            acs=["config settings must be applied"],
+        )
+        oos_findings = [f for f in findings if "Out of Scope" in f.message]
+        assert oos_findings == []
+
 
 # =============================================================================
 # TestPrerequisiteConsistencyValidator
@@ -4401,6 +4477,43 @@ guaranteed by the message broker. All downstream consumers handle errors.
         findings = self._validate(content)
         assert len(findings) >= 1
         assert any(f.severity == ValidationSeverity.WARNING for f in findings)
+
+    def test_event_plus_state_machine_elevates_repair_worthy(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when the state transition fires.
+2. Add a state machine transition from PENDING to ACTIVE.
+
+## Potential Risks or Considerations
+- **External dependencies**: None identified.
+"""
+        findings = self._validate(plan)
+        assert len(findings) >= 1
+        assert all(f.repair_worthy is True for f in findings)
+
+    def test_event_alone_not_repair_worthy(self):
+        plan = """\
+## Implementation Steps
+1. Emit an event when the guard evaluates.
+
+## Potential Risks or Considerations
+- **External dependencies**: None identified.
+"""
+        findings = self._validate(plan)
+        assert len(findings) >= 1
+        assert all(f.repair_worthy is False for f in findings)
+
+    def test_state_machine_alone_not_repair_worthy(self):
+        plan = """\
+## Implementation Steps
+1. Add a state machine transition from PENDING to ACTIVE.
+
+## Potential Risks or Considerations
+- **External dependencies**: None identified.
+"""
+        findings = self._validate(plan)
+        assert len(findings) >= 1
+        assert all(f.repair_worthy is False for f in findings)
 
 
 # =============================================================================

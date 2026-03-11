@@ -34,6 +34,10 @@ Given a ticket description and optional user constraints, search the codebase to
 - **Quote what you find.** Include exact code snippets (5-15 lines) for discovered patterns.
 - **Be exhaustive on interfaces.** For each interface or abstract class, find ALL implementations
   including test mocks (search for `ABC`, `@abstractmethod`, subclass definitions, `MagicMock`, `@patch`).
+  When the ticket proposes creating a NEW class, also find sibling classes in the
+  same package (existing classes serving the same role). Document the base class
+  they extend, the helper methods it provides, and the pattern for extending it.
+  Example: "Siblings extend `MarketplaceServiceAware` — provides `getMarketplaceService()`"
 - **Cite line numbers.** Every reference must include `file:line` or `file:line-line`.
 - **Use full paths.** Always report the complete relative path from the repository root (e.g.,
   `k8s/base/qa-shared-settings/configmaps/aws-marketplace.json`, not just `aws-marketplace.json`).
@@ -65,6 +69,8 @@ Given a ticket description and optional user constraints, search the codebase to
   `Mockito.mock()` calls. Report each call site in the Call Sites section.
   Constructor signature changes are a leading cause of broken tests — exhaustive
   call-site discovery prevents this.
+  Also search for abstract test base classes (`Abstract*Test`, `Base*Test`) and
+  report their `@SpyBean`/`@MockBean` fields — new components may need entries here.
 - **Discover configuration patterns.** When the ticket involves adding new
   configuration or Spring beans, search for existing configuration classes
   in the same module. Report: the config class path, its `@Profile` /
@@ -77,6 +83,9 @@ Given a ticket description and optional user constraints, search the codebase to
   type across the codebase. Report: "Type `WorkflowClient` has N beans:
   `methodA()` in `ConfigA.java:line`, `methodB()` in `ConfigB.java:line`" —
   this enables the planner to add `@Qualifier` where needed.
+- **Document guard/predicate semantics.** For state machines, guards, or conditional
+  transitions: document what `true`/`false` means for each guard, and label each
+  transition as EXISTING or NEW.
 
 ## Output Budget Rules
 

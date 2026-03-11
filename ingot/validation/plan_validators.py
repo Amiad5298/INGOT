@@ -1684,7 +1684,18 @@ class TicketReconciliationValidator(Validator):
     def _extract_key_phrases(text: str) -> list[str]:
         """Extract meaningful noun phrases from an acceptance criterion."""
         # Remove common filler words; keep substantive terms
-        cleaned = re.sub(r"\b(?:is|are|the|a|an|and|or|that|this|should|must|will)\b", " ", text)
+        cleaned = re.sub(
+            r"\b(?:is|are|was|were|be|been|being|have|has|had|do|does|did|"
+            r"the|a|an|and|or|but|if|then|so|as|at|by|for|in|of|on|to|"
+            r"that|this|these|those|it|its|"
+            r"should|must|will|shall|can|could|would|may|might|need|"
+            r"not|no|all|each|every|any|some|"
+            r"with|from|into|also|when|where|how|what|which|"
+            r"new|existing|correct|proper|appropriate|relevant|"
+            r"verify|ensure|confirm|check|validate|test)\b",
+            " ",
+            text,
+        )
         words = [w.strip() for w in cleaned.split() if len(w.strip()) > 2]
         return words
 
@@ -1722,6 +1733,38 @@ class TicketReconciliationValidator(Validator):
                     ),
                 )
             )
+
+        # Cross-check: detect AC items contradicted by Out of Scope section
+        oos_text = _extract_plan_sections(content, ["Out of Scope"])
+        oos_lower = oos_text.lower() if oos_text else ""
+
+        if oos_lower:
+            for ac in context.ticket_acceptance_criteria:
+                phrases = self._extract_key_phrases(ac)
+                if len(phrases) < 2:
+                    continue
+                oos_matches = sum(
+                    1 for p in phrases if re.search(rf"\b{re.escape(p.lower())}\b", oos_lower)
+                )
+                # 50% threshold + minimum 2 matches to avoid false positives
+                if oos_matches >= 2 and oos_matches / len(phrases) >= 0.5:
+                    findings.append(
+                        ValidationFinding(
+                            validator_name=self.name,
+                            severity=ValidationSeverity.WARNING,
+                            message=(
+                                f"Ticket AC '{ac[:100]}' appears contradicted by "
+                                f"the 'Out of Scope' section — acceptance criteria "
+                                f"must not be excluded without justification."
+                            ),
+                            suggestion=(
+                                "Move this acceptance criterion from Out of Scope into "
+                                "the Implementation Steps. If intentionally excluded, "
+                                "add a '**Deviation from ticket**: [reason]' callout."
+                            ),
+                            repair_worthy=True,
+                        )
+                    )
 
         # Check acceptance criteria traceability
         for ac in context.ticket_acceptance_criteria:
@@ -2912,9 +2955,9 @@ class ContentDrivenRiskValidator(Validator):
     """
 
     # Content triggers → required risk mentions.
-    _CONTENT_RISK_CHECKLISTS: list[tuple[re.Pattern[str], list[tuple[list[str], str]]]] = [
+    _CONTENT_RISK_CHECKLISTS: list[tuple[str, re.Pattern[str], list[tuple[list[str], str]]]] = [
         (
-            # Event emission
+            "event_emission",
             re.compile(
                 r"\b(?:emit|publish|send|dispatch|fire|produce)\s+"
                 r"(?:an?\s+)?(?:event|message|notification|signal|command)",
@@ -2933,7 +2976,7 @@ class ContentDrivenRiskValidator(Validator):
             ],
         ),
         (
-            # State machine / transition
+            "state_machine",
             re.compile(
                 r"\b(?:state\s+machine|state\s+transition|transition\s+(?:from|to)|"
                 r"guard\s+(?:condition|clause)|finite\s+state)",
@@ -2949,7 +2992,7 @@ class ContentDrivenRiskValidator(Validator):
             ],
         ),
         (
-            # External API call
+            "external_api",
             re.compile(
                 r"\b(?:external\s+API|third.party\s+(?:API|service)|REST\s+call|HTTP\s+(?:call|request)|"
                 r"API\s+(?:call|request|invocation))\b",
@@ -2962,8 +3005,7 @@ class ContentDrivenRiskValidator(Validator):
             ],
         ),
         (
-            # Database mutation — SQL keywords are case-sensitive (uppercase only)
-            # to avoid matching generic prose like "update the config".
+            "db_mutation",
             re.compile(
                 r"(?:"
                 r"\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|"
@@ -2978,7 +3020,7 @@ class ContentDrivenRiskValidator(Validator):
             ],
         ),
         (
-            # Scheduled job / cron
+            "scheduled_job",
             re.compile(
                 r"\b(?:scheduled\s+(?:job|task)|cron|periodic|recurring\s+(?:job|task)|"
                 r"@Scheduled|timer\s+trigger)\b",
@@ -2991,7 +3033,7 @@ class ContentDrivenRiskValidator(Validator):
             ],
         ),
         (
-            # User-visible notification
+            "notification",
             re.compile(
                 r"\b(?:notification\s+email|send\s+email|email\s+notification|"
                 r"push\s+notification|SMS|user\s+notification|alert\s+user)\b",
@@ -3006,6 +3048,11 @@ class ContentDrivenRiskValidator(Validator):
                 (["delivery failure", "bounce", "retry"], "Delivery failure handling"),
             ],
         ),
+    ]
+
+    # Named trigger combinations that warrant repair_worthy=True.
+    _HIGH_RISK_COMBOS: list[frozenset[str]] = [
+        frozenset({"event_emission", "state_machine"}),
     ]
 
     @property
@@ -3028,9 +3075,12 @@ class ContentDrivenRiskValidator(Validator):
         extended_lower = extended_text.lower()
         content_lower = content.lower()
 
-        for trigger_re, checklist in self._CONTENT_RISK_CHECKLISTS:
+        fired_triggers: set[str] = set()
+
+        for trigger_name, trigger_re, checklist in self._CONTENT_RISK_CHECKLISTS:
             if not trigger_re.search(content_lower):
                 continue
+            fired_triggers.add(trigger_name)
             missing: list[str] = []
             for keywords, label in checklist:
                 if not any(kw in extended_lower for kw in keywords):
@@ -3051,6 +3101,13 @@ class ContentDrivenRiskValidator(Validator):
                         ),
                     )
                 )
+
+        # Elevate repair_worthy when high-risk trigger combinations are present.
+        # Intentionally elevates ALL findings (not just the combo triggers) because
+        # the combination raises the overall risk profile of the plan.
+        if any(combo.issubset(fired_triggers) for combo in self._HIGH_RISK_COMBOS):
+            for f in findings:
+                f.repair_worthy = True
 
         return findings
 
