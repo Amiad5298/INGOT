@@ -1,5 +1,6 @@
 """Tests for ingot.integrations.agents module."""
 
+from ingot.integrations.agent_templates import load_template
 from ingot.integrations.agents import (
     _REQUIRED_AGENTS,
     AGENT_BODIES,
@@ -10,6 +11,7 @@ from ingot.integrations.agents import (
     verify_agents_available,
 )
 from ingot.workflow.constants import (
+    INGOT_AGENT_IMPLEMENTER,
     INGOT_AGENT_RESEARCHER,
     RESEARCHER_SECTION_HEADINGS,
 )
@@ -61,6 +63,25 @@ class TestResearcherSectionHeadingsSync:
             assert (
                 heading_text in researcher_body
             ), f"Heading '{heading}' not found in researcher prompt body"
+
+
+class TestImplementerTemplateLoading:
+    """Verify implementer prompt is loaded from the template file."""
+
+    def test_implementer_body_loaded_from_template(self):
+        body = AGENT_BODIES[INGOT_AGENT_IMPLEMENTER]
+        template = load_template("implementer")
+        assert body == template
+
+    def test_implementer_body_contains_three_phases(self):
+        body = AGENT_BODIES[INGOT_AGENT_IMPLEMENTER]
+        assert "Phase 1: Orient" in body
+        assert "Phase 2: Implement Incrementally" in body
+        assert "Phase 3: Verify Before Completing" in body
+
+    def test_implementer_body_has_no_test_writing_instruction(self):
+        body = AGENT_BODIES[INGOT_AGENT_IMPLEMENTER]
+        assert "Write tests alongside" not in body
 
 
 SAMPLE_AGENT_CONTENT = """\

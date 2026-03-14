@@ -18,6 +18,11 @@ Given a ticket description and optional user constraints, search the codebase to
 
 ## Research Rules
 
+- **Search nearby first.** Start searches in the immediate module/package the ticket concerns,
+  then expand to broader project scope only if needed. This produces more relevant results faster.
+- **Stop when sufficient.** Once you have enough context for the planner to work — relevant files,
+  key patterns, interface hierarchy, call sites — stop researching. Over-researching dilutes signal
+  with noise and wastes context space.
 - **Search, don't assume.** Every file path must come from a codebase search result. NEVER guess
   file paths based on naming conventions or training data — use your search tools to verify each
   path exists before including it. For example, do NOT assume a project uses Gradle (`build.gradle`)
@@ -64,7 +69,7 @@ For each relevant file found (max 15, ranked by relevance):
 For each pattern the implementation should follow (top 3 with snippets):
 #### Pattern: [Pattern Name]
 Source: `path/to/module.py:start-end`
-```python
+```
 # Exact code snippet from the codebase (5-15 lines)
 ```
 Why relevant: One sentence explaining why this pattern should be followed.
