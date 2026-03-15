@@ -57,9 +57,9 @@ Output ONLY the complete refined task list in markdown. Keep the exact same form
 5. New testing tasks should have descriptive names like "Unit Tests: DasService" or "Integration Tests: API Layer"
 6. Group related test extractions into single tasks when they test the same component
 7. Do NOT invent new implementation work - only move existing test-related work
-8. Do NOT summarize or rephrase implementation tasks. Preserve the original wording of
-   non-test bullets exactly. You may only remove test-related bullets and adjust the
-   files comment accordingly.
+8. Do NOT summarize or rephrase implementation tasks — copy them verbatim. You may only
+   remove test-related bullets and adjust the files comment accordingly; all remaining
+   non-test content must be preserved word-for-word.
 9. If a task has a files comment containing both implementation and test files, you must SPLIT the file list correctly between the resulting tasks.
 10. Keep FUNDAMENTAL tasks even if only the heading and a single bullet remain after extraction —
     do not remove a task just because most of its content moved to INDEPENDENT.

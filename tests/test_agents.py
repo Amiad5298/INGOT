@@ -1,5 +1,7 @@
 """Tests for ingot.integrations.agents module."""
 
+import pytest
+
 from ingot.integrations.agent_templates import load_template
 from ingot.integrations.agents import (
     _REQUIRED_AGENTS,
@@ -12,7 +14,11 @@ from ingot.integrations.agents import (
 )
 from ingot.workflow.constants import (
     INGOT_AGENT_IMPLEMENTER,
+    INGOT_AGENT_PLANNER,
     INGOT_AGENT_RESEARCHER,
+    INGOT_AGENT_REVIEWER,
+    INGOT_AGENT_TASKLIST,
+    INGOT_AGENT_TASKLIST_REFINER,
     RESEARCHER_SECTION_HEADINGS,
 )
 
@@ -65,13 +71,39 @@ class TestResearcherSectionHeadingsSync:
             ), f"Heading '{heading}' not found in researcher prompt body"
 
 
-class TestImplementerTemplateLoading:
-    """Verify implementer prompt is loaded from the template file."""
+class TestTemplateLoading:
+    """Verify all agent prompts are loaded from template files."""
 
-    def test_implementer_body_loaded_from_template(self):
-        body = AGENT_BODIES[INGOT_AGENT_IMPLEMENTER]
-        template = load_template("implementer")
+    @pytest.mark.parametrize(
+        "agent_key,template_name",
+        [
+            (INGOT_AGENT_RESEARCHER, "researcher"),
+            (INGOT_AGENT_PLANNER, "planner"),
+            (INGOT_AGENT_TASKLIST, "tasklist"),
+            (INGOT_AGENT_TASKLIST_REFINER, "tasklist_refiner"),
+            (INGOT_AGENT_IMPLEMENTER, "implementer"),
+            (INGOT_AGENT_REVIEWER, "reviewer"),
+        ],
+    )
+    def test_agent_body_matches_template(self, agent_key, template_name):
+        body = AGENT_BODIES[agent_key]
+        template = load_template(template_name)
         assert body == template
+
+    @pytest.mark.parametrize(
+        "template_name,expected_marker",
+        [
+            ("researcher", "## Research Rules"),
+            ("planner", "## HARD GATES"),
+            ("tasklist", "## GATE 1"),
+            ("tasklist_refiner", "# Your Single Job"),
+            ("implementer", "Phase 1: Orient"),
+            ("reviewer", "PASS"),
+        ],
+    )
+    def test_template_contains_expected_marker(self, template_name, expected_marker):
+        body = load_template(template_name)
+        assert expected_marker in body
 
     def test_implementer_body_contains_three_phases(self):
         body = AGENT_BODIES[INGOT_AGENT_IMPLEMENTER]

@@ -71,6 +71,7 @@ at workflow start. Use it to verify that the implementation respects these const
 ## Guidelines
 
 - Be pragmatic, not pedantic
+- Keep reviews focused and efficient — this is a targeted sanity check, not a full code review
 - Focus on correctness and completeness
 - Trust the implementing agent made reasonable decisions
 - Only flag genuine problems, not style preferences

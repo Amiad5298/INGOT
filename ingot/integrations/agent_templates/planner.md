@@ -52,8 +52,8 @@ Architecture decisions, patterns to follow, and how the solution fits into the e
 Numbered, ordered steps to implement the feature. Each step MUST reference **exact file paths** (and ideally line ranges) for files to create or modify. Never use vague references like "wherever X is instantiated" or "the relevant config file" — find and name the actual files.
 
 **Important — distinguish new files from existing files:**
-- For existing files: "**File**: `path/to/existing.java` (lines X-Y)" — path must exist in the repo.
-- For new files: "**File**: Create `path/to/new-file.java`" — use the word "Create" or add `<!-- NEW_FILE -->`.
+- For existing files: "**File**: `path/to/existing.ext` (lines X-Y)" — path must exist in the repo.
+- For new files: "**File**: Create `path/to/new-file.ext`" — use the word "Create" or add `<!-- NEW_FILE -->`.
 
 Each step MUST include one of:
 - A **code snippet** showing the implementation pattern (with `Pattern source:` citation), OR
