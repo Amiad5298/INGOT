@@ -29,7 +29,7 @@ def load_template(name: str) -> str:
         FileNotFoundError: If the template file does not exist.
     """
     path = _TEMPLATES_DIR / f"{name}.md"
-    return path.read_text()
+    return path.read_text(encoding="utf-8")
 
 
 __all__ = ["load_template"]
