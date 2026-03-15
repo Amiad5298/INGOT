@@ -1,5 +1,8 @@
 """Tests for ingot.integrations.agents module."""
 
+import pytest
+
+from ingot.integrations.agent_templates import load_template
 from ingot.integrations.agents import (
     _REQUIRED_AGENTS,
     AGENT_BODIES,
@@ -10,7 +13,12 @@ from ingot.integrations.agents import (
     verify_agents_available,
 )
 from ingot.workflow.constants import (
+    INGOT_AGENT_IMPLEMENTER,
+    INGOT_AGENT_PLANNER,
     INGOT_AGENT_RESEARCHER,
+    INGOT_AGENT_REVIEWER,
+    INGOT_AGENT_TASKLIST,
+    INGOT_AGENT_TASKLIST_REFINER,
     RESEARCHER_SECTION_HEADINGS,
 )
 
@@ -61,6 +69,51 @@ class TestResearcherSectionHeadingsSync:
             assert (
                 heading_text in researcher_body
             ), f"Heading '{heading}' not found in researcher prompt body"
+
+
+class TestTemplateLoading:
+    """Verify all agent prompts are loaded from template files."""
+
+    @pytest.mark.parametrize(
+        "agent_key,template_name",
+        [
+            (INGOT_AGENT_RESEARCHER, "researcher"),
+            (INGOT_AGENT_PLANNER, "planner"),
+            (INGOT_AGENT_TASKLIST, "tasklist"),
+            (INGOT_AGENT_TASKLIST_REFINER, "tasklist_refiner"),
+            (INGOT_AGENT_IMPLEMENTER, "implementer"),
+            (INGOT_AGENT_REVIEWER, "reviewer"),
+        ],
+    )
+    def test_agent_body_matches_template(self, agent_key, template_name):
+        body = AGENT_BODIES[agent_key]
+        template = load_template(template_name)
+        assert body == template
+
+    @pytest.mark.parametrize(
+        "template_name,expected_marker",
+        [
+            ("researcher", "## Research Rules"),
+            ("planner", "## HARD GATES"),
+            ("tasklist", "## GATE 1"),
+            ("tasklist_refiner", "# Your Single Job"),
+            ("implementer", "Phase 1: Orient"),
+            ("reviewer", "PASS"),
+        ],
+    )
+    def test_template_contains_expected_marker(self, template_name, expected_marker):
+        body = load_template(template_name)
+        assert expected_marker in body
+
+    def test_implementer_body_contains_three_phases(self):
+        body = AGENT_BODIES[INGOT_AGENT_IMPLEMENTER]
+        assert "Phase 1: Orient" in body
+        assert "Phase 2: Implement Incrementally" in body
+        assert "Phase 3: Verify Before Completing" in body
+
+    def test_implementer_body_has_no_test_writing_instruction(self):
+        body = AGENT_BODIES[INGOT_AGENT_IMPLEMENTER]
+        assert "Write tests alongside" not in body
 
 
 SAMPLE_AGENT_CONTENT = """\
